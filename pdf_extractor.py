@@ -84,11 +84,7 @@ class PDFTableExtractor:
                     if not hasattr(self, 'failed_pages'):
                         self.failed_pages = []
                     self.failed_pages.append((base, str(page_err)))
-                    # 连续失败熔断保护
-                    if len(self.failed_pages) >= 2 and total_p > 2:
-                        print(f"    ! [熔断] 该扫描件连续两页识别失败，触发熔断保护流水线。")
-                        break
-                    # 创建空错误 Sheet
+                    # 失败页面留痕隔离 (不执行中断，确保后续页面被继续处理并如实对账)
                     ws_err = wb.create_sheet(base)
                     ws_err.cell(1, 1, value=f"异常:{base}识别失败({page_err})")
                     self.text_source[base] = 'error'
@@ -235,11 +231,13 @@ class PDFTableExtractor:
                 prompt += f" 表格列数必须为 {target_cols} 列，首块表头为: {known_headers}。"
             res = self._vision_call_prompt(b64, prompt)
             tables = self._normalize_tables(res)
-            if not tables:
+            if not tables or not tables[0][0]:
+                print(f"    ! [切片告警] {base} 第 {idx+1}/{num_tiles} 切片识别失败，插入异常标记行以防静默丢失")
+                cols = target_cols or 2
+                err_row = [f"异常:{base}第{idx+1}分块识别失败"] + [''] * (cols - 1)
+                merged_cells.append(err_row)
                 continue
             grid, unc = tables[0]
-            if not grid:
-                continue
             if idx == 0:
                 known_headers = grid[0]
                 target_cols = len(grid[0])

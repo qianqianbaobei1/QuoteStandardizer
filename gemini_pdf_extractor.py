@@ -18,7 +18,7 @@ import fitz  # PyMuPDF
 import openpyxl
 import requests
 
-from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_THINKING_BUDGET, LLM_MAX_RETRIES
+from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_THINKING_BUDGET, LLM_MAX_RETRIES
 
 try:
     from google import genai
@@ -117,11 +117,12 @@ class GeminiPDFTableExtractor:
                     b64_data = base64.b64encode(pdf_bytes).decode("utf-8")
 
                     for attempt in range(1, LLM_MAX_RETRIES + 2):
+                        cur_model = GEMINI_MODEL if attempt == 1 else (GEMINI_FALLBACK_MODEL or GEMINI_MODEL)
                         try:
                             # 优先尝试官方文档的 interactions.create 接口
                             if hasattr(client, "interactions"):
                                 interaction = client.interactions.create(
-                                    model=GEMINI_MODEL,
+                                    model=cur_model,
                                     input=[
                                         {
                                             "type": "document",
@@ -136,7 +137,7 @@ class GeminiPDFTableExtractor:
                                 # 回退到 models.generate_content
                                 pdf_part = types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
                                 response = client.models.generate_content(
-                                    model=GEMINI_MODEL,
+                                    model=cur_model,
                                     contents=[pdf_part, GEMINI_PDF_TRANSCRIPTION_PROMPT],
                                     config=types.GenerateContentConfig(
                                         response_mime_type="application/json",
@@ -148,7 +149,7 @@ class GeminiPDFTableExtractor:
                             if raw_json_str:
                                 break
                         except Exception as e:
-                            print(f"[Gemini B-Rail] SDK 调用异常 (重试 {attempt}/{LLM_MAX_RETRIES}): {e}")
+                            print(f"[Gemini B-Rail] SDK ({cur_model}) 调用异常 (重试 {attempt}/{LLM_MAX_RETRIES}): {e}")
                             time.sleep(2)
                 else:
                     # 方式 2: >= 20MB 文件使用 Files API 上传
@@ -156,10 +157,11 @@ class GeminiPDFTableExtractor:
                     uploaded_file = client.files.upload(file=self.pdf_path)
                     
                     for attempt in range(1, LLM_MAX_RETRIES + 2):
+                        cur_model = GEMINI_MODEL if attempt == 1 else (GEMINI_FALLBACK_MODEL or GEMINI_MODEL)
                         try:
                             if hasattr(client, "interactions"):
                                 interaction = client.interactions.create(
-                                    model=GEMINI_MODEL,
+                                    model=cur_model,
                                     input=[
                                         {
                                             "type": "document",
@@ -172,7 +174,7 @@ class GeminiPDFTableExtractor:
                                 raw_json_str = getattr(interaction, "output_text", None)
                             else:
                                 response = client.models.generate_content(
-                                    model=GEMINI_MODEL,
+                                    model=cur_model,
                                     contents=[uploaded_file, GEMINI_PDF_TRANSCRIPTION_PROMPT],
                                     config=types.GenerateContentConfig(
                                         response_mime_type="application/json",
@@ -184,7 +186,7 @@ class GeminiPDFTableExtractor:
                             if raw_json_str:
                                 break
                         except Exception as e:
-                            print(f"[Gemini B-Rail] Files API 调用异常 (重试 {attempt}/{LLM_MAX_RETRIES}): {e}")
+                            print(f"[Gemini B-Rail] Files API ({cur_model}) 调用异常 (重试 {attempt}/{LLM_MAX_RETRIES}): {e}")
                             time.sleep(2)
             finally:
                 if uploaded_file:
