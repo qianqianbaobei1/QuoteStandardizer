@@ -74,6 +74,9 @@ class SourceRowRecord:
     has_formula_without_cache: bool = False
 
 
+STRUCTURAL_SKIP = {'分组标题行', '重复表头行', '合计/小计行'}   # 这三类行本身就会有数字 (如合计金额)，不算漏行
+
+
 def reconcile(source_rows: List[SourceRowRecord], items: List[CanonicalMaterialItem]) -> List[dict]:
     """
     原表 ↔ 标准化结果逐行对账。返回对账明细 (每个原表行一条)，并把发现的问题写回 item.uncertainty_note。
@@ -81,6 +84,7 @@ def reconcile(source_rows: List[SourceRowRecord], items: List[CanonicalMaterialI
       1. 判定为物料的原表行必须恰好对应 1 条输出 (漏行 / 重复)
       2. 输出单价必须与原表单价完全一致 (防模型篡改价格)
       3. 输出中不得出现原表不存在的行 (防模型编造)
+      4. 判定为“跳过”的行如果有单价，同样算异常 (防止规则误伤把真实物料行丢掉)
     """
     by_ref: Dict[str, List[CanonicalMaterialItem]] = {}
     for it in items:
@@ -91,7 +95,15 @@ def reconcile(source_rows: List[SourceRowRecord], items: List[CanonicalMaterialI
     for r in source_rows:
         outs = by_ref.get(r.source_ref, [])
         if r.decision != 'item':
-            status = '跳过' if not outs else '异常:被跳过的行仍有输出'
+            # 跳过的行不能免检：行里有单价却被判为跳过 = 原来的漏行没人看得见 (单向检查的盲区)
+            if outs:
+                status = '异常:被跳过的行仍有输出'
+            elif r.decision.startswith('异常'):
+                status = r.decision  # 页级/表级失败：原样上报，不能因为“没输出”就算跳过
+            elif r.raw_price > 0 and r.decision not in STRUCTURAL_SKIP:
+                status = f'异常:有单价({r.raw_price:g})却被跳过'
+            else:
+                status = '跳过'
             report.append({'source_ref': r.source_ref, 'status': status, 'detail': r.decision,
                            'raw_price': r.raw_price, 'out_price': None, 'quote_id': '', 'raw_text': r.raw_text})
             continue

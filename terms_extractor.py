@@ -14,7 +14,7 @@ import re
 import requests
 from PIL import Image
 
-from config import VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, GEMINI_API_KEY, GEMINI_MODEL, normalize_province
+from config import VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, GEMINI_API_KEY, GEMINI_MODEL, GEMINI_THINKING_BUDGET, normalize_province
 
 try:
     from google import genai
@@ -203,17 +203,24 @@ class TermsExtractor:
         # 1. 优先使用 Gemini 原生全模态视觉
         if genai and GEMINI_API_KEY:
             try:
-                client = genai.Client(api_key=GEMINI_API_KEY)
+                # 增加客户端超时保护 (5秒快速探活，失败即跳过或降级)
+                http_opts = types.HttpOptions(timeout=5.0) if hasattr(types, "HttpOptions") else None
+                client_kwargs = {"api_key": GEMINI_API_KEY}
+                if http_opts: client_kwargs["http_options"] = http_opts
+                client = genai.Client(**client_kwargs)
                 with open(self.image_path, "rb") as f:
                     img_bytes = f.read()
-                # 确定图片 mime 类型
                 ext = os.path.splitext(self.image_path)[1].lower()
                 mime = "image/png" if ext == ".png" else "image/jpeg"
                 part = types.Part.from_bytes(data=img_bytes, mime_type=mime)
                 resp = client.models.generate_content(
                     model=GEMINI_MODEL,
                     contents=[part, SYSTEM_PROMPT_TERMS_VISION + "\n请严格以 JSON 格式输出识别到的条款："],
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.0,
+                        thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET)
+                    )
                 )
                 if resp.text:
                     parsed = json.loads(self._clean_json_str(resp.text))

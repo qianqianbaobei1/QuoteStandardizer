@@ -25,7 +25,7 @@ import requests
 from config import (VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, VISION_DOUBLE_CHECK,
                     VISION_GAMMA, VISION_MAX_ROWS_PER_TILE, VISION_TILE_OVERLAP_ROWS, LLM_MAX_RETRIES)
 
-COMPANY_RE = re.compile(r'([一-龥（）\(\)]{4,30}?(?:股份有限公司|有限责任公司|有限公司|股份公司|集团))')
+COMPANY_RE = re.compile(r'([\u4e00-\u9fa5（）\(\)]{4,30}?(?:股份有限公司|有限责任公司|有限公司|股份公司))')
 SCAN_DPI = 300
 VISION_DPI = 200
 VISION_MAX_EDGE = 2400
@@ -73,7 +73,7 @@ class PDFTableExtractor:
             page = self.doc[p_idx]
             base = f"第{p_idx + 1}页"
             if len(re.sub(r'\s', '', page.get_text())) >= 30:
-                grids = [self._grid_from_text_layer(page)]
+                grids = self._grids_from_text_layer(page)
                 src = 'text'
             elif use_vision:
                 try:
@@ -84,6 +84,10 @@ class PDFTableExtractor:
                     if not hasattr(self, 'failed_pages'):
                         self.failed_pages = []
                     self.failed_pages.append((base, str(page_err)))
+                    # 连续失败熔断保护
+                    if len(self.failed_pages) >= 2 and total_p > 2:
+                        print(f"    ! [熔断] 该扫描件连续两页识别失败，触发熔断保护流水线。")
+                        break
                     # 创建空错误 Sheet
                     ws_err = wb.create_sheet(base)
                     ws_err.cell(1, 1, value=f"异常:{base}识别失败({page_err})")
@@ -143,9 +147,9 @@ class PDFTableExtractor:
             "response_format": {"type": "json_object"},
         }
         last = ""
-        for attempt in range(LLM_MAX_RETRIES + 1):
+        for attempt in range(min(LLM_MAX_RETRIES + 1, 2)):
             try:
-                resp = requests.post(url, headers=headers, json=payload, timeout=180)
+                resp = requests.post(url, headers=headers, json=payload, timeout=12)
                 if resp.status_code == 400 and "response_format" in payload:
                     # 部分模型不支持 response_format，去掉后重试
                     payload.pop("response_format")
@@ -169,8 +173,11 @@ class PDFTableExtractor:
                     break
             except Exception as e:
                 last = str(e)
-            if attempt < LLM_MAX_RETRIES:
-                time.sleep(2 ** attempt)
+                # 遇到证书或连接断开直接终止，防止无效重试阻塞
+                if "SSLError" in str(e) or "Max retries exceeded" in str(e):
+                    break
+            if attempt < 1:
+                time.sleep(1)
         print(f"[Vision Warning] 视觉模型调用失败: {last}")
         return None
 
@@ -390,21 +397,39 @@ class PDFTableExtractor:
         return None
 
     # ------------------------------------------------------------------ 文字层
-    def _grid_from_text_layer(self, page):
+    def _lines_from_text(self, page):
+        """没有表格线时按文本行切分 (整页文字)"""
+        self.page_titles.append(page.get_text()[:200])
+        return [[[p for p in re.split(r'\s{2,}|\t', line.strip()) if p]
+                 for line in page.get_text().split('\n') if line.strip()]]
+
+    def _grids_from_text_layer(self, page):
+        """一页可能有多张表，必须全部返回；原实现只取面积最大的一张，其余整张静默丢弃"""
         try:
             tables = page.find_tables().tables
         except Exception:
             tables = []
-        if tables:
-            tb = max(tables, key=lambda t: (t.bbox[2] - t.bbox[0]) * (t.bbox[3] - t.bbox[1]))
-            self.page_titles.append(page.get_text(clip=fitz.Rect(0, 0, page.rect.width, tb.bbox[1])))
+        if not tables:
+            return self._lines_from_text(page)
+        cand = []
+        for tb in sorted(tables, key=lambda t: (round(t.bbox[1] / 5), t.bbox[0])):
             rows = tb.extract()
+            if rows:
+                cand.append((tb, rows, (tb.bbox[2] - tb.bbox[0]) * (tb.bbox[3] - tb.bbox[1])))
+        max_area = max((a for _, _, a in cand), default=0)
+        grids = []
+        for tb, rows, area in cand:
+            # 面积不到最大表 20% 的当碎片丢弃 (页眉装饰框)，其余全部解析并逐张打印
+            if max_area and area < max_area * 0.2:
+                print(f"    ! 忽略碎片表格 (面积占比 {area / max_area:.0%})")
+                continue
+            self.page_titles.append(page.get_text(clip=fitz.Rect(0, 0, page.rect.width, tb.bbox[1])))
             # find_tables 对合并单元格返回 None：向下/向右填充，与 Excel 合并单元格展开语义一致
             grid = [[(c or '').replace('\n', ' ').strip() for c in r] for r in rows]
-            return _fill_merged_none(rows, grid)
-        self.page_titles.append(page.get_text()[:200])
-        return [[p for p in re.split(r'\s{2,}|\t', line.strip()) if p]
-                for line in page.get_text().split('\n') if line.strip()]
+            grids.append(_fill_merged_none(rows, grid))
+        if len(grids) > 1:
+            print(f"    -> 本页识别到 {len(grids)} 张表格，全部解析")
+        return grids or self._lines_from_text(page)
 
     @staticmethod
     def _remove_red(img):

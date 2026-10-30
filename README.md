@@ -81,4 +81,21 @@ llm_agent.py        DeepSeek 表头推导与物料清洗
 models.py           物料记录与原表对账
 builder.py          输出工作簿
 config.py           环境配置、省份映射、编码库加载
+evaluate.py         评差引擎（与线上系统逐格比对、错误归纳、回归）
+health_check.py     模块自检（含评差引擎自检）
+ERROR_CODES.md      错误码字典 + 每日流程 + 修复账本
 ```
+
+## 评差与验收口径
+
+线上系统对同一份报价单也出一份结果，本地结果要与它逐格比对评差：
+
+```bash
+python evaluate.py scan --ours-dir ours/ --theirs-dir theirs/ -o cases.csv   # 自动配对
+python evaluate.py batch --cases cases.csv -o eval_out/     # 评差出报告
+python evaluate.py regression                              # 回归，任一用例变差即退出码 1
+```
+
+**验收口径：单份文件零差异才算 PASS。** 10 份文件 9 份各错 1 处 = 1/10 PASS（1 份合格），不是 99% 准确率。
+错误按 16 个固定错误码归纳（漏行/价格/单位/错字/规格/条款/页码/结构判错…），每个码绑定“该去查哪个函数”。
+完整错误码表、每日进化流程和修复账本见 `ERROR_CODES.md`。
