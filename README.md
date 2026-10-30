@@ -1,0 +1,84 @@
+# QuoteStandardizer
+
+把厂家的非标准报价单（Excel / PDF 电子版 / PDF 扫描件）解析为统一格式的物料报价表，并逐行和原表对账。
+
+## 原则
+
+- **价格只取原表**：模型返回的价格只用来比对，不会覆盖原表的价格。
+- **不知道就留空**：商务条款、单位、编码等，原件中没有或识别不出时一律留空，并写入待复核说明，不填任何默认值。
+- **推断要标明**：由文件名推断的供应商、由供应商名推断的品牌、未经编码库核验的编码、识别存疑的单元格，全部写入待复核说明。
+
+## 流程
+
+1. **还原表格**
+   - Excel：展开合并单元格；公式取缓存计算值；图片按单元格位置定位。
+   - PDF 电子版：用 PyMuPDF 直接提取表格。
+   - PDF 扫描件：交给视觉模型逐格转录。第一遍读增强图（去除红色公章、压暗褪色笔画），第二遍读原图，两遍不一致的格子标记待复核。视觉模型不可用时直接报错。
+2. **识别表格类型**
+   - 清单式：一行一个物料。由模型或启发式规则判断表头行、单价列、单位列。
+   - 矩阵式：行标题 × 列标题，交叉格是价格。每个交叉格展开为一条物料，同一列的名称统一；同一列中档位越高价格反而越低时标记待复核。
+3. **清洗**：DeepSeek 整理物料名称和结构化参数。原文已经是 `键:值;` 格式的参数原样保留。
+4. **商务条款**：从同目录的报价说明/折扣单图片中识别，或用 `--terms-json` 直接提供。公章上识别出的供应商要和文件名、表格内容相互印证，对不上的不采用。
+5. **输出与对账**：生成「标准化报价」「疑义与失败审计说明」「原表对账」三个工作表。
+
+## 配置（`.env`）
+
+```bash
+DEEPSEEK_API_KEY=sk-...
+# 可选
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-chat          # 需支持图片输入 (扫描件、商务单图片)
+VISION_API_KEY= / VISION_BASE_URL= / VISION_MODEL=   # 扫描件改用其它 OpenAI 兼容多模态模型
+VISION_DOUBLE_CHECK=1                 # 扫描件两遍识别交叉校验
+VISION_GAMMA=1.8                      # 增强图压暗程度
+TEMPLATE_PATH=                        # 输出模板 .xlsx (取第 1 行表头)；不填使用内置 33 列表头
+CATEGORY_CODE_FILE=                   # 标准分类编码 .csv/.xlsx (前两列：名称、编码)；不填则编码留空
+OUTPUT_DIR=                           # 默认 ./deliveries
+# 试点：表格结构 / 行类型判定
+STRUCTURE_ENGINE=llm                  # llm (默认) / jev / compare
+TYPESAFE_API_KEY=                     # jev、compare 模式需要
+JEV_MIN_CONFIDENCE=0.5                # Jev 置信度低于此值时写入待复核说明
+```
+
+## 试点：用 TypeSafe Jev 判定表格结构
+
+Jev 只做选择题，答案只能是给定选项之一，并附带概率。试点用它判定以下内容：
+- **表格结构**（每个 Sheet 发一次请求）：表格类型（清单式 / 矩阵式）、表头行、数据起始行、单价列、单位列；
+- **行类型**（每 40 行发一次请求，并发执行）：物料行 / 分组标题 / 表头 / 合计小计 / 备注其他。
+
+三种模式：
+
+| `STRUCTURE_ENGINE` | 输出采用 | 额外内容 |
+|---|---|---|
+| `llm` | 现有做法 | 无 |
+| `jev` | Jev 的判定；置信度低的写入待复核说明 | 「结构判定对比」Sheet |
+| `compare` | 现有做法 | 同时调用 Jev，两者判定差异写入「结构判定对比」Sheet，供对照原件判定谁对 |
+
+限制：
+- 试点只覆盖清单式表格的结构和行类型；矩阵表只比较表格类型这一项。
+- `jev` 模式下，左右并排的子表按整张表处理。
+- Jev 返回的答案如果不在选项内、或概率不合法，整次请求作废，退回现有做法。
+
+## 运行
+
+```bash
+pip install -r requirements.txt
+python main.py -i "报价单.pdf"                       # 自动查找同目录的 报价说明/折扣单 图片
+python main.py -i "报价单.xlsx" -t "报价说明.png"
+python main.py -i "报价单.pdf" --terms-json terms.json  # 人工确认的商务条款
+```
+
+`terms.json` 的字段：`supplier`、`brand`、`province`、`city`、`is_tax_included`、`tax_rate`、`tax_desc`、`is_freight_included`、`freight_desc`、`freight_settle`、`discount_ratio`、`discount_series`、`quote_desc`、`quote_type`。没有的字段可以不写。
+
+## 文件
+
+```text
+main.py             入口与解析主流程（清单式 / 矩阵式、清洗、对账）
+extractor.py        Excel 合并单元格展开、精度保护、图片定位
+pdf_extractor.py    PDF → 表格（文字层 / 视觉模型）
+terms_extractor.py  商务条款识别与规范化
+llm_agent.py        DeepSeek 表头推导与物料清洗
+models.py           物料记录与原表对账
+builder.py          输出工作簿
+config.py           环境配置、省份映射、编码库加载
+```
