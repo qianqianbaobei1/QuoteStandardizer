@@ -758,6 +758,19 @@ def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
     items, source_rows = standardize_workbook(wb, wb, None, supplier, brand, id_prefix, normalize_terms(terms),
                                               cell_issue=pdf_ext.cell_issue, global_notes=global_notes,
                                               struct_log=struct_log)
+    if hasattr(pdf_ext, 'failed_pages') and pdf_ext.failed_pages:
+        for fpage, reason in pdf_ext.failed_pages:
+            rec = SourceRowRecord(
+                sheet_name=fpage,
+                row_idx=1,
+                row_type="exception",
+                source_ref=f"{fpage}!R1",
+                raw_full_line=f"异常:{fpage}识别失败({reason})",
+                raw_price=None,
+                skip_reason=f"异常:{fpage}识别失败({reason})"
+            )
+            source_rows.append(rec)
+        print(f"[*] 页面失败隔离清单: {[fp for fp, _ in pdf_ext.failed_pages]}")
     # 每页原件截图作为“厂家报价图片” (quote_img{页码}.png)，便于对照
     page_imgs = pdf_ext.save_page_images(img_dir)
     for it in items:
@@ -825,6 +838,9 @@ def main():
         sys.exit(1)
 
     print(f"\n🎉 统一标准多行结构化输出完成！交付文件：{out}")
+    # 若存在隔离的失败页，返回退出码 2
+    if 'failed_pages' in locals() or (hasattr(sys, '_has_failed_pages') and sys._has_failed_pages):
+        sys.exit(2)
 
 if __name__ == '__main__':
     main()

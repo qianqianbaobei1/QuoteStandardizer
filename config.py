@@ -26,6 +26,9 @@ VISION_MODEL = os.getenv("VISION_MODEL") or DEEPSEEK_MODEL
 VISION_DOUBLE_CHECK = os.getenv("VISION_DOUBLE_CHECK", "1") not in ("0", "false", "False", "")
 # 扫描件识别增强的 gamma (>1 压暗浅色笔画)
 VISION_GAMMA = float(os.getenv("VISION_GAMMA", "1.8"))
+# 大页面切块识别配置
+VISION_MAX_ROWS_PER_TILE = int(os.getenv("VISION_MAX_ROWS_PER_TILE", "40"))
+VISION_TILE_OVERLAP_ROWS = int(os.getenv("VISION_TILE_OVERLAP_ROWS", "2"))
 
 # 表格结构 / 行类型判定方式 (试点)：
 #   llm     = 现有做法 (DeepSeek 推导表头 + 启发式行过滤)，默认

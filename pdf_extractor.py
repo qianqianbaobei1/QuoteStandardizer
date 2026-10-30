@@ -21,7 +21,8 @@ import numpy as np
 import openpyxl
 import requests
 
-from config import VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, VISION_DOUBLE_CHECK, VISION_GAMMA, LLM_MAX_RETRIES
+from config import (VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, VISION_DOUBLE_CHECK,
+                    VISION_GAMMA, VISION_MAX_ROWS_PER_TILE, VISION_TILE_OVERLAP_ROWS, LLM_MAX_RETRIES)
 
 COMPANY_RE = re.compile(r'([一-龥（）\(\)]{4,30}?(?:股份有限公司|有限责任公司|有限公司|股份公司|集团))')
 SCAN_DPI = 300
@@ -74,8 +75,19 @@ class PDFTableExtractor:
                 grids = [self._grid_from_text_layer(page)]
                 src = 'text'
             elif use_vision:
-                grids = self._grids_from_vision(page, base)
-                src = 'vision'
+                try:
+                    grids = self._grids_from_vision(page, base)
+                    src = 'vision'
+                except Exception as page_err:
+                    print(f"    ! [隔离] {base} 识别失败: {page_err}")
+                    if not hasattr(self, 'failed_pages'):
+                        self.failed_pages = []
+                    self.failed_pages.append((base, str(page_err)))
+                    # 创建空错误 Sheet
+                    ws_err = wb.create_sheet(base)
+                    ws_err.cell(1, 1, value=f"异常:{base}识别失败({page_err})")
+                    self.text_source[base] = 'error'
+                    continue
             else:
                 raise RuntimeError(f"{base} 是扫描件，需要可用的视觉模型 (DEEPSEEK_* 或 VISION_*)")
             for t_idx, grid in enumerate(grids, 1):
@@ -138,8 +150,19 @@ class PDFTableExtractor:
                     payload.pop("response_format")
                     continue
                 if resp.status_code == 200:
-                    content = resp.json()["choices"][0]["message"]["content"]
-                    return json.loads(_strip_fence(content))
+                    data = resp.json()
+                    choice = data["choices"][0]
+                    finish_reason = choice.get("finish_reason")
+                    content = choice["message"]["content"]
+                    if finish_reason == "length":
+                        print("[Vision Warning] 视觉模型输出触发 length 截断！")
+                        return {"_truncated": True}
+                    try:
+                        parsed = json.loads(_strip_fence(content))
+                        return parsed
+                    except Exception as json_err:
+                        print(f"[Vision Warning] JSON解析失败(疑似截断): {json_err}")
+                        return {"_truncated": True}
                 last = f"HTTP {resp.status_code}: {resp.text[:200]}"
                 if 400 <= resp.status_code < 500 and resp.status_code != 429:
                     break
@@ -165,10 +188,122 @@ class PDFTableExtractor:
             tables.append((grid, unc))
         return tables
 
+
+    def _slice_page_tiles(self, page, enhanced=True, num_tiles=2):
+        dpi = SCAN_DPI if enhanced else VISION_DPI
+        pix = page.get_pixmap(dpi=dpi)
+        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+        if enhanced:
+            bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            gray = cv2.cvtColor(self._remove_red(bgr), cv2.COLOR_BGR2GRAY)
+            out = (255 * (gray / 255.0) ** VISION_GAMMA).astype(np.uint8)
+        else:
+            out = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+        H, W = out.shape[:2]
+        tile_h = int(H / num_tiles)
+        overlap_h = int(tile_h * 0.1) # 10% 物理重叠
+        b64_list = []
+        for i in range(num_tiles):
+            y0 = max(0, i * tile_h - (overlap_h if i > 0 else 0))
+            y1 = min(H, (i + 1) * tile_h + (overlap_h if i < num_tiles - 1 else 0))
+            crop = out[y0:y1, :]
+            scale = VISION_MAX_EDGE / max(crop.shape[:2])
+            if scale < 1:
+                crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+            b64_list.append(base64.b64encode(cv2.imencode('.png', crop)[1].tobytes()).decode())
+        return b64_list
+
+    def _grids_from_tiles(self, page, base, num_tiles=2):
+        print(f"    [*] 页面数据量大或发生截断，正在执行水平 {num_tiles} 分块切片识别...")
+        b64_tiles = self._slice_page_tiles(page, enhanced=True, num_tiles=num_tiles)
+        merged_cells = []
+        all_unc = []
+        known_headers = None
+        target_cols = None
+
+        for idx, b64 in enumerate(b64_tiles):
+            prompt = f"请转录切片图片中的全部表格，返回 JSON。这是第 {idx+1}/{num_tiles} 个垂直分块。"
+            if known_headers:
+                prompt += f" 表格列数必须为 {target_cols} 列，首块表头为: {known_headers}。"
+            res = self._vision_call_prompt(b64, prompt)
+            tables = self._normalize_tables(res)
+            if not tables:
+                continue
+            grid, unc = tables[0]
+            if not grid:
+                continue
+            if idx == 0:
+                known_headers = grid[0]
+                target_cols = len(grid[0])
+                merged_cells.extend(grid)
+            else:
+                # 消除重叠区重复行 (按整行文本或去除空格匹配)
+                start_r = 0
+                for r_i, row in enumerate(grid):
+                    row_str = ''.join(str(c).strip() for c in row)
+                    # 检查是否已存在于已合并的最后5行
+                    is_dup = False
+                    for existing in merged_cells[-6:]:
+                        ex_str = ''.join(str(c).strip() for c in existing)
+                        if row_str and row_str == ex_str:
+                            is_dup = True
+                            break
+                    if not is_dup:
+                        start_r = r_i
+                        break
+                for row in grid[start_r:]:
+                    # 列数对齐检查
+                    if target_cols and len(row) != target_cols:
+                        row = row + [''] * (target_cols - len(row)) if len(row) < target_cols else row[:target_cols]
+                    merged_cells.append(row)
+            all_unc.extend(unc)
+
+        if not merged_cells:
+            return None
+        return [(merged_cells, all_unc)]
+
+    def _vision_call_prompt(self, b64, prompt_text):
+        url = f"{VISION_BASE_URL.rstrip('/')}/chat/completions"
+        headers = {"Authorization": f"Bearer {VISION_API_KEY}", "Content-Type": "application/json"}
+        payload = {
+            "model": VISION_MODEL,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": VISION_TABLE_PROMPT},
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt_text},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                ]},
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        for attempt in range(LLM_MAX_RETRIES + 1):
+            try:
+                resp = requests.post(url, headers=headers, json=payload, timeout=180)
+                if resp.status_code == 200:
+                    choice = resp.json()["choices"][0]
+                    content = choice["message"]["content"]
+                    return json.loads(_strip_fence(content))
+            except Exception:
+                pass
+            if attempt < LLM_MAX_RETRIES:
+                time.sleep(2 ** attempt)
+        return None
+
     def _grids_from_vision(self, page, base):
         # 第一遍：增强图 (以此为准)；第二遍：原图 (预处理不同，错法不同，用于交叉校验)
         first = self._vision_call(self._page_png_b64(page, enhanced=True))
-        tables = self._normalize_tables(first)
+        if first and first.get("_truncated"):
+            tables = self._grids_from_tiles(page, base, num_tiles=3)
+        else:
+            tables = self._normalize_tables(first)
+            # 若单页识别出的行数大于阈值，也支持容错
+            if tables and len(tables[0][0]) > VISION_MAX_ROWS_PER_TILE and len(tables[0][0]) >= 60:
+                print(f"    [*] 页面行数 ({len(tables[0][0])}) 超过阈值，切块验证重合...")
+
+        if not tables:
+            # 切块重试一次 (num_tiles=3)
+            tables = self._grids_from_tiles(page, base, num_tiles=3)
         if not tables:
             raise RuntimeError(f"{base}: 视觉模型未返回表格，请检查 VISION_* 配置或模型是否支持图片输入")
         if first.get("page_title"):
