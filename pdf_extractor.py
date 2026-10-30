@@ -14,6 +14,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 
 import cv2
 import fitz

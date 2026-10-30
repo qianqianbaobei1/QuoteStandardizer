@@ -14,7 +14,14 @@ import re
 import requests
 from PIL import Image
 
-from config import VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, normalize_province
+from config import VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, GEMINI_API_KEY, GEMINI_MODEL, normalize_province
+
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 SYSTEM_PROMPT_TERMS_VISION = """你是工程采购商务条款的转录员。请从提供的《报价说明》《工程折扣记录单》等商务附件图片中提取条款。
 
@@ -161,7 +168,7 @@ class TermsExtractor:
         """识别商务单图片，返回原始条款字典 (由调用方统一 normalize_terms)；失败返回 {'_source': 'none'}"""
         if not os.path.exists(self.image_path):
             return {'_source': 'none'}
-        if not (VISION_API_KEY and VISION_BASE_URL and VISION_MODEL):
+        if not (GEMINI_API_KEY or (VISION_API_KEY and VISION_BASE_URL and VISION_MODEL)):
             print("[TermsExtractor Warning] 未配置视觉模型，商务条款无法识别。")
             return {'_source': 'none'}
         parsed = self._extract_by_vision()
@@ -193,6 +200,29 @@ class TermsExtractor:
             return None
 
     def _extract_by_vision(self):
+        # 1. 优先使用 Gemini 原生全模态视觉
+        if genai and GEMINI_API_KEY:
+            try:
+                client = genai.Client(api_key=GEMINI_API_KEY)
+                with open(self.image_path, "rb") as f:
+                    img_bytes = f.read()
+                # 确定图片 mime 类型
+                ext = os.path.splitext(self.image_path)[1].lower()
+                mime = "image/png" if ext == ".png" else "image/jpeg"
+                part = types.Part.from_bytes(data=img_bytes, mime_type=mime)
+                resp = client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=[part, SYSTEM_PROMPT_TERMS_VISION + "\n请严格以 JSON 格式输出识别到的条款："],
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                if resp.text:
+                    parsed = json.loads(self._clean_json_str(resp.text))
+                    if isinstance(parsed, dict):
+                        return parsed
+            except Exception as e:
+                print(f"[TermsExtractor] Gemini 原生全模态识别异常: {e}，回退至兼容通道...")
+
+        # 2. 传统兼容通道
         # 商务单图片分辨率常很低：放大到约 1600px 宽再送模型，提升小字与勾选框识别
         img = Image.open(self.image_path).convert('RGB')
         if img.width < 1600:

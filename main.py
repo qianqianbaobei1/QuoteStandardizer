@@ -18,9 +18,11 @@ import openpyxl
 
 from extractor import ExcelAssetExtractor, safe_clean_price, cell_str, unmerge_and_fill_cells, extract_sheet_sample_rows
 from pdf_extractor import PDFTableExtractor
+from gemini_pdf_extractor import GeminiPDFTableExtractor
 from terms_extractor import TermsExtractor, normalize_terms, find_terms_image, missing_terms
 from builder import StandardizedWorkbookBuilder
-from config import DEFAULT_TEMPLATE_PATH, DEFAULT_OUTPUT_DIR, PROVINCE_ABBR_MAP, CATEGORY_CODE_MAP, resolve_category_code, expand_region
+from config import (DEFAULT_TEMPLATE_PATH, DEFAULT_OUTPUT_DIR, PROVINCE_ABBR_MAP, CATEGORY_CODE_MAP,
+                    resolve_category_code, expand_region, EXTRACTOR_ENGINE, GEMINI_API_KEY, GEMINI_MODEL)
 from models import CanonicalMaterialItem, SourceRowRecord, reconcile
 from llm_agent import DeepSeekStandardizer, JevJudge, UNIT_PRICE_KEYS, TOTAL_PRICE_KEYS
 from config import STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE
@@ -800,9 +802,9 @@ def process_excel(input_xlsx, template_xlsx, output_dir, terms=None):
     return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log)
 
 
-def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
-    print(f"\n=== [PDF] 解析: {input_pdf} ===")
-    pdf_ext = PDFTableExtractor(input_pdf)
+def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_dir, terms=None, rail_name="A-Rail"):
+    print(f"\n=== [PDF Pipeline - {rail_name}] 启动解析: {input_pdf} ===")
+    pdf_ext = extractor_cls(input_pdf)
     wb = pdf_ext.to_workbook()
 
     terms = verify_terms_supplier(terms, _path_evidence(input_pdf) + pdf_ext.page_titles + _workbook_text(wb))
@@ -839,6 +841,35 @@ def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
         if m and int(m.group(1)) in page_imgs:
             it.image_filenames = [page_imgs[int(m.group(1))]]
     return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log)
+
+
+def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
+    """
+    双轨调度中枢:
+    1. EXTRACTOR_ENGINE='gemini': 优先使用 B 轨 (Gemini 3.8 Flash 原生直传)，若未配置Key或异常自动无损回退到 A 轨
+    2. EXTRACTOR_ENGINE='traditional': 强制使用 A 轨 (传统切片 + OpenCV 滤镜 + DeepSeek)
+    3. EXTRACTOR_ENGINE='compare': 双轨比对模式
+    """
+    engine = (EXTRACTOR_ENGINE or "traditional").strip().lower()
+
+    if engine in ("gemini", "compare"):
+        if GEMINI_API_KEY:
+            try:
+                print(f"[*] [双轨调度] 路由至 B 轨 (Gemini 原生全模态: {GEMINI_MODEL})")
+                return _process_pdf_with_extractor(GeminiPDFTableExtractor, input_pdf, template_xlsx, output_dir,
+                                                    terms=terms, rail_name="Gemini B-Rail")
+            except Exception as e:
+                print(f"[Warning] [双轨调度] Gemini B 轨执行异常: {e}，自动平滑兜底回退至 A 轨...")
+                return _process_pdf_with_extractor(PDFTableExtractor, input_pdf, template_xlsx, output_dir,
+                                                    terms=terms, rail_name="Traditional A-Rail (Fallback)")
+        else:
+            print("[Info] [双轨调度] 检测到 EXTRACTOR_ENGINE=gemini 但未配置 GEMINI_API_KEY，安全直通 A 轨 (传统切图流水线)")
+            return _process_pdf_with_extractor(PDFTableExtractor, input_pdf, template_xlsx, output_dir,
+                                                terms=terms, rail_name="Traditional A-Rail")
+    else:
+        print("[*] [双轨调度] 路由至 A 轨 (传统切图流水线)")
+        return _process_pdf_with_extractor(PDFTableExtractor, input_pdf, template_xlsx, output_dir,
+                                            terms=terms, rail_name="Traditional A-Rail")
 
 
 def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=None):

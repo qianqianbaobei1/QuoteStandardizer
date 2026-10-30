@@ -41,6 +41,13 @@ TYPESAFE_MODEL = os.getenv("TYPESAFE_MODEL", "jev-latest")
 # Jev 判定置信度低于此值时写入待复核说明 (需用真实样例校准)
 JEV_MIN_CONFIDENCE = float(os.getenv("JEV_MIN_CONFIDENCE", "0.5"))
 
+# 线路引擎选择: 'traditional' (原切图流水线) / 'gemini' (Gemini原生直传) / 'compare' (双轨对比)
+EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "gemini").strip().lower()
+
+# Gemini 原生引擎配置
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+
 # LLM 调用重试次数
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 
