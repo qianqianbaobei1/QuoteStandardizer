@@ -223,7 +223,11 @@ def _verbatim_specs(raw_cells: dict) -> dict:
     return {}
 
 
-BUSINESS_HEADER_RE = re.compile(r'(单价|合价|总价|金额|小计|价格|市场价|出厂价|含税价|面价|单位|序号|税率|是否含税|报价地区|地区|图片)')
+# 地区表头关键词集
+REGION_HEADER_KEYS = ['地区', '区域', '城市', '省份', '省市', '供货范围', '供应范围', '报价城市', '报价地区']
+REGION_HEADER_RE = re.compile(r'(' + '|'.join(REGION_HEADER_KEYS) + r')')
+
+BUSINESS_HEADER_RE = re.compile(r'(单价|合价|总价|金额|小计|价格|市场价|出厂价|含税价|面价|单位|序号|税率|是否含税|' + '|'.join(REGION_HEADER_KEYS) + r'|图片)')
 
 
 def _genoffice_raw_spec(row_cells: dict, headers_map: dict, price_col, unit_col) -> str:
@@ -607,7 +611,7 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     structured_specs = {**verbatim, **extra}
 
                 # 行内自带报价地区时以行为准，否则用商务条款中的地区
-                row_region = next((v for k, v in item["raw_cells_dict"].items() if '地区' in k or '区域' in k), '')
+                row_region = next((v for k, v in item["raw_cells_dict"].items() if any(rk in k for rk in REGION_HEADER_KEYS)), '')
                 province, city, region_note = _region_fields(row_region or terms_info["province"], terms_info["city"])
                 if region_note:
                     notes.append(region_note)
