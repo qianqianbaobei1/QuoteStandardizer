@@ -137,14 +137,17 @@ def missing_terms(terms: dict) -> list:
     return [name for k, name in labels.items() if terms.get(k) in (None, '')]
 
 
-def find_terms_image(folder: str):
-    """在报价单同目录查找商务说明/折扣单图片 (文件名含关键词即可，如 “报价说明20260918.png”)"""
+def find_terms_image(folder: str, exclude_file: str = None):
+    """在报价单同目录查找商务说明/折扣单图片 (文件名含关键词即可，如 “报价说明20260918.png”)，自动排除输入文件本身"""
     try:
         files = [f for f in os.listdir(folder) if os.path.splitext(f)[1].lower() in ('.png', '.jpg', '.jpeg')]
     except OSError:
         return None
+    exclude_base = os.path.basename(exclude_file) if exclude_file else None
     for key in TERMS_IMAGE_KEYS:
         for f in sorted(files):
+            if exclude_base and f == exclude_base:
+                continue
             if key in f:
                 return os.path.join(folder, f)
     return None

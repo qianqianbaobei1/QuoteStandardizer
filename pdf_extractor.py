@@ -48,7 +48,14 @@ VISION_TABLE_PROMPT = """你是报价单扫描件的表格转录员。请把图�
 class PDFTableExtractor:
     def __init__(self, pdf_path):
         self.pdf_path = pdf_path
-        self.doc = fitz.open(pdf_path)
+        ext = os.path.splitext(pdf_path)[1].lower()
+        if ext in ('.png', '.jpg', '.jpeg'):
+            # 单张图片转换为单页内存 PDF 文档
+            img_doc = fitz.open(pdf_path)
+            pdf_bytes = img_doc.convert_to_pdf()
+            self.doc = fitz.open("pdf", pdf_bytes)
+        else:
+            self.doc = fitz.open(pdf_path)
         self.cell_issue = {}      # (sheet, row, col) -> 存疑原因
         self.page_titles = []     # 每页表格上方的文字 (用于识别供应商)
         self.text_source = {}     # sheet -> 'text' / 'vision'

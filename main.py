@@ -810,7 +810,7 @@ def main():
         terms_dict['_source'] = 'manual'
         print(f"[*] 使用人工商务条款: {args.terms_json}")
     else:
-        terms_path = args.terms or find_terms_image(os.path.dirname(os.path.abspath(input_path)))
+        terms_path = args.terms or find_terms_image(os.path.dirname(os.path.abspath(input_path)), exclude_file=input_path)
         if terms_path and os.path.exists(terms_path):
             print(f"[*] 商务说明单: {terms_path}")
             terms_dict = TermsExtractor(terms_path).extract_terms()
@@ -818,7 +818,7 @@ def main():
     ext = os.path.splitext(input_path)[1].lower()
     if ext in ('.xlsx', '.xlsm'):
         out = process_excel(input_path, args.template, args.output_dir, terms=terms_dict)
-    elif ext == '.pdf':
+    elif ext in ('.pdf', '.png', '.jpg', '.jpeg'):
         out = process_pdf(input_path, args.template, args.output_dir, terms=terms_dict)
     else:
         print(f"[Error] 不支持的文件类型: {ext} (.xls 请先另存为 .xlsx)")
