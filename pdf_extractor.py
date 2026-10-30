@@ -340,7 +340,9 @@ class PDFTableExtractor:
         列数不同或行标题对不上的行整行标记。返回 (不一致格数, 无法对齐行数)
         """
         def norm(v):
-            return v.replace(' ', '').replace(',', '')
+            # NFKC 归一化全角/半角标点符号，去除空白和千分位逗号
+            s = unicodedata.normalize('NFKC', str(v or ''))
+            return s.replace(' ', '').replace(',', '').replace('　', '')
 
         width_ok = bool(g2) and len(g2[0]) == len(grid[0])
         if width_ok and len(g2) == len(grid):
