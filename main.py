@@ -278,14 +278,22 @@ def _detect_matrix(ws):
     if len(value_cols) < 2:
         return None
 
-    # 表头区内的标题/分组行 (合并展开后整行同值) 不参与表头路径
-    header_rows = [r for r in range(r0) if not _is_title_row(grid[r])]
+    # 检测横跨全部价格列的大标题 (如“10/0.4kV干式配电变压器（单位：元/台）”)
+    table_title = ""
+    for r in range(r0):
+        row_vals = [grid[r][c] for c in value_cols if grid[r][c]]
+        if len(set(row_vals)) == 1 and len(row_vals) == len(value_cols):
+            table_title = row_vals[0]
+            break
+
+    # 表头区内的标题/分组行或整表大标题不参与列标题路径
+    header_rows = [r for r in range(r0) if not _is_title_row(grid[r]) and not (table_title and all(grid[r][c] == table_title for c in value_cols))]
 
     def path(c):
         parts = []
         for r in header_rows:
             v = grid[r][c]
-            if v and (not parts or parts[-1] != v):
+            if v and v != table_title and (not parts or parts[-1] != v):
                 parts.append(v)
         return parts
 
@@ -302,6 +310,7 @@ def _detect_matrix(ws):
         'value_cols': [c + 1 for c in value_cols],
         'col_paths': {c + 1: '-'.join(path(c)) or f"第{c + 1}列" for c in value_cols},
         'label_header': ''.join(path(label_col)) or '行标题',
+        'table_title': table_title,
         'unit': m_unit.group(1) if m_unit else '',
     }
 
@@ -332,6 +341,7 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue):
                 continue
             ref = f"{sname}!R{r}C{c}"
             col_path = mx['col_paths'][c]
+            tt_part = f";表标题:{mx['table_title']}" if mx.get('table_title') else ""
             raw_line = f"{mx['label_header']}:{label} | 列:{col_path} | 价格:{v}"
             price = safe_clean_price(v) if _is_number_text(v) else 0.0
             decision = 'item' if price > 0 else f"矩阵单元格非数值: {v}"
@@ -340,6 +350,12 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue):
             if decision != 'item':
                 continue
             notes = _cell_notes(cell_issue, sname, r, [c, mx['label_col']], price_col=c)
+            # 检查表头格是否有 cell_issue (F5)
+            for hr in range(1, mx['data_start']):
+                h_issue = cell_issue.get((sname, hr, c))
+                if h_issue:
+                    notes.append(f"列标题识别存疑: {h_issue}")
+                    break
             if label_num is not None and c in prev:
                 p_label, p_price = prev[c]
                 if label_num > p_label and price < p_price:
@@ -350,7 +366,7 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue):
                 "id": ref,
                 "raw_cells_dict": {mx['label_header']: label, "产品/型号(表头)": col_path, "单价": v},
                 "raw_full_line": raw_line,
-                "raw_spec": f"{mx['label_header']}:{label};型号/系列:{col_path}",
+                "raw_spec": f"{mx['label_header']}:{label};型号/系列:{col_path}" + tt_part,
                 "raw_price": price,
                 "raw_unit": mx['unit'],
                 "mpaths": [],
