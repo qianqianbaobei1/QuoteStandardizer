@@ -27,7 +27,7 @@ except ImportError:
     genai = None
     types = None
 
-COMPANY_RE = re.compile(r'([一-龥（）\(\)]{4,30}?(?:股份有限公司|有限责任公司|有限公司|股份公司|集团))')
+COMPANY_RE = re.compile(r'([\u4e00-\u9fa5（）\(\)]{4,30}?(?:股份有限公司|有限责任公司|有限公司|股份公司))')
 
 GEMINI_PDF_TRANSCRIPTION_PROMPT = """你是一个国家级建设工程造价与采招数据专家。请直接审视这份原始 PDF 报价单文档，把其中包含的全部页面的所有表格原样逐格转录为 JSON 结构。
 

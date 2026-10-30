@@ -15,6 +15,7 @@ import hashlib
 import argparse
 import json
 import openpyxl
+from concurrent.futures import ThreadPoolExecutor
 
 from extractor import ExcelAssetExtractor, safe_clean_price, cell_str, unmerge_and_fill_cells, extract_sheet_sample_rows
 from pdf_extractor import PDFTableExtractor
@@ -603,8 +604,9 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         group_of.update({r["id"]: r["group_key"] for r in raw_rows if r.get("group_key")})
         print(f"    -> 提取出有效物料原始行: {len(raw_rows)} 行，启动大模型槽位精准清洗...")
 
-        # 分批调用 DeepSeek 提炼标准物料模型（Chunking 15行/批）
-        batch_size = 15
+        # 分批调用 DeepSeek 提炼标准物料模型（并发线程池加速）
+        batch_size = 30
+        batches = []
         for b_idx in range(0, len(raw_rows), batch_size):
             batch_slice = raw_rows[b_idx:b_idx + batch_size]
             llm_input = [
@@ -617,12 +619,20 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 }
                 for item in batch_slice
             ]
+            batches.append((batch_slice, llm_input))
 
-            cleaned_batch = standardizer.standardize_batch(llm_input, supplier_hint=supplier, brand_hint=brand)
-            cleaned_dict = {}
-            for res in cleaned_batch:
-                cleaned_dict.setdefault(str(res.get("id")), res)
+        def _clean_worker(args):
+            b_slice, inp = args
+            res_list = standardizer.standardize_batch(inp, supplier_hint=supplier, brand_hint=brand)
+            res_map = {str(res.get("id")): res for res in res_list if isinstance(res, dict)}
+            return b_slice, res_map
 
+        # 并发执行各批次标准化清洗
+        max_workers = min(len(batches), 5) if batches else 1
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            cleaned_batch_results = list(pool.map(_clean_worker, batches))
+
+        for batch_slice, cleaned_dict in cleaned_batch_results:
             for item in batch_slice:
                 it_id = item["id"]
                 cleaned_res = cleaned_dict.get(it_id, {})
