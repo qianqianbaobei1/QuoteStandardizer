@@ -227,7 +227,7 @@ def _verbatim_specs(raw_cells: dict) -> dict:
 REGION_HEADER_KEYS = ['地区', '区域', '城市', '省份', '省市', '供货范围', '供应范围', '报价城市', '报价地区']
 REGION_HEADER_RE = re.compile(r'(' + '|'.join(REGION_HEADER_KEYS) + r')')
 
-BUSINESS_HEADER_RE = re.compile(r'(单价|合价|总价|金额|小计|价格|市场价|出厂价|含税价|面价|单位|序号|税率|是否含税|' + '|'.join(REGION_HEADER_KEYS) + r'|图片)')
+BUSINESS_HEADER_RE = re.compile(r'(单价|合价|总价|金额|小计|价格|市场价|出厂价|含税价|面价|单位|序号|税率|是否含税|品牌|' + '|'.join(REGION_HEADER_KEYS) + r'|图片)')
 
 
 def _genoffice_raw_spec(row_cells: dict, headers_map: dict, price_col, unit_col) -> str:
@@ -585,6 +585,17 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 cleaned_res = cleaned_dict.get(it_id, {})
                 notes = list(global_notes) + list(item.get("notes", []))
 
+                # 表内行级品牌推导 (F4)
+                row_brand = ''
+                for bk, bv in item["raw_cells_dict"].items():
+                    if '品牌' in bk and not any(ng in bk for ng in ['档位', '等级', '类别', '系列']):
+                        row_brand = str(bv).strip()
+                        break
+                item_brand = row_brand or brand
+                # 若来自表内明确品牌列，清除“由供应商名称推断”的提示
+                if row_brand:
+                    notes = [n for n in notes if not (n.startswith("品牌“") and "由供应商名称推断" in n)]
+
                 clean_source = cleaned_res.get("_source", "fallback")
                 if clean_source != "llm":
                     notes.append("未经大模型清洗(规则降级)，名称与参数需复核")
@@ -638,7 +649,7 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 ci = CanonicalMaterialItem(
                     quote_id=f"{id_prefix}{seq:05d}",
                     supplier=supplier,
-                    brand=brand,
+                    brand=item_brand,
                     category_name=std_name,
                     category_code=cat_code,
                     structured_specs=structured_specs,
