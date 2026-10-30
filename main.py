@@ -1,3 +1,4 @@
+import unicodedata
 # -*- coding: utf-8 -*-
 """
 QuoteStandardizer - 报价单解析与原表对账
@@ -213,6 +214,30 @@ def normalize_unit(u: str) -> str:
 def _spec_key_norm(k: str) -> str:
     return re.sub(r'[\s()（）]|mm|㎜', '', k)
 
+
+
+def _norm_f7_text(s: str) -> str:
+    """NFKC 归一、去空白、统一各种乘号 (× x X * -> ×)"""
+    s = unicodedata.normalize('NFKC', str(s or ''))
+    s = re.sub(r'\s+', '', s)
+    s = re.sub(r'[xX*×]', '×', s)
+    return s.lower()
+
+def _check_param_provenance(structured_specs: dict, raw_full_line: str) -> list:
+    """检查 structured_specs 的每个值是否能在 raw_full_line 中找到出处，返回无出处的说明"""
+    norm_line = _norm_f7_text(raw_full_line)
+    unproven = []
+    for k, v in structured_specs.items():
+        v_str = str(v).strip()
+        if not v_str:
+            continue
+        norm_val = _norm_f7_text(v_str)
+        # 常见纯状态布尔值/通用分类允许豁免
+        if norm_val in ('是', '否', '无', '有', '高档', '中档', '低档'):
+            continue
+        if norm_val not in norm_line:
+            unproven.append(f"{k}={v_str}")
+    return unproven
 
 def _verbatim_specs(raw_cells: dict) -> dict:
     """单元格内容为 “品种:xx;厚度(mm):1.5;…” (至少 2 对) 时，逐对原样解析"""
@@ -636,6 +661,11 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     extra = {k: v for k, v in structured_specs.items()
                              if _spec_key_norm(k) not in covered and v not in verbatim.values()}
                     structured_specs = {**verbatim, **extra}
+
+                # F7 结构化参数逐项核对原文出处
+                unproven_params = _check_param_provenance(structured_specs, item.get("raw_full_line", ""))
+                if unproven_params:
+                    notes.append("参数无原文出处: " + "；".join(unproven_params))
 
                 # 行内自带报价地区时以行为准，否则用商务条款中的地区
                 row_region = next((v for k, v in item["raw_cells_dict"].items() if any(rk in k for rk in REGION_HEADER_KEYS)), '')
