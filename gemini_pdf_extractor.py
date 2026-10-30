@@ -18,7 +18,7 @@ import fitz  # PyMuPDF
 import openpyxl
 import requests
 
-from config import GEMINI_API_KEY, GEMINI_MODEL, LLM_MAX_RETRIES
+from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_THINKING_BUDGET, LLM_MAX_RETRIES
 
 try:
     from google import genai
@@ -48,20 +48,20 @@ GEMINI_PDF_TRANSCRIPTION_PROMPT = """你是一个国家级建设工程造价与�
   "pages": [
     {
       "page_number": 1,
-      "page_title": "重庆望变电气（集团）股份有限公司 报价单",
+      "page_title": "示例供应商名称 报价单",
       "tables": [
         {
           "cells": [
-            ["容量kVA", "S13型（NX3）", "S20型（NX2）", "S22型（NX1）"],
-            ["30", "10500", "", "20800"],
-            ["50", "13500", "19800", "33000"]
+            ["参数A", "规格项1", "规格项2", "规格项3"],
+            ["型号X", "100.00", "", "200.00"],
+            ["型号Y", "150.00", "180.00", "300.00"]
           ],
           "uncertain": [
-            [1, 1, "公章文字遮挡数字，疑似10500"]
+            [1, 1, "字迹模糊，疑似100.00"]
           ]
         }
       ],
-      "notes": "1000公里以内含运费"
+      "notes": "示例备注说明"
     }
   ]
 }
@@ -102,7 +102,11 @@ class GeminiPDFTableExtractor:
 
         # 优先使用 google-genai 官方 SDK
         if genai:
-            client = genai.Client(api_key=GEMINI_API_KEY)
+            http_opts = types.HttpOptions(timeout=5.0) if hasattr(types, "HttpOptions") else None
+            client_kwargs = {"api_key": GEMINI_API_KEY}
+            if http_opts:
+                client_kwargs["http_options"] = http_opts
+            client = genai.Client(**client_kwargs)
             uploaded_file = None
 
             try:
@@ -127,7 +131,7 @@ class GeminiPDFTableExtractor:
                                         {"type": "text", "text": GEMINI_PDF_TRANSCRIPTION_PROMPT}
                                     ]
                                 )
-                                raw_json_str = getattr(interaction, "output_text", None) or str(interaction)
+                                raw_json_str = getattr(interaction, "output_text", None)
                             else:
                                 # 回退到 models.generate_content
                                 pdf_part = types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
@@ -136,7 +140,8 @@ class GeminiPDFTableExtractor:
                                     contents=[pdf_part, GEMINI_PDF_TRANSCRIPTION_PROMPT],
                                     config=types.GenerateContentConfig(
                                         response_mime_type="application/json",
-                                        temperature=0.1
+                                        temperature=0.0,
+                                        thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET)
                                     )
                                 )
                                 raw_json_str = response.text
@@ -164,14 +169,15 @@ class GeminiPDFTableExtractor:
                                         {"type": "text", "text": GEMINI_PDF_TRANSCRIPTION_PROMPT}
                                     ]
                                 )
-                                raw_json_str = getattr(interaction, "output_text", None) or str(interaction)
+                                raw_json_str = getattr(interaction, "output_text", None)
                             else:
                                 response = client.models.generate_content(
                                     model=GEMINI_MODEL,
                                     contents=[uploaded_file, GEMINI_PDF_TRANSCRIPTION_PROMPT],
                                     config=types.GenerateContentConfig(
                                         response_mime_type="application/json",
-                                        temperature=0.1
+                                        temperature=0.0,
+                                        thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET)
                                     )
                                 )
                                 raw_json_str = response.text
@@ -193,7 +199,7 @@ class GeminiPDFTableExtractor:
             with open(self.pdf_path, "rb") as f:
                 b64_pdf = base64.b64encode(f.read()).decode("utf-8")
 
-            rest_url = f"https://generativelanguage.googleapis.com/v1beta/interactions?key={GEMINI_API_KEY}"
+            rest_url = "https://generativelanguage.googleapis.com/v1beta/interactions"
             payload = {
                 "model": GEMINI_MODEL,
                 "input": [
@@ -205,7 +211,11 @@ class GeminiPDFTableExtractor:
                     {"type": "text", "text": GEMINI_PDF_TRANSCRIPTION_PROMPT}
                 ]
             }
-            resp = requests.post(rest_url, json=payload, headers={"Content-Type": "application/json"}, timeout=120)
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": GEMINI_API_KEY
+            }
+            resp = requests.post(rest_url, json=payload, headers=headers, timeout=10)
             if resp.status_code == 200:
                 res_data = resp.json()
                 raw_json_str = res_data.get("output_text") or (
@@ -251,8 +261,28 @@ class GeminiPDFTableExtractor:
         if not pages and isinstance(data, list):
             pages = data
 
+        # 页数对不上就是漏页：必须显式上报，不能当成功落盘
+        returned = set()
+        for p in pages:
+            try:
+                returned.add(int(p.get("page_number")))
+            except (AttributeError, TypeError, ValueError):
+                pass
+        if self.total_pages and len(pages) < self.total_pages:
+            missing = [n for n in range(1, self.total_pages + 1) if n not in returned]
+            msg = f"模型只转录了 {len(pages)}/{self.total_pages} 页" + (f"，缺页 {missing[:10]}" if missing else "")
+            print(f"    ! [Gemini] {msg}")
+            self.failed_pages.append(("整篇", msg))
+
         for idx, page_info in enumerate(pages, 1):
-            sheet_name = f"第{idx}页"
+            # Sheet 名用模型的自报页码，不能用 enumerate 序号：模型跳页时序号会把后面每页的页码全推错
+            try:
+                pno = int(page_info.get("page_number"))
+            except (AttributeError, TypeError, ValueError):
+                pno = idx
+            sheet_name = f"第{pno}页"
+            if sheet_name in wb.sheetnames:
+                sheet_name = f"第{pno}页(#{idx})"
             ws = wb.create_sheet(title=sheet_name)
             self.text_source[sheet_name] = f"gemini_{GEMINI_MODEL}"
 

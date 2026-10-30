@@ -334,6 +334,17 @@ class StandardizedWorkbookBuilder:
         if structure_log:
             self._build_structure_sheet(wb_out, structure_log, thin_border)
 
+        try:
+            import subprocess
+            git_commit = subprocess.check_output(
+                ["git", "-C", os.path.dirname(os.path.abspath(__file__)), "rev-parse", "HEAD"],
+                stderr=subprocess.DEVNULL
+            ).decode("utf-8").strip()
+            wb_out.properties.keywords = f"git_commit:{git_commit}"
+            wb_out.properties.description = f"git_commit:{git_commit}"
+        except Exception:
+            pass
+
         wb_out.save(output_xlsx_path)
 
         # 垃圾文件防护：若全表无任何图片生成，自动清除空的临时图片目录，保持交付区清爽整洁
@@ -402,9 +413,11 @@ class StandardizedWorkbookBuilder:
         ws = wb_out.create_sheet(title='结构判定对比')
 
         def same(r):
+            if not isinstance(r, dict):
+                return True
             return str(r.get('current')) == str(r.get('jev'))
 
-        diff = [r for r in log if not same(r)]
+        diff = [r for r in log if isinstance(r, dict) and not same(r)]
         ws.cell(row=1, column=1, value=f"判定项 {len(log)} 个 | 分歧 {len(diff)} 个 (分歧项需对照原件判定哪一方正确)").font = \
             Font(name='宋体', size=11, bold=True, color='C00000' if diff else '385623')
         headers = ['Sheet', '判定项', '现有做法', 'Jev', 'Jev 置信度', '是否一致', '输出采用', '行内容', '人工判定 (对照原件填写)']

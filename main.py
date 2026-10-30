@@ -23,7 +23,7 @@ from gemini_pdf_extractor import GeminiPDFTableExtractor
 from terms_extractor import TermsExtractor, normalize_terms, find_terms_image, missing_terms
 from builder import StandardizedWorkbookBuilder
 from config import (DEFAULT_TEMPLATE_PATH, DEFAULT_OUTPUT_DIR, PROVINCE_ABBR_MAP, CATEGORY_CODE_MAP,
-                    resolve_category_code, expand_region, EXTRACTOR_ENGINE, GEMINI_API_KEY, GEMINI_MODEL)
+                    resolve_category_code, expand_region, EXTRACTOR_ENGINE, GEMINI_API_KEY, GEMINI_MODEL, VISION_MODEL)
 from models import CanonicalMaterialItem, SourceRowRecord, reconcile
 from llm_agent import DeepSeekStandardizer, JevJudge, UNIT_PRICE_KEYS, TOTAL_PRICE_KEYS
 from config import STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE
@@ -41,6 +41,8 @@ COMPANY_SUFFIX_RE = re.compile(r'(股份有限公司|有限责任公司|有限�
 REGION_PREFIX_RE = re.compile('^(' + '|'.join(sorted((k for k in PROVINCE_ABBR_MAP if len(k) >= 2), key=len, reverse=True)) + r')|^[\u4e00-\u9fa5]{2,3}市')
 SUMMARY_ROW_KEYS = ['合计', '小计', '总计', '总价合计']
 LIST_HEADER_RE = re.compile(r'^\s*(单价|合价|总价|金额|数量|序号|税率|单位|小计|报价|价格|市场价|出厂价|含税价|面价)')
+# 矩阵表的行标题列是“规格/型号/档位”这类维度；表头像“名称/品名”时更可能是清单表
+MATRIX_LABEL_RE = re.compile(r'规格|型号|容量|档位|尺寸|功率|厚度|直径|层数|电压|电流|kVA|kg')
 NUMBER_RE = re.compile(r'[¥￥]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|[¥￥]?\d+(?:\.\d+)?')
 
 
@@ -315,7 +317,8 @@ def _detect_matrix(ws):
             break
 
     # 表头区内的标题/分组行或整表大标题不参与列标题路径
-    header_rows = [r for r in range(r0) if not _is_title_row(grid[r]) and not (table_title and all(grid[r][c] == table_title for c in value_cols))]
+    header_rows = [r for r in range(r0) if not _is_title_row(grid[r]) and sum(1 for v in grid[r] if v) >= 2
+                   and not (table_title and all(grid[r][c] == table_title for c in value_cols))]
 
     def path(c):
         parts = []
@@ -330,6 +333,16 @@ def _detect_matrix(ws):
         if any(LIST_HEADER_RE.match(p) for p in path(c)):
             return None
 
+    label_header = ''.join(path(label_col))
+    label_leaf = (path(label_col) or [''])[-1]   # 只看末级表头，避免入标题行的字污染 (“…报价单”里也有“价”)
+    label_vals = [grid[r][label_col] for r in range(r0, max_r) if grid[r][label_col]]
+    numeric_ratio = sum(1 for v in label_vals if _leading_number(v) is not None) / max(1, len(label_vals))
+    # 行标题必须是“维度”（数字档位，或规格/型号/容量类表头）；否则更像清单表里两个数值属性列
+    # 两边判错的代价不对称：退回清单式会因读不到单价而大声报错，按矩阵解析则会凭空造出一堆假物料且对账全绿
+    if numeric_ratio < 0.5 and not MATRIX_LABEL_RE.search(label_leaf):
+        print(f"    ! 行标题末级“{label_leaf or '(空)'}”不是规格/档位维度，不按矩阵式解析（退回清单式）")
+        return None
+
     header_text = ' '.join(v for r in range(r0) for v in grid[r] if v)
     m_unit = re.search(r'单位[:：]\s*元?/?\s*([一-龥a-zA-Z²]+)', header_text)
     return {
@@ -337,7 +350,7 @@ def _detect_matrix(ws):
         'label_col': label_col + 1,
         'value_cols': [c + 1 for c in value_cols],
         'col_paths': {c + 1: '-'.join(path(c)) or f"第{c + 1}列" for c in value_cols},
-        'label_header': ''.join(path(label_col)) or '行标题',
+        'label_header': label_header or '行标题',
         'table_title': table_title,
         'unit': m_unit.group(1) if m_unit else '',
     }
@@ -374,7 +387,9 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue):
             price = safe_clean_price(v) if _is_number_text(v) else 0.0
             decision = 'item' if price > 0 else f"矩阵单元格非数值: {v}"
             records.append(SourceRowRecord(source_ref=ref, sheet=sname, row=r, raw_text=raw_line,
-                                           raw_price=price, decision=decision))
+                                           # 非纯数字格也记下能读出的数字：让对账报出“这一格有数值却没被当价格”
+                                           raw_price=price if price > 0 else safe_clean_price(v),
+                                           decision=decision))
             if decision != 'item':
                 continue
             notes = _cell_notes(cell_issue, sname, r, [c, mx['label_col']], price_col=c)
@@ -555,7 +570,7 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
 
 def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, terms_info,
                          cell_issue=None, global_notes=None, struct_log=None):
-    """Excel 与 PDF(还原后的表格) 共用的解析主流程，返回 (canonical_items, source_rows)"""
+    """Excel 与 PDF(还原后的表格) 共用的解析主流程，返回 (canonical_items, source_rows, sheet_stats)"""
     standardizer = DeepSeekStandardizer()
     struct_log = struct_log if struct_log is not None else []
     jev = None
@@ -574,13 +589,17 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         global_notes = global_notes + [f"商务条款缺失: {'、'.join(missing)}"]
     if disc_ratio is None:
         global_notes = global_notes + ["未提供工程折扣，工程价留空"]
+    sheet_stats = []   # 每个 Sheet 的“原表行数 → 产出条数”记账，空产出不能静默
 
     for sname in wb_val.sheetnames:
         ws = wb_val[sname]
         ws_f = wb_fml[sname]
         if ws.max_row is None or ws.max_row <= 1:
+            print(f"\n--- [Sheet: {sname}] 跳过: 只有 {ws.max_row or 0} 行，无数据区 ---")
+            sheet_stats.append({'sheet': sname, 'rows': ws.max_row or 0, 'raw_rows': 0, 'items': 0, 'error': ''})
             continue
         print(f"\n--- [Sheet: {sname}] (共 {ws.max_row} 行 x {ws.max_column} 列) ---")
+        n_before = len(canonical_items)
 
         mx = _detect_matrix(ws)
         jev_layout = None
@@ -740,11 +759,19 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     ci.add_note(n)
                 canonical_items.append(ci)
                 seq += 10
+
+        produced = len(canonical_items) - n_before
+        err = ''
+        if not produced and (ws.max_row or 0) > 2:
+            err = f"{sname}: 原表 {ws.max_row} 行数据，最终 0 条输出 (物料原始行 {len(raw_rows)} 条)"
+            print(f"    ! {err}")
+        sheet_stats.append({'sheet': sname, 'rows': ws.max_row, 'raw_rows': len(raw_rows),
+                            'items': produced, 'error': err})
     _unify_group_names(canonical_items, group_of)
     if jev is not None:
         u = jev.usage
         print(f"[*] Jev 用量: 请求 {u['requests']} 次 (失败 {u['failed']})，输入 {u['input_tokens']} tokens，输出 {u['output_tokens']} tokens")
-    return canonical_items, source_rows
+    return canonical_items, source_rows, sheet_stats
 
 
 def _unify_group_names(items, group_of):
@@ -806,14 +833,18 @@ def process_excel(input_xlsx, template_xlsx, output_dir, terms=None):
         unmerge_and_fill_cells(wb_fml[sname])
 
     struct_log = []
-    items, source_rows = standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix,
-                                              normalize_terms(terms), global_notes=_terms_notes(terms) + sup_notes,
-                                              struct_log=struct_log)
-    return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log)
+    items, source_rows, sheet_stats = standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix,
+                                                          normalize_terms(terms), global_notes=_terms_notes(terms) + sup_notes,
+                                                          struct_log=struct_log)
+    return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log,
+                   sheet_stats=sheet_stats, source_path=input_xlsx)
 
 
-def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_dir, terms=None, rail_name="A-Rail"):
+def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_dir, terms=None, rail_name="A-Rail",
+                                fallback_reason=None, actual_model=""):
     print(f"\n=== [PDF Pipeline - {rail_name}] 启动解析: {input_pdf} ===")
+    if fallback_reason:
+        print(f"[Warning] [双轨调度] B 轨失败已回退 A 轨：{fallback_reason}")
     pdf_ext = extractor_cls(input_pdf)
     wb = pdf_ext.to_workbook()
 
@@ -828,19 +859,31 @@ def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_
 
     global_notes = _terms_notes(terms) + sup_notes
     struct_log = []
-    items, source_rows = standardize_workbook(wb, wb, None, supplier, brand, id_prefix, normalize_terms(terms),
-                                              cell_issue=pdf_ext.cell_issue, global_notes=global_notes,
-                                              struct_log=struct_log)
+    model_label = actual_model or (GEMINI_MODEL if "Gemini" in rail_name else VISION_MODEL)
+    struct_log.append({"sheet": "全局", "item": "实际使用链路", "current": rail_name, "jev": rail_name,
+                       "conf": 1.0, "adopted": rail_name, "row_text": f"实际模型: {model_label}"})
+    if fallback_reason:
+        struct_log.append({"sheet": "全局", "item": "链路回退记录",
+                           "current": f"B 轨回退 A 轨: {fallback_reason}",
+                           "jev": "", "conf": 1.0, "adopted": "A 轨", "row_text": str(fallback_reason)})
+
+    items, source_rows, sheet_stats = standardize_workbook(wb, wb, None, supplier, brand, id_prefix, normalize_terms(terms),
+                                                          cell_issue=pdf_ext.cell_issue, global_notes=global_notes,
+                                                          struct_log=struct_log)
+    if fallback_reason:
+        for it in items:
+            prefix = f"B 轨失败已回退 A 轨：{fallback_reason}"
+            it.uncertainty_note = f"{prefix}；{it.uncertainty_note}" if it.uncertainty_note else prefix
+
     if hasattr(pdf_ext, 'failed_pages') and pdf_ext.failed_pages:
         for fpage, reason in pdf_ext.failed_pages:
             rec = SourceRowRecord(
-                sheet_name=fpage,
-                row_idx=1,
-                row_type="exception",
                 source_ref=f"{fpage}!R1",
-                raw_full_line=f"异常:{fpage}识别失败({reason})",
-                raw_price=None,
-                skip_reason=f"异常:{fpage}识别失败({reason})"
+                sheet=fpage,
+                row=1,
+                raw_text=f"异常:{fpage}识别失败({reason})",
+                raw_price=0.0,
+                decision=f"异常:{fpage}识别失败({reason})"
             )
             source_rows.append(rec)
         print(f"[*] 页面失败隔离清单: {[fp for fp, _ in pdf_ext.failed_pages]}")
@@ -850,7 +893,8 @@ def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_
         m = re.match(r'第(\d+)页', it.file_page)
         if m and int(m.group(1)) in page_imgs:
             it.image_filenames = [page_imgs[int(m.group(1))]]
-    return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log)
+    return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log,
+                   sheet_stats=sheet_stats, source_path=input_pdf)
 
 
 def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
@@ -867,22 +911,30 @@ def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
             try:
                 print(f"[*] [双轨调度] 路由至 B 轨 (Gemini 原生全模态: {GEMINI_MODEL})")
                 return _process_pdf_with_extractor(GeminiPDFTableExtractor, input_pdf, template_xlsx, output_dir,
-                                                    terms=terms, rail_name="Gemini B-Rail")
+                                                    terms=terms, rail_name="Gemini B-Rail",
+                                                    actual_model=GEMINI_MODEL)
             except Exception as e:
-                print(f"[Warning] [双轨调度] Gemini B 轨执行异常: {e}，自动平滑兜底回退至 A 轨...")
+                err_msg = str(e)
+                print(f"[Warning] [双轨调度] Gemini B 轨执行异常: {err_msg}，自动平滑兜底回退至 A 轨...")
                 return _process_pdf_with_extractor(PDFTableExtractor, input_pdf, template_xlsx, output_dir,
-                                                    terms=terms, rail_name="Traditional A-Rail (Fallback)")
+                                                    terms=terms, rail_name="Traditional A-Rail (Fallback)",
+                                                    fallback_reason=err_msg, actual_model=VISION_MODEL)
         else:
-            print("[Info] [双轨调度] 检测到 EXTRACTOR_ENGINE=gemini 但未配置 GEMINI_API_KEY，安全直通 A 轨 (传统切图流水线)")
+            reason = "未配置 GEMINI_API_KEY"
+            print(f"[Info] [双轨调度] 检测到 EXTRACTOR_ENGINE=gemini 但{reason}，安全直通 A 轨 (传统切图流水线)")
             return _process_pdf_with_extractor(PDFTableExtractor, input_pdf, template_xlsx, output_dir,
-                                                terms=terms, rail_name="Traditional A-Rail")
+                                                terms=terms, rail_name="Traditional A-Rail (Fallback)",
+                                                fallback_reason=reason, actual_model=VISION_MODEL)
     else:
         print("[*] [双轨调度] 路由至 A 轨 (传统切图流水线)")
         return _process_pdf_with_extractor(PDFTableExtractor, input_pdf, template_xlsx, output_dir,
-                                            terms=terms, rail_name="Traditional A-Rail")
+                                            terms=terms, rail_name="Traditional A-Rail",
+                                            actual_model=VISION_MODEL)
 
 
-def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=None):
+def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=None,
+            sheet_stats=None, source_path=""):
+    """落盘 + 校验。返回 (交付文件路径, 失败清单)；失败清单非空时调用方必须置退出码 2"""
     # 原表 ↔ 结果逐行对账
     recon = reconcile(source_rows, items)
     _print_recon_summary(recon)
@@ -890,7 +942,70 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
     builder = StandardizedWorkbookBuilder(template_xlsx)
     builder.build_from_canonical_items(items, output_xlsx, img_dir, reconciliation=recon,
                                        structure_log=struct_log or None)
-    return output_xlsx
+    # 落盘后读回 + 完整性汇总：任何一项失败都不允许静默通过
+    failures = _integrity_problems(items, recon, sheet_stats) + _verify_output(output_xlsx, items)
+    for s in sheet_stats or []:
+        print(f"    [{s['sheet']}] 原表 {s['rows']} 行 → 产出 {s['items']} 条" + (f"  ⚠ {s['error']}" if s.get('error') else ""))
+    print(f"[VERIFY] {os.path.basename(source_path)} | Sheet {len(sheet_stats or [])} | 物料 {len(items)} | "
+          f"对账 {len(recon)} 行 | 失败 {len(failures)} | RESULT={'PASS' if not failures else 'FAIL'}")
+    for f in failures[:20]:
+        print(f"    ✗ {f}")
+    return output_xlsx, failures
+
+
+def _integrity_problems(items, recon, sheet_stats):
+    """执行完整性：每个 Sheet 要有交代，跳过行要能自证，空产出不能算成功"""
+    errs = []
+    if not items:
+        errs.append("本次未产出任何物料 (0 条)")
+    for s in sheet_stats or []:
+        if s.get('error'):
+            errs.append(s['error'])
+    bad = [r for r in recon if r['status'].startswith('异常')]
+    for r in bad[:20]:
+        errs.append(f"对账{r['status']} @ {r['source_ref']} | {r['detail']}")
+    if len(bad) > 20:
+        errs.append(f"…另有 {len(bad) - 20} 条对账异常 (详见交付文件「原表对账」页)")
+    return errs
+
+
+def _verify_output(path, items):
+    """写盘后读回：文件必须能打开，行数 / 报价ID / 市场价必须与内存结果逐条一致"""
+    from collections import Counter
+    try:
+        wb = openpyxl.load_workbook(path, data_only=True)
+    except Exception as e:
+        return [f"输出文件无法读回: {e}"]
+    errs = [f"输出缺少「{n}」Sheet" for n in ('标准化报价', '疑义与失败审计说明', '原表对账')
+            if n not in wb.sheetnames]
+    if '标准化报价' not in wb.sheetnames:
+        return errs
+    ws = wb['标准化报价']
+    header = [ws.cell(1, c).value for c in range(1, (ws.max_column or 0) + 1)]
+    col = {str(h): i for i, h in enumerate(header) if h}
+    if not {'市场价', '报价ID'} <= set(col):
+        return errs + [f"输出表头缺 市场价/报价ID: {header}"]
+    rows = [r for r in ws.iter_rows(min_row=2, values_only=True) if any(v not in (None, '') for v in r)]
+    if len(rows) != len(items):
+        errs.append(f"输出数据行 {len(rows)} ≠ 内存物料 {len(items)} 条")
+    ids = []
+    for i, (it, r) in enumerate(zip(items, rows), 2):
+        if len(errs) > 20:
+            break
+        qid = r[col['报价ID']]
+        ids.append(qid)
+        if str(qid) != it.quote_id:
+            errs.append(f"第{i}行 报价ID {qid} ≠ {it.quote_id}")
+        try:
+            out_price = float(r[col['市场价']] or 0)
+        except (TypeError, ValueError):
+            out_price = None
+        if out_price is None or abs(out_price - float(it.market_price)) > 1e-6:
+            errs.append(f"第{i}行 市场价 {r[col['市场价']]} ≠ {it.market_price}")
+    dup = [q for q, n in Counter(ids).items() if n > 1]
+    if dup:
+        errs.append(f"报价ID 重复: {[str(d) for d in dup[:5]]}")
+    return errs
 
 
 def _print_recon_summary(recon: list):
@@ -939,10 +1054,12 @@ def main():
         print(f"[Error] 不支持的文件类型: {ext} (.xls 请先另存为 .xlsx)")
         sys.exit(1)
 
-    print(f"\n🎉 统一标准多行结构化输出完成！交付文件：{out}")
-    # 若存在隔离的失败页，返回退出码 2
-    if 'failed_pages' in locals() or (hasattr(sys, '_has_failed_pages') and sys._has_failed_pages):
+    out, failures = out
+    if failures:
+        print(f"\n❌ 交付文件已生成，但有 {len(failures)} 项失败/异常，需人工核对：{out}")
         sys.exit(2)
+    print(f"\n🎉 统一标准多行结构化输出完成！交付文件：{out}")
+    sys.exit(0)
 
 if __name__ == '__main__':
     main()

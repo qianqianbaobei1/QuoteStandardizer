@@ -22,8 +22,8 @@ DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 VISION_API_KEY = os.getenv("VISION_API_KEY") or DEEPSEEK_API_KEY
 VISION_BASE_URL = os.getenv("VISION_BASE_URL") or DEEPSEEK_BASE_URL
 VISION_MODEL = os.getenv("VISION_MODEL") or DEEPSEEK_MODEL
-# 扫描件是否让视觉模型独立读两遍做交叉校验 (默认开启；关闭可省一半调用量)
-VISION_DOUBLE_CHECK = os.getenv("VISION_DOUBLE_CHECK", "1") not in ("0", "false", "False", "")
+# 扫描件是否让视觉模型独立读两遍做交叉校验 (默认关闭以提高效率；可通过环境变量 VISION_DOUBLE_CHECK=1 开启)
+VISION_DOUBLE_CHECK = os.getenv("VISION_DOUBLE_CHECK", "0").strip().lower() in ("1", "true")
 # 扫描件识别增强的 gamma (>1 压暗浅色笔画)
 VISION_GAMMA = float(os.getenv("VISION_GAMMA", "1.8"))
 # 大页面切块识别配置
@@ -42,11 +42,13 @@ TYPESAFE_MODEL = os.getenv("TYPESAFE_MODEL", "jev-latest")
 JEV_MIN_CONFIDENCE = float(os.getenv("JEV_MIN_CONFIDENCE", "0.5"))
 
 # 线路引擎选择: 'traditional' (原切图流水线) / 'gemini' (Gemini原生直传) / 'compare' (双轨对比)
-EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "gemini").strip().lower()
+EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "traditional").strip().lower()
 
 # Gemini 原生引擎配置
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+# Gemini 思考预算 (0 为禁用思考/最低开销，-1 为自动，默认设为 0 以极速返回)
+GEMINI_THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
 
 # LLM 调用重试次数
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
