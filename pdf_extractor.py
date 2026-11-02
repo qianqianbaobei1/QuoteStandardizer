@@ -47,6 +47,34 @@ VISION_TABLE_PROMPT = """你是报价单扫描件的表格转录员。请把图�
 """
 
 
+def validate_vision_payload(obj):
+    """
+    视觉模型响应的结构硬约束：不合规整份作废，退回重试，不产出半可信的表格。
+    返回 '' 表示通过，否则返回作废原因。
+    """
+    if not isinstance(obj, dict):
+        return '不是 JSON 对象'
+    tables = obj.get('tables')
+    if not isinstance(tables, list) or not tables:
+        return '缺少 tables 或为空'
+    for t in tables:
+        cells = t.get('cells') if isinstance(t, dict) else None
+        if not isinstance(cells, list) or not cells:
+            return 'tables[].cells 缺失或为空'
+        if any(not isinstance(r, list) for r in cells):
+            return 'cells 内含非数组行'
+        widths = {len(r) for r in cells}
+        if len(widths) != 1 or 0 in widths:
+            return f'cells 列数不齐 {sorted(widths)}'
+        unc = t.get('uncertain', [])
+        if not isinstance(unc, list) or any(not isinstance(u, list) or len(u) < 2 for u in unc):
+            return 'uncertain 格式错误'
+    for k in ('page_title', 'notes'):
+        if obj.get(k) is not None and not isinstance(obj.get(k), str):
+            return f'{k} 不是字符串'
+    return ''
+
+
 class PDFTableExtractor:
     def __init__(self, pdf_path):
         self.pdf_path = pdf_path
@@ -164,6 +192,11 @@ class PDFTableExtractor:
                         return {"_truncated": True}
                     try:
                         parsed = json.loads(_strip_fence(content))
+                        bad = validate_vision_payload(parsed)
+                        if bad:
+                            print(f"[Vision Warning] 响应结构不合规（{bad}），整份作废")
+                            last = f"结构不合规: {bad}"
+                            continue
                         return parsed
                     except Exception as json_err:
                         print(f"[Vision Warning] JSON解析失败(疑似截断): {json_err}")
@@ -291,7 +324,11 @@ class PDFTableExtractor:
                 if resp.status_code == 200:
                     choice = resp.json()["choices"][0]
                     content = choice["message"]["content"]
-                    return json.loads(_strip_fence(content))
+                    parsed = json.loads(_strip_fence(content))
+                    bad = validate_vision_payload(parsed)
+                    if bad:
+                        raise ValueError(f"响应结构不合规: {bad}")
+                    return parsed
             except Exception:
                 pass
             if attempt < LLM_MAX_RETRIES:

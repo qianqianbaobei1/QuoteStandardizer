@@ -5,6 +5,68 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 
+
+# ---------------------------------------------------------------- 待复核说明分级
+# 每条说明归到一个严重级别与一个“同类问题组”：审计页先看致命/严重，提示级只留痕不打扰。
+# 级别决定的是“人要不要看”，不是“这条错得有多离谱”：推断来源、编码未配置这类留痕项
+# 每天都有一堆，混在致命项里会让审计页失去分辨力 (165 行全红的审计页等于没有审计页)。
+SEVERITY_ORDER = {'致命': 0, '严重': 1, '提示': 2}
+
+# (关键词, 严重级别, 同类问题组) —— 顺序即优先级，先匹配先算
+NOTE_RULES = (
+    # 致命：这项结果不可信 / 原表对不上，不核对不许交付
+    (('漏行', '原表无此行', '一行生成了', '输出无法对应', '却被跳过', '单价不一致',
+      '未识别出物料名称', '原表未读到有效单价', '识别失败', '0 条输出'), '致命', '行数与价格'),
+    # 严重：读到了但可能读错，必须对着原件核这一个格子
+    (('两遍识别不一致', '第二遍识别中找不到', '视觉模型标注存疑', '列标题识别存疑',
+      '识别存疑', '遮挡', '看不清'), '严重', '识别遮挡'),
+    (('模型返回价格', '未经大模型清洗'), '严重', '清洗与比对'),
+    (('参数无原文出处',), '严重', '参数出处'),
+    (('低于上一档',), '严重', '价格走向'),
+    (('单位由原表', '原表无计量单位'), '严重', '计量单位'),
+    (('商务条款缺失', '未提供工程折扣', '未提供或未识别出商务条款',
+      '无法识别为省级行政区', '未采用'), '严重', '商务条款'),
+    (('含公式但无缓存值',), '严重', '结构'),
+    # 提示：只是留痕，不需要人工核对
+    (('Jev',), '提示', '结构判定'),
+    (('由文件名推断', '由供应商名称推断', '由页面标题推断'), '提示', '推断来源'),
+    (('未经标准编码库', '类别编码未确定', '未配置标准编码库'), '提示', '分类编码'),
+    (('个省份',), '提示', '报价地区'),
+)
+DEFAULT_RULE = ('提示', '其他')
+
+# 说明里写的是“单价”，输出表头叫“市场价”
+FIELD_SYNONYMS = {'单价': '市场价'}
+
+
+def classify_note(note: str):
+    """待复核说明 → (严重级别, 同类问题组)"""
+    s = str(note or '')
+    for keys, severity, group in NOTE_RULES:
+        if any(k in s for k in keys):
+            return severity, group
+    return DEFAULT_RULE
+
+
+def note_field(note: str, headers=None) -> str:
+    """说明指的是哪个单元格：取说明里最早出现的表头名（“品牌…由供应商名称推断”算品牌，不算供应商）；
+    都对不上就按同义词，再都对不上就是整行问题"""
+    s = str(note or '')
+    best = None
+    for h in headers or []:
+        h = str(h or '')
+        pos = s.find(h) if len(h) >= 2 else -1
+        if pos >= 0:
+            key = (pos, -len(h))       # 位置越靠前越算；同位置取更长的表头
+            if best is None or key < best[0]:
+                best = (key, h)
+    if best:
+        return best[1]
+    for alias, real in FIELD_SYNONYMS.items():
+        if alias in s:
+            return real
+    return '整行'
+
 @dataclass
 class CanonicalMaterialItem:
     """统一物料记录。未知字段一律为空 ("" / None)，不预设任何业务默认值"""
@@ -49,9 +111,24 @@ class CanonicalMaterialItem:
     clean_source: str = ""             # 清洗来源: llm / fallback
     category_source: str = ""          # 编码来源: dict / llm / default
 
+    # 逐条待复核说明 (审计页一行一条，按条分级)；uncertainty_note 是它的合并串，供报价说明/高亮用
+    notes: List[str] = field(default_factory=list)
+
     def add_note(self, note: str):
         if note and note not in self.uncertainty_note:
             self.uncertainty_note = f"{self.uncertainty_note}；{note}" if self.uncertainty_note else note
+            self.notes.append(note)
+
+    def note_list(self) -> List[str]:
+        """逐条说明。老数据只有合并串时按“；”拆开，宁可多拆也不漏项"""
+        if self.notes:
+            return list(self.notes)
+        return [n for n in str(self.uncertainty_note or '').split('；') if n.strip()]
+
+    def worst_severity(self) -> str:
+        """最坏级别：'' (无待复核项) / 提示 / 严重 / 致命"""
+        levels = [classify_note(n)[0] for n in self.note_list()]
+        return min(levels, key=lambda s: SEVERITY_ORDER[s]) if levels else ''
     
     # 图片资产
     image_filenames: List[str] = field(default_factory=list)
@@ -75,6 +152,68 @@ class SourceRowRecord:
 
 
 STRUCTURAL_SKIP = {'分组标题行', '重复表头行', '合计/小计行'}   # 这三类行本身就会有数字 (如合计金额)，不算漏行
+
+
+# 同类问题组 → 一次处理建议 (同一组的问题可以用同一个动作批量解决)
+GROUP_ADVICE = {
+    '行数与价格': '先核对或重跑，这条不许带着交付',
+    '识别遮挡': '对照原件该单元格/公章区域截图核对',
+    '清洗与比对': '对照原表该行原文核对，模型结论不作数',
+    '参数出处': '该参数原文里找不到，确认后再保留',
+    '价格走向': '档位越高价格反而越低，核对原表该列',
+    '计量单位': '按原件补录单位',
+    '商务条款': '补齐报价说明/折扣单，或补录 terms.json 后重跑',
+    '结构': '在 Excel 中打开原表保存后重跑 (公式缺缓存值)',
+    '结构判定': '留痕，无需处理',
+    '推断来源': '留痕，无需处理 (已在输出中标明出处)',
+    '分类编码': '留痕；配置 CATEGORY_CODE_FILE 后可消除',
+    '报价地区': '留痕，无需处理',
+}
+
+
+def summarize_audit(items, headers=None) -> Dict:
+    """
+    审计分级汇总：给审计页首行与“同类问题组汇总”用。
+    - 行级免审率：没有致命/严重的行 / 总行数 (人真正要动的比例)
+    - 字段级免审率：1 - 存疑单元格数 / (总行 × 输出列数)
+    """
+    total = len(items)
+    counts = {'致命': 0, '严重': 0, '提示': 0}
+    review_rows = set()
+    suspect_cells = set()
+    clusters: Dict[tuple, Dict] = {}
+
+    for it in items:
+        for note in it.note_list():
+            severity, group = classify_note(note)
+            counts[severity] += 1
+            field_name = note_field(note, headers)
+            if severity != '提示':
+                review_rows.add(it.quote_id)
+            suspect_cells.add((it.quote_id, field_name))
+            c = clusters.setdefault((severity, group), {'severity': severity, 'group': group,
+                                                       'count': 0, 'quote_ids': [], 'fields': set()})
+            c['count'] += 1
+            if it.quote_id not in c['quote_ids']:
+                c['quote_ids'].append(it.quote_id)
+            c['fields'].add(field_name)
+
+    field_total = total * len(headers or [])
+    cluster_list = sorted(clusters.values(), key=lambda c: (SEVERITY_ORDER[c['severity']], -c['count']))
+    for c in cluster_list:
+        c['advice'] = GROUP_ADVICE.get(c['group'], '对照原表核对')
+        c['fields'] = sorted(c['fields'])
+
+    return {
+        'total_rows': total,
+        'fatal': counts['致命'],
+        'severe': counts['严重'],
+        'hint': counts['提示'],
+        'review_rows': len(review_rows),
+        'row_pass_rate': round(100 * (total - len(review_rows)) / total, 1) if total else 100.0,
+        'field_pass_rate': round(100 * (1 - len(suspect_cells) / field_total), 1) if field_total else 100.0,
+        'clusters': cluster_list,
+    }
 
 
 def reconcile(source_rows: List[SourceRowRecord], items: List[CanonicalMaterialItem]) -> List[dict]:

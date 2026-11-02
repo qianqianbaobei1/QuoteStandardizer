@@ -24,7 +24,7 @@ from terms_extractor import TermsExtractor, normalize_terms, find_terms_image, m
 from builder import StandardizedWorkbookBuilder
 from config import (DEFAULT_TEMPLATE_PATH, DEFAULT_OUTPUT_DIR, PROVINCE_ABBR_MAP, CATEGORY_CODE_MAP,
                     resolve_category_code, expand_region, EXTRACTOR_ENGINE, GEMINI_API_KEY, GEMINI_MODEL, VISION_MODEL)
-from models import CanonicalMaterialItem, SourceRowRecord, reconcile
+from models import CanonicalMaterialItem, SourceRowRecord, reconcile, summarize_audit
 from llm_agent import DeepSeekStandardizer, JevJudge, UNIT_PRICE_KEYS, TOTAL_PRICE_KEYS
 from config import STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE
 
@@ -853,6 +853,7 @@ def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_
         guessed = pdf_ext.guess_supplier()
         if guessed:
             terms['supplier'] = guessed
+            terms['_supplier_note'] = f"供应商名称“{guessed}”由页面标题推断，未经原件核对"
     supplier, brand, id_prefix, sup_notes = derive_supplier_and_brand_dynamic(input_pdf, terms)
     print(f"[*] 动态感知供方主体: {supplier} | 核心品牌: {brand} | 报价ID前缀: {id_prefix}")
     output_xlsx, img_dir = _output_paths(input_pdf, output_dir, supplier)
@@ -948,6 +949,13 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
         print(f"    [{s['sheet']}] 原表 {s['rows']} 行 → 产出 {s['items']} 条" + (f"  ⚠ {s['error']}" if s.get('error') else ""))
     print(f"[VERIFY] {os.path.basename(source_path)} | Sheet {len(sheet_stats or [])} | 物料 {len(items)} | "
           f"对账 {len(recon)} 行 | 失败 {len(failures)} | RESULT={'PASS' if not failures else 'FAIL'}")
+    audit = summarize_audit(items, builder.headers)
+    print(f"[AUDIT] 行级免审率 {audit['row_pass_rate']}% "
+          f"({audit['total_rows'] - audit['review_rows']}/{audit['total_rows']} 行无需人工核对) | "
+          f"字段级免审率 {audit['field_pass_rate']}% | "
+          f"致命 {audit['fatal']} / 严重 {audit['severe']} / 提示 {audit['hint']}")
+    if audit['clusters']:
+        print("        同类问题组: " + "；".join(f"{c['group']}({c['count']})" for c in audit['clusters']))
     for f in failures[:20]:
         print(f"    ✗ {f}")
     return output_xlsx, failures

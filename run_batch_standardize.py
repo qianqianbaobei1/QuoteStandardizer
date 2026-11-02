@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-run_batch_standardize.py - 批量自动化执行 QuoteStandardizer
-为桌面程雅洁与张艳鸽两批供应商原始文件进行端到端解析并输出至桌面交付目录
+run_batch_standardize.py - 批量解析一个批次下的所有供应商原文件
+
+用法: python3 run_batch_standardize.py <源目录> <输出目录> [--label 批次名]
 """
 import os
 import sys
@@ -99,7 +100,8 @@ def run_single_vendor(vendor_dir: Path, output_dir: Path) -> dict:
         "output_file": None,
         "item_count": 0,
         "duration": 0.0,
-        "error_msg": None
+        "error_msg": None,
+        "failures": None
     }
     
     start_t = time.time()
@@ -134,16 +136,19 @@ def run_single_vendor(vendor_dir: Path, output_dir: Path) -> dict:
             
         res["output_file"] = out_file
         res["duration"] = round(time.time() - start_t, 2)
-        
-        # 统计解析出的有效物料条数
-        if out_file and os.path.exists(out_file):
-            df = pd.read_excel(out_file)
-            res["item_count"] = len(df)
-            res["status"] = "PASS" if len(df) > 0 else "FAIL"
-            if len(df) == 0:
-                res["error_msg"] = "输出物料条数为 0"
-        else:
+        res["failures"] = failures
+
+        # PASS 只认 process_* 的完整性校验结果 (对账异常/漏行/不守恒)；行数>0 不算通过
+        if not out_file or not os.path.exists(out_file):
             res["error_msg"] = "未生成交付 Excel 文件"
+            return res
+        res["item_count"] = len(pd.read_excel(out_file))
+        if failures:
+            res["error_msg"] = f"完整性校验未通过 {len(failures)} 项: {failures[0]}"
+        elif res["item_count"] == 0:
+            res["error_msg"] = "输出物料条数为 0"
+        else:
+            res["status"] = "PASS"
             
     except Exception as e:
         res["duration"] = round(time.time() - start_t, 2)
@@ -153,16 +158,29 @@ def run_single_vendor(vendor_dir: Path, output_dir: Path) -> dict:
     return res
 
 if __name__ == "__main__":
-    desktop = Path("/Users/qianqianawodebaobei/Desktop")
-    tasks = [
-        ("程雅洁", desktop / "程雅洁-10月30日", desktop / "本地自跑解析结果_1030/程雅洁"),
-        ("张艳鸽", desktop / "张艳鸽-源文件1030", desktop / "本地自跑解析结果_1030/张艳鸽")
-    ]
-    
-    for person, src_root, out_root in tasks:
-        print(f"\n==================== 开始批量自跑: {person} ====================")
-        vdirs = sorted([d for d in src_root.iterdir() if d.is_dir() and not d.name.startswith(".")])
-        for idx, vd in enumerate(vdirs, 1):
-            print(f"\n[{idx}/{len(vdirs)}] 处理: {vd.name}...")
-            r = run_single_vendor(vd, out_root)
-            print(f"    -> 结果: {r['status']} | 物料: {r['item_count']} 行 | 耗时: {r['duration']}s | 文件: {r['output_file']}")
+    import argparse
+    ap = argparse.ArgumentParser(description="批量解析一个批次下所有供应商原文件")
+    ap.add_argument("src", help="批次源目录 (每家一个子目录)")
+    ap.add_argument("out", help="输出目录")
+    ap.add_argument("--label", default="", help="批次名，仅用于日志")
+    args = ap.parse_args()
+
+    src_root, out_root = Path(args.src), Path(args.out)
+    label = args.label or src_root.name
+    print(f"\n==================== 开始批量自跑: {label} ====================")
+    vdirs = sorted([d for d in src_root.iterdir() if d.is_dir() and not d.name.startswith(".")])
+    results = []
+    for idx, vd in enumerate(vdirs, 1):
+        print(f"\n[{idx}/{len(vdirs)}] 处理: {vd.name}...")
+        r = run_single_vendor(vd, out_root)
+        results.append(r)
+        print(f"    -> 结果: {r['status']} | 物料: {r['item_count']} 行 | 耗时: {r['duration']}s | 文件: {r['output_file']}")
+        if r["error_msg"]:
+            print(f"    ! {r['error_msg']}")
+
+    passed = sum(1 for r in results if r["status"] == "PASS")
+    print(f"\n批次 {label}: {passed}/{len(results)} PASS")
+    for r in results:
+        if r["status"] != "PASS":
+            print(f"  ✗ {r['vendor']}: {r['error_msg']}")
+    sys.exit(0 if passed == len(results) else 2)

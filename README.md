@@ -20,6 +20,9 @@
 3. **清洗**：DeepSeek 整理物料名称和结构化参数。原文已经是 `键:值;` 格式的参数原样保留。
 4. **商务条款**：从同目录的报价说明/折扣单图片中识别，或用 `--terms-json` 直接提供。公章上识别出的供应商要和文件名、表格内容相互印证，对不上的不采用。
 5. **输出与对账**：生成「标准化报价」「疑义与失败审计说明」「原表对账」三个工作表。
+   - 审计页把每条待复核说明分成 **致命 / 严重 / 提示** 三级，并给出**行级与字段级免审率**：只有致命/严重才需要人看（主表同步红字黄底），提示级（推断来源、编码未配置等）只留痕不打扰。
+   - 审计页末尾按「同类问题组」汇总条数与涉及报价ID，同组可一次核对/一次修复。
+   - 模板第 1 行里超出内置 33 列的表头（如 `品种`、`厚度(mm)`、`胎基材料`、`是否曝露使用`）按**表头名**从结构化参数取值，不看列位置 —— 列序不同的模板（同一套物料走 112101 与 112115 两种列序）都能对得上。
 
 ## 配置（`.env`）
 
@@ -66,6 +69,7 @@ pip install -r requirements.txt
 python main.py -i "报价单.pdf"                       # 自动查找同目录的 报价说明/折扣单 图片
 python main.py -i "报价单.xlsx" -t "报价说明.png"
 python main.py -i "报价单.pdf" --terms-json terms.json  # 人工确认的商务条款
+python3 run_batch_standardize.py "<批次源目录>" "<输出目录>" --label 程雅洁  # 整批逐家解析；任一家完整性校验不通过则该家 FAIL、退出码 2
 ```
 
 `terms.json` 的字段：`supplier`、`brand`、`province`、`city`、`is_tax_included`、`tax_rate`、`tax_desc`、`is_freight_included`、`freight_desc`、`freight_settle`、`discount_ratio`、`discount_series`、`quote_desc`、`quote_type`。没有的字段可以不写。
@@ -82,6 +86,7 @@ models.py           物料记录与原表对账
 builder.py          输出工作簿
 config.py           环境配置、省份映射、编码库加载
 evaluate.py         评差引擎（与线上系统逐格比对、错误归纳、回归）
+run_batch_standardize.py  整批供应商批量解析
 health_check.py     模块自检（含评差引擎自检）
 ERROR_CODES.md      错误码字典 + 每日流程 + 修复账本
 ```

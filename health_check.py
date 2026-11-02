@@ -135,7 +135,6 @@ class TestQuoteStandardizerHealth(unittest.TestCase):
         """测试 WorkbookBuilder 33 列输出、全宋体、多行排版、审计页与对账页生成"""
         builder = StandardizedWorkbookBuilder(None)
         self.assertEqual(len(builder.headers), 33)
-
         item = CanonicalMaterialItem(
             quote_id="WB00010",
             supplier="测试供应商",
@@ -152,10 +151,10 @@ class TestQuoteStandardizerHealth(unittest.TestCase):
             file_page="第1页"
         )
         
-        test_out_path = os.path.join(os.path.dirname(__file__), "deliveries", "_temp_health_test.xlsx")
-        os.makedirs(os.path.dirname(test_out_path), exist_ok=True)
+        import tempfile
+        test_out_path = os.path.join(tempfile.gettempdir(), "_qs_builder_health_test.xlsx")
         try:
-            builder.build_from_canonical_items([item], test_out_path, img_dir=os.path.join(os.path.dirname(__file__), "deliveries", "_temp_imgs"))
+            builder.build_from_canonical_items([item], test_out_path, img_dir=os.path.join(tempfile.gettempdir(), "_qs_builder_tmp_imgs"))
             wb = openpyxl.load_workbook(test_out_path)
             
             # 校验包含三个核心 Sheet
@@ -168,12 +167,15 @@ class TestQuoteStandardizerHealth(unittest.TestCase):
             # 校验宋体
             self.assertEqual(ws_main.cell(row=2, column=1).font.name, "宋体")
             
-            # 校验审计说明 Sheet 的红色高亮
+            # 校验审计说明 Sheet: 首行免审率、二级表头、原因列红色宋体
             ws_audit = wb['疑义与失败审计说明']
-            self.assertGreaterEqual(ws_audit.max_row, 2)
-            c_reason = ws_audit.cell(row=2, column=6)
+            self.assertIn('行级免审率', str(ws_audit.cell(row=1, column=1).value))
+            self.assertEqual(ws_audit.cell(row=2, column=2).value, '严重级别')
+            self.assertGreaterEqual(ws_audit.max_row, 3)
+            c_reason = ws_audit.cell(row=3, column=9)
             self.assertEqual(c_reason.font.name, "宋体")
-            self.assertEqual(c_reason.font.color.rgb, "00FF0000") # 严格红色
+            self.assertEqual(c_reason.font.color.rgb, "00BF8F00")   # 印章遮挡 = 严重，橙红宋体
+            self.assertEqual(ws_audit.cell(row=3, column=2).value, '严重')
         finally:
             if os.path.exists(test_out_path):
                 os.remove(test_out_path)
@@ -241,6 +243,159 @@ class TestPipelineVerification(unittest.TestCase):
         """评差引擎自身的防线：0 差异基线 / 13 类错误全命中 / 等价写法不误报 / 结构错位可识别"""
         import evaluate
         self.assertEqual(evaluate.selftest(), 0)
+
+    def test_11_batch_pass_requires_integrity(self):
+        """批量运行器不得把“行数>0”当 PASS：完整性缺陷必须让该家判 FAIL"""
+        import shutil
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        import run_batch_standardize as rbs
+
+        tmp = tempfile.mkdtemp(prefix="qs_batch_status_")
+        vendor = Path(tmp) / "某供应商"
+        out_dir = Path(tmp) / "out"
+        vendor.mkdir(); out_dir.mkdir()
+        wb = openpyxl.Workbook(); ws = wb.active
+        ws.append(["名称", "单价"]); ws.append(["闸阀", 100])
+        wb.save(vendor / "报价单.xlsx")
+        out = out_dir / "某供应商-标准解析.xlsx"
+        wb = openpyxl.Workbook(); wb.active.append(["报价ID"]); wb.active.append(["A1"])
+        wb.save(out)
+        try:
+            with patch.object(rbs, "process_excel", return_value=(str(out), [])):
+                self.assertEqual(rbs.run_single_vendor(vendor, out_dir)["status"], "PASS")
+            with patch.object(rbs, "process_excel", return_value=(str(out), ["物理行数不守恒: 50.0% < 100.0%"])):
+                r = rbs.run_single_vendor(vendor, out_dir)
+                self.assertEqual(r["status"], "FAIL")
+                self.assertIn("完整性校验未通过", r["error_msg"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+    # ---------------------------------------------------------------- 审计分级 / 动态列 / 金标不变量
+    def test_12_audit_grading_and_pass_rate(self):
+        """待复核说明要分级：推演类留痕不打扰人，致命/严重才进待核验；免审率要有分母"""
+        from models import classify_note, summarize_audit
+        self.assertEqual(classify_note('原表未读到有效单价')[0], '致命')
+        self.assertEqual(classify_note('单价不一致: 原表 100 / 输出 99')[0], '致命')
+        self.assertEqual(classify_note('品牌“望变”由供应商名称推断'), ('提示', '推断来源'))
+        self.assertEqual(classify_note('类别编码未确定'), ('提示', '分类编码'))
+        self.assertEqual(classify_note('单价(公章边缘遮挡数字，读数10500)'), ('严重', '识别遮挡'))
+        self.assertEqual(classify_note('参数无原文出处: 厚度=3')[1], '参数出处')
+
+        a = CanonicalMaterialItem('A00010', '供', '品', '闸阀', '', market_price=10.0)
+        a.add_note('品牌“供”由供应商名称推断')
+        b = CanonicalMaterialItem('A00020', '供', '品', '闸阀', '', market_price=20.0)
+        b.add_note('单价(公章边缘遮挡数字，读数20)')
+        c = CanonicalMaterialItem('A00030', '供', '品', '闸阀', '', market_price=0.0)
+        c.add_note('原表未读到有效单价')
+        headers = ['报价ID', '市场价', '品牌']
+        s = summarize_audit([a, b, c], headers)
+        self.assertEqual((s['total_rows'], s['review_rows']), (3, 2))
+        self.assertEqual((s['fatal'], s['severe'], s['hint']), (1, 1, 1))
+        self.assertEqual(s['row_pass_rate'], 33.3)
+        self.assertEqual(a.worst_severity(), '提示')
+        self.assertEqual(b.worst_severity(), '严重')
+        self.assertEqual(c.worst_severity(), '致命')
+        self.assertEqual(s['clusters'][0]['severity'], '致命')          # 致命排最前
+        self.assertIn('识别遮挡', [cl['group'] for cl in s['clusters']])
+
+    def test_13_dynamic_attribute_columns_follow_header_names(self):
+        """模板动态属性列按表头名取值：AD/AE/AF 列序不同也能对得上 (112101 vs 112115)"""
+        import shutil
+        import tempfile
+        from builder import StandardizedWorkbookBuilder
+
+        item = CanonicalMaterialItem(
+            'SBS00010', '北新禹王', '禹王', '弹性体改性沥青防水卷材', '112101',
+            structured_specs={'品种': 'SBS I PY PE PE 3', '厚度(mm)': '3',
+                              '胎基材料': '聚酯毡PY', '覆面材料': '聚乙烯膜PE', '是否曝露使用': '否'},
+            market_price=28.0, unit='m²')
+        expect = {'品种': 'SBS I PY PE PE 3', '厚度(mm)': '3',
+                  '胎基材料': '聚酯毡PY', '覆面材料': '聚乙烯膜PE', '是否曝露使用': '否'}
+        tmp = tempfile.mkdtemp(prefix='qs_dyn_')
+        try:
+            # 同一套物料、两种列序的模板：列位置变了，靠表头名写对
+            for i, dyn in enumerate([['品种', '厚度(mm)', '胎基材料', '覆面材料', '是否曝露使用'],
+                                     ['品种', '厚度(mm)', '是否曝露使用', '胎基材料', '覆面材料']]):
+                tpl = os.path.join(tmp, f'tpl{i}.xlsx')
+                wb = openpyxl.Workbook()
+                wb.active.append(['报价ID', '名称规格', '市场价', '单位'] + dyn)
+                wb.save(tpl)
+                out = os.path.join(tmp, f'out{i}.xlsx')
+                StandardizedWorkbookBuilder(tpl).build_from_canonical_items([item], out, os.path.join(tmp, f'img{i}'))
+                ws = openpyxl.load_workbook(out)['标准化报价']
+                cols = {str(c.value): c.column for c in ws[1] if c.value}
+                for h, v in expect.items():
+                    self.assertEqual(ws.cell(2, cols[h]).value, v, f'列序{i} 的 {h} 填错')
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_14_golden_delivery_invariants(self):
+        """已入库交付件的全量不变量：报价ID唯一、价>0、图片后缀合法、留痕项必进审计页"""
+        import glob
+        import re as _re
+        files = glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                       'deliveries', '*-标准解析.xlsx'))
+        if not files:
+            self.skipTest('deliveries 下无标准解析件')
+        allowed_ext = ('.png', '.jpg', '.jpeg', '.emf', '.bmp', '.gif', '.webp', '.bin')
+        for f in files:
+            wb = openpyxl.load_workbook(f, data_only=True)
+            ws = wb['标准化报价']
+            col = {str(c.value): c.column for c in ws[1] if c.value}
+            audit_ids, reason_col = self._audit_index(wb['疑义与失败审计说明'])
+            seen = []
+            for r in range(2, ws.max_row + 1):
+                qid = ws.cell(r, col['报价ID']).value
+                if not qid:
+                    continue
+                seen.append(qid)
+                price = ws.cell(r, col['市场价']).value
+                self.assertIsInstance(price, (int, float), f'{os.path.basename(f)} 第{r}行 市场价非数值')
+                self.assertGreater(price, 0, f'{os.path.basename(f)} 第{r}行 市场价不为正')
+                img = str(ws.cell(r, col['厂家报价图片文件名']).value or '无')
+                self.assertTrue(img == '无' or img.lower().endswith(allowed_ext), f'{qid} 图片文件名 {img}')
+                notes = str(ws.cell(r, col['报价说明']).value or '')
+                if _re.search(r'待人工复核|留痕', notes):
+                    self.assertIn(str(qid), audit_ids, f'{qid} 主表留痕但审计页漏项')
+                if not ws.cell(r, col['单位']).value:
+                    reasons = ' '.join(audit_ids.get(str(qid), {}).get('reasons', []))
+                    self.assertIn('计量单位', reasons, f'{qid} 无单位却没写原因')
+            self.assertEqual(len(seen), len(set(seen)), f'{os.path.basename(f)} 报价ID重复')
+            self.assertGreaterEqual(reason_col, 1)
+
+    @staticmethod
+    def _audit_index(ws):
+        """审计页列定位：兼容旧版(表头在第1行)与新版(首行免审率、表头在第2行)"""
+        cols, header_row = {}, 0
+        for hr in (1, 2, 3):
+            vals = [str(ws.cell(hr, c).value or '') for c in range(1, (ws.max_column or 1) + 1)]
+            if '报价ID' in vals:
+                cols = {v: i + 1 for i, v in enumerate(vals) if v}
+                header_row = hr
+                break
+        reason_col = next((c for h, c in cols.items() if '原因' in h), 0)
+        index = {}
+        for r in range(header_row + 1, (ws.max_row or 1) + 1):
+            qid = ws.cell(r, cols.get('报价ID', 1)).value
+            if not qid:
+                continue
+            reason = str(ws.cell(r, reason_col).value or '') if reason_col else ''
+            index.setdefault(str(qid), {'reasons': []})['reasons'].append(reason)
+        return index, reason_col
+    def test_15_vision_payload_schema_rejected(self):
+        """视觉模型响应的结构硬约束：不合格就整份作废，不能把半截表格当结果"""
+        from pdf_extractor import validate_vision_payload as v
+        self.assertEqual(v({'tables': [{'cells': [['a', 'b'], ['1', '2']]}], 'page_title': 'x'}), '')
+        self.assertTrue(v({}))
+        self.assertTrue(v({'tables': []}))
+        self.assertTrue(v({'tables': [{'cells': []}]}))
+        self.assertTrue(v({'tables': [{'cells': [['a', 'b'], ['1']]}]}))     # 列数不齐
+        self.assertTrue(v({'tables': [{'cells': ['a', 'b']}]}))              # 行不是数组
+        self.assertTrue(v({'tables': [{'cells': [['a']], 'uncertain': [[1]]}]}))  # uncertain 项过短
+        self.assertTrue(v({'tables': [{'cells': [['a']]}], 'notes': 5}))
 
 
 if __name__ == '__main__':
