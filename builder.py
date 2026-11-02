@@ -460,15 +460,15 @@ class StandardizedWorkbookBuilder:
 
     @staticmethod
     def _build_reconciliation_sheet(wb_out, recon: list, thin_border):
-        """原表 ↔ 标准化结果逐行对账页"""
+        """原表 ↔ 标准化结果逐行对账页 (含数学勾稽)"""
         ws = wb_out.create_sheet(title='原表对账')
         total = sum(1 for r in recon if r['status'] != '跳过')
         bad = sum(1 for r in recon if r['status'].startswith('异常'))
         skipped = sum(1 for r in recon if r['status'] == '跳过')
-        ws.cell(row=1, column=1, value=f"原表物料行 {total} 行 | 跳过 {skipped} 行 | 对账异常 {bad} 行").font = \
+        ws.cell(row=1, column=1, value=f"原表物理行 {len(recon)} 行 | 物料输出 {total} 行 | 跳过 {skipped} 行 | 对账异常 {bad} 行").font = \
             Font(name='宋体', size=11, bold=True, color='C00000' if bad else '385623')
 
-        headers = ['原表位置', '对账结果', '报价ID', '原表单价', '输出单价', '说明/跳过原因', '原表整行内容']
+        headers = ['原表位置', '对账结果', '数学勾稽', '报价ID', '原表单价', '输出单价', '说明/跳过原因', '原表整行内容']
         hfill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
         for c, h in enumerate(headers, 1):
             cell = ws.cell(row=2, column=c, value=h)
@@ -484,18 +484,83 @@ class StandardizedWorkbookBuilder:
         order = {'异常': 0, '一致(有待复核项)': 1, '一致': 2, '跳过': 3}
         rows = sorted(recon, key=lambda r: order.get(r['status'].split(':')[0], order.get(r['status'], 1)))
         for i, r in enumerate(rows, 3):
-            vals = [r['source_ref'], r['status'], r['quote_id'], r['raw_price'], r['out_price'], r['detail'], r['raw_text']]
+            vals = [r['source_ref'], r['status'], r.get('math_audit', ''), r['quote_id'], r['raw_price'], r['out_price'], r['detail'], r['raw_text']]
             font = red if r['status'].startswith('异常') else (grey if r['status'] == '跳过' else normal)
             for c, v in enumerate(vals, 1):
                 cell = ws.cell(row=i, column=c, value=safe_excel_val(v))
                 cell.font = font
                 cell.border = thin_border
-                cell.alignment = Alignment(vertical='center', wrap_text=c in (6, 7))
-                if c in (4, 5) and isinstance(v, (int, float)):
+                cell.alignment = Alignment(vertical='center', wrap_text=c in (7, 8))
+                if c in (5, 6) and isinstance(v, (int, float)):
                     cell.number_format = '#,##0.00'
-        for col, w in zip('ABCDEFG', [22, 26, 14, 12, 12, 50, 70]):
+        for col, w in zip('ABCDEFGH', [20, 24, 28, 14, 12, 12, 45, 65]):
             ws.column_dimensions[col].width = w
         ws.freeze_panes = 'A3'
+
+    @classmethod
+    def build_integrity_certificate(cls, report_path: str, recon: list, summary: dict, supplier: str, source_file: str):
+        """
+        生成独立的《防欺瞒体检报告与对账白皮书》(投行深蓝美学风格)
+        """
+        wb = openpyxl.Workbook()
+        ws_cert = wb.active
+        ws_cert.title = '防欺瞒体检指标概览'
+        ws_cert.views.sheetView[0].showGridLines = True
+
+        thin_border = Border(
+            left=Side(style='thin', color='D9D9D9'), right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'), bottom=Side(style='thin', color='D9D9D9')
+        )
+        navy_header_fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
+        header_font = Font(name='宋体', size=11, bold=True, color='FFFFFF')
+        kpi_title_font = Font(name='宋体', size=12, bold=True, color='1F4E78')
+        kpi_val_font = Font(name='Arial', size=20, bold=True, color='385623' if summary.get('is_zero_defect') else 'C00000')
+
+        ws_cert.merge_cells('A1:G1')
+        t_cell = ws_cert.cell(row=1, column=1, value=f"【零信任防欺瞒体检证书】{supplier} 报价单工程解析")
+        t_cell.font = Font(name='宋体', size=14, bold=True, color='1F4E78')
+        t_cell.alignment = Alignment(horizontal='center', vertical='center')
+        ws_cert.row_dimensions[1].height = 40
+
+        ws_cert.merge_cells('A2:G2')
+        sub_cell = ws_cert.cell(row=2, column=1, value=f"原始文件: {os.path.basename(source_file)} | 自动免检状态: {'【通过·零缺陷免检入库】' if summary.get('is_zero_defect') else '【存在异常·需红圈复核】'}")
+        sub_cell.font = Font(name='宋体', size=10, color='595959')
+        sub_cell.alignment = Alignment(horizontal='center', vertical='center')
+        ws_cert.row_dimensions[2].height = 24
+
+        # 指标卡片
+        kpis = [
+            ("物理行守恒率", f"{summary.get('row_conservation_rate', 0):.1f}%", "物料行+跳过行 / 原表总物理扫描行"),
+            ("对账异常总数", f"{summary.get('anomalies_count', 0)} 项", "漏行/多行/价格窜改/单向漏检"),
+            ("数学勾稽自洽率", f"{summary.get('math_pass_rate', 100):.1f}%", f"参检 {summary.get('math_audited_count', 0)} 行 / 自洽 {summary.get('math_passed_count', 0)} 行"),
+            ("原表物理总行数", f"{summary.get('total_source_rows', 0)} 行", f"物料输出 {summary.get('matched_items', 0)} | 合法跳过 {summary.get('skipped_rows', 0)}")
+        ]
+
+        ws_cert.row_dimensions[4].height = 26
+        ws_cert.row_dimensions[5].height = 36
+        ws_cert.row_dimensions[6].height = 20
+
+        for idx, (title, val, desc) in enumerate(kpis):
+            col_st = idx * 2 + 1
+            col_ed = col_st + 1 if idx < 3 else col_st
+            if col_st < 7:
+                ws_cert.merge_cells(start_row=4, start_column=col_st, end_row=4, end_column=col_ed)
+                ws_cert.merge_cells(start_row=5, start_column=col_st, end_row=5, end_column=col_ed)
+                ws_cert.merge_cells(start_row=6, start_column=col_st, end_row=6, end_column=col_ed)
+            c1 = ws_cert.cell(row=4, column=col_st, value=title)
+            c1.font = kpi_title_font
+            c1.alignment = Alignment(horizontal='center', vertical='center')
+            c2 = ws_cert.cell(row=5, column=col_st, value=val)
+            c2.font = kpi_val_font
+            c2.alignment = Alignment(horizontal='center', vertical='center')
+            c3 = ws_cert.cell(row=6, column=col_st, value=desc)
+            c3.font = Font(name='宋体', size=9, color='808080')
+            c3.alignment = Alignment(horizontal='center', vertical='center')
+
+        # 对账明细副表
+        cls._build_reconciliation_sheet(wb, recon, thin_border)
+        wb.save(report_path)
+
 
     @staticmethod
     def _build_structure_sheet(wb_out, log: list, thin_border):

@@ -41,14 +41,20 @@ TYPESAFE_MODEL = os.getenv("TYPESAFE_MODEL", "jev-latest")
 # Jev 判定置信度低于此值时写入待复核说明 (需用真实样例校准)
 JEV_MIN_CONFIDENCE = float(os.getenv("JEV_MIN_CONFIDENCE", "0.5"))
 
-# 线路引擎选择: 'traditional' (原切图流水线) / 'gemini' (Gemini原生直传) / 'compare' (双轨对比)
-EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "traditional").strip().lower()
+# 线路引擎选择: 'gemini' (Gemini原生全模态端到端直传，首选) / 'traditional' (原切图流水线) / 'compare' (双轨对比)
+EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "gemini").strip().lower()
 
 # Gemini 原生引擎配置
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.6-flash")
 # Gemini 思考预算 (0 为禁用思考/最低开销，-1 为自动，默认设为 0 以极速返回)
 GEMINI_THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
+
+# 防欺瞒工程参数配置
+ANTI_HALLUCINATION_MATH_AUDIT = os.getenv("ANTI_HALLUCINATION_MATH_AUDIT", "1").strip().lower() in ("1", "true")
+ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION = os.getenv("ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION", "1").strip().lower() in ("1", "true")
+EXPORT_INTEGRITY_CERTIFICATE = os.getenv("EXPORT_INTEGRITY_CERTIFICATE", "1").strip().lower() in ("1", "true")
 
 # LLM 调用重试次数
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))

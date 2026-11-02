@@ -3,7 +3,7 @@
 统一物料记录 (CanonicalMaterialItem)、多行规格排版与原表对账
 """
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 
 # ---------------------------------------------------------------- 待复核说明分级
@@ -141,7 +141,7 @@ class CanonicalMaterialItem:
 
 @dataclass
 class SourceRowRecord:
-    """原表中被扫描到的一行，以及解析器对它的判定 (用于对账)"""
+    """原表中被扫描到的一行，以及解析器对它的判定 (用于对账与数学勾稽)"""
     source_ref: str
     sheet: str
     row: int
@@ -149,9 +149,17 @@ class SourceRowRecord:
     raw_price: float
     decision: str            # 'item' = 作为物料输出；其余为跳过原因
     has_formula_without_cache: bool = False
+    raw_qty: Optional[float] = None       # 数量
+    raw_amount: Optional[float] = None    # 合价 / 金额
+    math_audit: str = ""                  # 数学勾稽结论
 
 
-STRUCTURAL_SKIP = {'分组标题行', '重复表头行', '合计/小计行'}   # 这三类行本身就会有数字 (如合计金额)，不算漏行
+# 强物料特征词：即使某行含有“合计/小计”，若同时包含这些特征且有价格，坚决不能当汇总行跳过！
+MATERIAL_FEATURE_KEYWORDS = (
+    'dn', 'de', 'mm', 'cm', 'm²', 'm2', 'm³', 'm3', 'kg', 'kv', 'kva', 'w', 'kw',
+    '型号', '规格', '系列', '米', '台', '套', '个', '支', '条', '件', '只', '根', '块', '卷'
+)
+STRUCTURAL_SKIP = {'分组标题行', '重复表头行', '合计/小计行'}
 
 
 # 同类问题组 → 一次处理建议 (同一组的问题可以用同一个动作批量解决)
@@ -216,14 +224,16 @@ def summarize_audit(items, headers=None) -> Dict:
     }
 
 
-def reconcile(source_rows: List[SourceRowRecord], items: List[CanonicalMaterialItem]) -> List[dict]:
+def reconcile(source_rows: List[SourceRowRecord], items: List[CanonicalMaterialItem]) -> 'ReconciliationReport':
     """
-    原表 ↔ 标准化结果逐行对账。返回对账明细 (每个原表行一条)，并把发现的问题写回 item.uncertainty_note。
+    原表 ↔ 标准化结果逐行对账与四维防欺瞒体检。
+    返回: (对账明细列表, 体检量化指标汇总)
     检查项：
-      1. 判定为物料的原表行必须恰好对应 1 条输出 (漏行 / 重复)
-      2. 输出单价必须与原表单价完全一致 (防模型篡改价格)
-      3. 输出中不得出现原表不存在的行 (防模型编造)
-      4. 判定为“跳过”的行如果有单价，同样算异常 (防止规则误伤把真实物料行丢掉)
+      1. 物理行数守恒闭环：每个原表物理行必须有且仅有明确去向 (物料或显式合法跳过)
+      2. 每一条输出单价必须与原表单价 100% 严格一致 (逐条校验，杜绝多条时漏检后项)
+      3. 封堵 STRUCTURAL_SKIP 误杀漏洞：有单价且带物料特征的行坚决不豁免
+      4. 输出中不得出现原表不存在的幽灵行
+      5. 数学勾稽验证：单价 × 数量 == 合价
     """
     by_ref: Dict[str, List[CanonicalMaterialItem]] = {}
     for it in items:
@@ -231,49 +241,139 @@ def reconcile(source_rows: List[SourceRowRecord], items: List[CanonicalMaterialI
 
     known_refs = {r.source_ref for r in source_rows}
     report = []
+    
+    math_audited = 0
+    math_passed = 0
+    total_anomalies = 0
+
     for r in source_rows:
         outs = by_ref.get(r.source_ref, [])
+        
+        # 数学勾稽核算: 单价 * 数量 == 合价
+        if r.raw_price > 0 and r.raw_qty and r.raw_qty > 0 and r.raw_amount and r.raw_amount > 0:
+            math_audited += 1
+            expected = round(r.raw_price * r.raw_qty, 2)
+            diff = abs(expected - r.raw_amount)
+            # 允许 5 分钱以内的微小乘积精度容差
+            if diff <= max(0.05, r.raw_amount * 0.002):
+                math_passed += 1
+                r.math_audit = f"勾稽自洽: {r.raw_price:g}×{r.raw_qty:g}≈{r.raw_amount:g}"
+            else:
+                r.math_audit = f"勾稽异常: 单价({r.raw_price:g})×数量({r.raw_qty:g})={expected:g}≠合价({r.raw_amount:g})"
+
         if r.decision != 'item':
-            # 跳过的行不能免检：行里有单价却被判为跳过 = 原来的漏行没人看得见 (单向检查的盲区)
+            # 跳过行的防漏检审计
+            is_suspicious_kill = False
+            if r.raw_price > 0:
+                raw_lower = r.raw_text.lower()
+                # 检查是否包含规格特征词
+                has_spec_feat = any(k in raw_lower for k in MATERIAL_FEATURE_KEYWORDS)
+                if has_spec_feat or r.decision not in STRUCTURAL_SKIP:
+                    is_suspicious_kill = True
+
             if outs:
                 status = '异常:被跳过的行仍有输出'
+                total_anomalies += 1
             elif r.decision.startswith('异常'):
-                status = r.decision  # 页级/表级失败：原样上报，不能因为“没输出”就算跳过
-            elif r.raw_price > 0 and r.decision not in STRUCTURAL_SKIP:
+                status = r.decision
+                total_anomalies += 1
+            elif is_suspicious_kill:
                 status = f'异常:有单价({r.raw_price:g})却被跳过'
+                total_anomalies += 1
             else:
                 status = '跳过'
-            report.append({'source_ref': r.source_ref, 'status': status, 'detail': r.decision,
-                           'raw_price': r.raw_price, 'out_price': None, 'quote_id': '', 'raw_text': r.raw_text})
+            report.append({
+                'source_ref': r.source_ref, 'status': status, 'detail': r.decision,
+                'raw_price': r.raw_price, 'out_price': None, 'quote_id': '',
+                'raw_text': r.raw_text, 'math_audit': r.math_audit
+            })
             continue
+
         if not outs:
-            report.append({'source_ref': r.source_ref, 'status': '异常:漏行', 'detail': '原表物料行未生成输出',
-                           'raw_price': r.raw_price, 'out_price': None, 'quote_id': '', 'raw_text': r.raw_text})
+            total_anomalies += 1
+            report.append({
+                'source_ref': r.source_ref, 'status': '异常:漏行', 'detail': '原表物料行未生成任何输出',
+                'raw_price': r.raw_price, 'out_price': None, 'quote_id': '',
+                'raw_text': r.raw_text, 'math_audit': r.math_audit
+            })
             continue
+
         problems = []
         if len(outs) > 1:
             problems.append(f'一行生成了 {len(outs)} 条输出')
-        it = outs[0]
-        if abs(it.market_price - r.raw_price) > 1e-6:
-            problems.append(f'单价不一致: 原表 {r.raw_price} / 输出 {it.market_price}')
+
+        # 逐条全面核验单价 (杜绝仅比对 outs[0] 的漏洞)
+        for idx, o_it in enumerate(outs):
+            if abs(o_it.market_price - r.raw_price) > 1e-6:
+                diff_label = f'单价不一致: 原表 {r.raw_price} / 输出#{idx+1} {o_it.market_price}' if len(outs) > 1 else f'单价不一致: 原表 {r.raw_price} / 输出 {o_it.market_price}'
+                problems.append(diff_label)
+                total_anomalies += 1
+
         if r.raw_price <= 0:
             problems.append('原表未读到有效单价')
         if r.has_formula_without_cache:
             problems.append('含公式但无缓存值，请在 Excel 中打开并保存后重跑')
+        if r.math_audit and r.math_audit.startswith("勾稽异常"):
+            problems.append(r.math_audit)
+            total_anomalies += 1
+
         for p in problems:
             for o in outs:
                 o.add_note(p)
-        status = '一致' if not problems else '异常:' + '；'.join(problems)
-        if not problems and it.uncertainty_note:
-            status = '一致(有待复核项)'
-        report.append({'source_ref': r.source_ref, 'status': status, 'detail': it.uncertainty_note,
-                       'raw_price': r.raw_price, 'out_price': it.market_price,
-                       'quote_id': ', '.join(o.quote_id for o in outs), 'raw_text': r.raw_text})
 
+        status = '一致' if not problems else '异常:' + '；'.join(problems)
+        if not problems and any(o.uncertainty_note for o in outs):
+            status = '一致(有待复核项)'
+        report.append({
+            'source_ref': r.source_ref, 'status': status,
+            'detail': '；'.join(o.uncertainty_note for o in outs if o.uncertainty_note),
+            'raw_price': r.raw_price, 'out_price': outs[0].market_price,
+            'quote_id': ', '.join(o.quote_id for o in outs),
+            'raw_text': r.raw_text, 'math_audit': r.math_audit
+        })
+
+    # 反查原表无此行的幽灵物料
     for ref, outs in by_ref.items():
         if ref not in known_refs:
+            total_anomalies += len(outs)
             for o in outs:
                 o.add_note('输出无法对应到原表行')
-                report.append({'source_ref': ref or '(空)', 'status': '异常:原表无此行', 'detail': o.uncertainty_note,
-                               'raw_price': None, 'out_price': o.market_price, 'quote_id': o.quote_id, 'raw_text': o.raw_spec})
-    return report
+                report.append({
+                    'source_ref': ref or '(空)', 'status': '异常:原表无此行',
+                    'detail': o.uncertainty_note or '原表无此行(幽灵行)', 'raw_price': None,
+                    'out_price': o.market_price, 'quote_id': o.quote_id,
+                    'raw_text': o.raw_spec, 'math_audit': ''
+                })
+
+    # 计算四维防欺瞒量化体检指标
+    total_src = len(source_rows)
+    skipped_cnt = sum(1 for rep in report if rep['status'] == '跳过')
+    matched_cnt = sum(1 for rep in report if rep['status'].startswith('一致'))
+    
+    # 行数守恒率 = (合法物料行 + 合法跳过行) / 原表总物理扫描行
+    row_conservation_rate = round(((matched_cnt + skipped_cnt) / total_src * 100), 2) if total_src > 0 else 0.0
+    math_pass_rate = round((math_passed / math_audited * 100), 2) if math_audited > 0 else 100.0
+
+    integrity_summary = {
+        "total_source_rows": total_src,
+        "matched_items": matched_cnt,
+        "skipped_rows": skipped_cnt,
+        "anomalies_count": total_anomalies,
+        "row_conservation_rate": row_conservation_rate,
+        "math_audited_count": math_audited,
+        "math_passed_count": math_passed,
+        "math_pass_rate": math_pass_rate,
+        "is_zero_defect": total_anomalies == 0 and row_conservation_rate == 100.0 and math_pass_rate == 100.0
+    }
+
+    return ReconciliationReport(report, integrity_summary)
+
+
+class ReconciliationReport(list):
+    """兼具 list 列表原生兼容性与四维防欺瞒量化指标 summary 的增强对账结果对象"""
+    def __init__(self, report: list, summary: dict):
+        super().__init__(report)
+        self.summary = summary
+        self.integrity_summary = summary
+
+

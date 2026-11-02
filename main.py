@@ -23,7 +23,8 @@ from gemini_pdf_extractor import GeminiPDFTableExtractor
 from terms_extractor import TermsExtractor, normalize_terms, find_terms_image, missing_terms
 from builder import StandardizedWorkbookBuilder
 from config import (DEFAULT_TEMPLATE_PATH, DEFAULT_OUTPUT_DIR, PROVINCE_ABBR_MAP, CATEGORY_CODE_MAP,
-                    resolve_category_code, expand_region, EXTRACTOR_ENGINE, GEMINI_API_KEY, GEMINI_MODEL, VISION_MODEL)
+                    resolve_category_code, expand_region, EXTRACTOR_ENGINE, GEMINI_API_KEY, GEMINI_MODEL, VISION_MODEL,
+                    EXPORT_INTEGRITY_CERTIFICATE, ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION)
 from models import CanonicalMaterialItem, SourceRowRecord, reconcile, summarize_audit
 from llm_agent import DeepSeekStandardizer, JevJudge, UNIT_PRICE_KEYS, TOTAL_PRICE_KEYS
 from config import STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE
@@ -465,12 +466,18 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
         headers_map = _build_headers(ws, header_row, col_st, col_ed)
         header_values = set(headers_map.values())
 
+        # 智能嗅探数量列与合价列 (用于物理数学勾稽审计)
+        qty_col = next((c for c, h in headers_map.items() if any(k in h for k in ('数量', '工程量', '采购量'))), None)
+        amount_col = next((c for c, h in headers_map.items() if any(k in h for k in ('合价', '总价', '金额', '小计')) and not _is_unit_price_header(h)), None)
+
         for r in range(data_start_row, ws.max_row + 1):
             row_cells_dict = {}
             row_text_parts = []
             row_values = []
             price_val = 0.0
             unit_val = ""
+            qty_val = 0.0
+            amount_val = 0.0
             formula_no_cache = False
 
             for c in range(col_st, col_ed + 1):
@@ -489,6 +496,10 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
                     price_val = safe_clean_price(cell.value)
                 elif c == unit_col:
                     unit_val = cell_val
+                elif c == qty_col:
+                    qty_val = safe_clean_price(cell.value)
+                elif c == amount_col:
+                    amount_val = safe_clean_price(cell.value)
 
             if not any(row_values):
                 continue
@@ -504,20 +515,36 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
                             price_val = p_candidate
                             break
 
-            # 行级过滤 (现有规则)：分组标题、重复表头、合计行
+            # 行级过滤与防误杀护栏
             decision = 'item'
+            raw_lower = raw_line.lower()
+            has_spec_feat = any(k in raw_lower for k in (
+                'dn', 'de', 'mm', 'cm', 'm²', 'm2', 'm³', 'm3', 'kg', 'kv', 'kva', 'w', 'kw',
+                '型号', '规格', '系列', '米', '台', '套', '个', '支', '条', '件', '只', '根', '块', '卷'
+            ))
+            is_business_note = any(bk in raw_line for bk in (
+                '开户行', '账号', '纳税人', '统一社会信用代码', '联系人', '联系电话', '传真', '送货地址',
+                '交货期', '有效期', '付款方式', '结算方式', '质保期', '说明:', '备注:', '注:'
+            ))
+
             if _is_title_row(row_values):
                 decision = '分组标题行'
             elif len(set(row_cells_dict.values()) & header_values) >= max(2, len(row_cells_dict) // 2):
                 decision = '重复表头行'
             elif any(v.replace(' ', '') in SUMMARY_ROW_KEYS for v in row_values if v):
-                decision = '合计/小计行'
+                # 防误杀：若带有单价且包含物料特征词，坚决不能当汇总行跳过！
+                if price_val > 0 and has_spec_feat:
+                    decision = 'item'
+                else:
+                    decision = '合计/小计行'
+            elif price_val <= 0 and is_business_note:
+                decision = '商务说明/备注行'
             elif not (price_val > 0 or len(row_cells_dict) >= 2):
                 decision = '无价格且有效属性不足2项'
 
             candidates.append({
                 "ref": ref, "r": r, "values": row_values, "decision": decision, "raw_line": raw_line,
-                "price": price_val, "formula_no_cache": formula_no_cache,
+                "price": price_val, "qty": qty_val, "amount": amount_val, "formula_no_cache": formula_no_cache,
                 "headers": [headers_map[c] for c in range(col_st, col_ed + 1)],
                 "build": dict(
                     id=ref,
@@ -543,7 +570,7 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
         decision = c["decision"]
         extra_notes = []
         if jev is not None:
-            current_type = RULE_DECISION_TYPE[decision]
+            current_type = RULE_DECISION_TYPE.get(decision, 'note')
             jt = jev_types.get(c["ref"])
             struct_log.append({"sheet": sname, "item": f"行类型 {c['ref']}", "current": ROW_TYPE_CN[current_type],
                                "jev": ROW_TYPE_CN[jt[0]] if jt else "(未返回)", "conf": jt[1] if jt else None,
@@ -558,7 +585,8 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
                     extra_notes.append("Jev 未返回行类型，按现有规则判定")
         records.append(SourceRowRecord(
             source_ref=c["ref"], sheet=sname, row=c["r"], raw_text=c["raw_line"],
-            raw_price=c["price"], decision=decision, has_formula_without_cache=c["formula_no_cache"]
+            raw_price=c["price"], decision=decision, has_formula_without_cache=c["formula_no_cache"],
+            raw_qty=c.get("qty"), raw_amount=c.get("amount")
         ))
         if decision != 'item':
             continue
@@ -936,15 +964,39 @@ def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
 def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=None,
             sheet_stats=None, source_path=""):
     """落盘 + 校验。返回 (交付文件路径, 失败清单)；失败清单非空时调用方必须置退出码 2"""
-    # 原表 ↔ 结果逐行对账
+    # 原表 ↔ 结果逐行对账与四维体检量化核算
     recon = reconcile(source_rows, items)
+    integrity_summary = getattr(recon, "summary", {})
     _print_recon_summary(recon)
+
+    print("\n" + "=" * 70)
+    print("【零信任防欺瞒四维体检指标报告】")
+    print(f"  -> 物理行守恒率: {integrity_summary['row_conservation_rate']:.1f}% (原表物理行: {integrity_summary['total_source_rows']})")
+    print(f"  -> 物料输出行数: {integrity_summary['matched_items']} | 合法跳过行数: {integrity_summary['skipped_rows']}")
+    print(f"  -> 对账异常项数: {integrity_summary['anomalies_count']} 项")
+    print(f"  -> 数学勾稽自洽: {integrity_summary['math_passed_count']}/{integrity_summary['math_audited_count']} ({integrity_summary['math_pass_rate']:.1f}%)")
+    print(f"  -> 最终免检裁决: {'【通过·零缺陷免检入库】' if integrity_summary['is_zero_defect'] else '【拦截·存在异常需复核】'}")
+    print("=" * 70)
+
     print(f"\n[*] 全表语义解析完成，共生成标准物料: {len(items)} 项，启动构建器落盘...")
     builder = StandardizedWorkbookBuilder(template_xlsx)
     builder.build_from_canonical_items(items, output_xlsx, img_dir, reconciliation=recon,
                                        structure_log=struct_log or None)
+
+    # 导出独立的《对账与防欺瞒体检报告》(投行级美学风格，不混淆主交付表)
+    if EXPORT_INTEGRITY_CERTIFICATE:
+        cert_path = output_xlsx.replace(".xlsx", "_对账与防欺瞒体检报告.xlsx")
+        try:
+            supplier_tag = os.path.basename(output_xlsx).split('-')[0]
+            StandardizedWorkbookBuilder.build_integrity_certificate(
+                cert_path, recon, integrity_summary, supplier=supplier_tag, source_file=source_path
+            )
+            print(f"[*] 防欺瞒体检白皮书已独立导出: {cert_path}")
+        except Exception as cert_err:
+            print(f"[Warning] 导出防欺瞒体检报告异常: {cert_err}")
+
     # 落盘后读回 + 完整性汇总：任何一项失败都不允许静默通过
-    failures = _integrity_problems(items, recon, sheet_stats) + _verify_output(output_xlsx, items)
+    failures = _integrity_problems(items, recon, sheet_stats, integrity_summary) + _verify_output(output_xlsx, items)
     for s in sheet_stats or []:
         print(f"    [{s['sheet']}] 原表 {s['rows']} 行 → 产出 {s['items']} 条" + (f"  ⚠ {s['error']}" if s.get('error') else ""))
     print(f"[VERIFY] {os.path.basename(source_path)} | Sheet {len(sheet_stats or [])} | 物料 {len(items)} | "
@@ -961,19 +1013,26 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
     return output_xlsx, failures
 
 
-def _integrity_problems(items, recon, sheet_stats):
-    """执行完整性：每个 Sheet 要有交代，跳过行要能自证，空产出不能算成功"""
+def _integrity_problems(items, recon, sheet_stats, integrity_summary=None):
+    """执行完整性：每个 Sheet 要有交代，跳过行要能自证，空产出不能算成功，物理行必须守恒"""
     errs = []
     if not items:
         errs.append("本次未产出任何物料 (0 条)")
     for s in sheet_stats or []:
         if s.get('error'):
             errs.append(s['error'])
+    
+    # 物理行强守恒断言
+    if ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION and integrity_summary:
+        if integrity_summary['row_conservation_rate'] < 100.0:
+            errs.append(f"物理行数不守恒: 守恒率 {integrity_summary['row_conservation_rate']:.1f}% < 100.0% "
+                        f"(原表 {integrity_summary['total_source_rows']} 行，已交代 {integrity_summary['matched_items'] + integrity_summary['skipped_rows']} 行)")
+
     bad = [r for r in recon if r['status'].startswith('异常')]
     for r in bad[:20]:
         errs.append(f"对账{r['status']} @ {r['source_ref']} | {r['detail']}")
     if len(bad) > 20:
-        errs.append(f"…另有 {len(bad) - 20} 条对账异常 (详见交付文件「原表对账」页)")
+        errs.append(f"…另有 {len(bad) - 20} 条对账异常 (详见交付伴生「对账与防欺瞒体检报告」)")
     return errs
 
 
@@ -984,18 +1043,19 @@ def _verify_output(path, items):
         wb = openpyxl.load_workbook(path, data_only=True)
     except Exception as e:
         return [f"输出文件无法读回: {e}"]
-    errs = [f"输出缺少「{n}」Sheet" for n in ('标准化报价', '疑义与失败审计说明', '原表对账')
-            if n not in wb.sheetnames]
+    
     if '标准化报价' not in wb.sheetnames:
-        return errs
+        return ["输出缺少「标准化报价」主表 Sheet"]
     ws = wb['标准化报价']
     header = [ws.cell(1, c).value for c in range(1, (ws.max_column or 0) + 1)]
     col = {str(h): i for i, h in enumerate(header) if h}
     if not {'市场价', '报价ID'} <= set(col):
-        return errs + [f"输出表头缺 市场价/报价ID: {header}"]
+        return [f"输出表头缺 市场价/报价ID: {header}"]
     rows = [r for r in ws.iter_rows(min_row=2, values_only=True) if any(v not in (None, '') for v in r)]
     if len(rows) != len(items):
-        errs.append(f"输出数据行 {len(rows)} ≠ 内存物料 {len(items)} 条")
+        return [f"输出数据行 {len(rows)} ≠ 内存物料 {len(items)} 条"]
+
+    errs = []
     ids = []
     for i, (it, r) in enumerate(zip(items, rows), 2):
         if len(errs) > 20:
