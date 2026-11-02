@@ -106,7 +106,7 @@ NATIONWIDE_TOKENS = {'全国', '全国范围', '不限', '全国通用'}
 
 
 def _load_category_codes(path: str) -> dict:
-    """读取标准分类编码文件：前两列为 名称、编码；首行若为表头自动跳过"""
+    """读取标准分类编码文件：支持前两列为(名称,编码)或(编码,名称)，以及标准6列库(三级类别编码/名称)"""
     if not path:
         return {}
     if not os.path.exists(path):
@@ -115,17 +115,35 @@ def _load_category_codes(path: str) -> dict:
     if path.lower().endswith(('.xlsx', '.xlsm')):
         import openpyxl
         ws = openpyxl.load_workbook(path, read_only=True, data_only=True).active
-        rows = [r[:2] for r in ws.iter_rows(values_only=True)]
+        rows = [list(r) for r in ws.iter_rows(values_only=True)]
     else:
         with open(path, encoding='utf-8-sig', newline='') as f:
-            rows = [r[:2] for r in csv.reader(f)]
+            rows = [list(r) for r in csv.reader(f)]
+    if not rows:
+        return {}
+    headers = [str(c or '').strip() for c in rows[0]]
     codes = {}
+    # 场景1：带有标准表头
+    if any('三级' in h for h in headers):
+        c_idx = next((i for i, h in enumerate(headers) if '三级类别编码' in h), -1)
+        n_idx = next((i for i, h in enumerate(headers) if '三级类别名称' in h), -1)
+        if c_idx != -1 and n_idx != -1:
+            for r in rows[1:]:
+                if len(r) > max(c_idx, n_idx):
+                    code = str(r[c_idx] or '').strip()
+                    name = str(r[n_idx] or '').strip()
+                    if code and name:
+                        codes[name] = code
+            return codes
+    # 场景2：常规两列或首两列 (名称, 编码) 或 (编码, 名称)
     for r in rows:
         if len(r) < 2 or r[0] in (None, '') or r[1] in (None, ''):
             continue
-        name, code = str(r[0]).strip(), str(r[1]).strip()
-        if re.fullmatch(r'\d+', code):
-            codes[name] = code
+        v0, v1 = str(r[0]).strip(), str(r[1]).strip()
+        if re.fullmatch(r'[A-Za-z0-9]+', v1) and not re.fullmatch(r'[A-Za-z0-9]+', v0):
+            codes[v0] = v1
+        elif re.fullmatch(r'[A-Za-z0-9]+', v0) and not re.fullmatch(r'[A-Za-z0-9]+', v1):
+            codes[v1] = v0
     return codes
 
 

@@ -36,6 +36,7 @@ VISION_DOUBLE_CHECK=1                 # 扫描件两遍识别交叉校验
 VISION_GAMMA=1.8                      # 增强图压暗程度
 TEMPLATE_PATH=                        # 输出模板 .xlsx (取第 1 行表头)；不填使用内置 33 列表头
 CATEGORY_CODE_FILE=                   # 标准分类编码 .csv/.xlsx (前两列：名称、编码)；不填则编码留空
+CATEGORY_ATTRS_API_URL=               # 类别属性/填写要求接口；不填则不调用（需配标准编码库）
 OUTPUT_DIR=                           # 默认 ./deliveries
 # 试点：表格结构 / 行类型判定
 STRUCTURE_ENGINE=llm                  # llm (默认) / jev / compare
@@ -69,7 +70,7 @@ pip install -r requirements.txt
 python main.py -i "报价单.pdf"                       # 自动查找同目录的 报价说明/折扣单 图片
 python main.py -i "报价单.xlsx" -t "报价说明.png"
 python main.py -i "报价单.pdf" --terms-json terms.json  # 人工确认的商务条款
-python3 run_batch_standardize.py "<批次源目录>" "<输出目录>" --label 程雅洁  # 整批逐家解析；任一家完整性校验不通过则该家 FAIL、退出码 2
+python3 run_batch_standardize.py "<批次源目录>" "<输出目录>" --label 批次A  # 整批逐家解析；任一家完整性校验不通过则该家 FAIL、退出码 2
 ```
 
 `terms.json` 的字段：`supplier`、`brand`、`province`、`city`、`is_tax_included`、`tax_rate`、`tax_desc`、`is_freight_included`、`freight_desc`、`freight_settle`、`discount_ratio`、`discount_series`、`quote_desc`、`quote_type`。没有的字段可以不写。

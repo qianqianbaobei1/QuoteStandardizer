@@ -1,6 +1,8 @@
 .env
 __pycache__/
 deliveries/
+scratch/
+category_attrs_cache.json
 .DS_Store
 *.pyc
 *.pyo
