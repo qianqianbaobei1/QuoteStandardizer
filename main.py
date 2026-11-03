@@ -396,7 +396,7 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue):
                 continue
             ref = f"{sname}!R{r}C{c}"
             col_path = mx['col_paths'][c]
-            tt_part = f";表标题:{mx['table_title']}" if mx.get('table_title') else ""
+            tt_part = ""
             raw_line = f"{mx['label_header']}:{label} | 列:{col_path} | 价格:{v}"
             price = safe_clean_price(v) if _is_number_text(v) else 0.0
             decision = 'item' if price > 0 else f"矩阵单元格非数值: {v}"
@@ -419,11 +419,33 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue):
                     notes.append(f"价格 {price:g} 低于上一档({p_label:g})的 {p_price:g}，疑似识别错误或原件模糊")
             if label_num is not None:
                 prev[c] = (label_num, price)
+            # 精确拆解矩阵列标题中的 品名 与 型号/系列
+            # 例如 "暗杆闸阀 Z45T-16" -> 品名: 暗杆闸阀, 型号/系列: Z45T-16
+            clean_col = col_path.strip()
+            # 提取型号/系列（字母数字中划线组合）
+            m_model = re.search(r'([A-Za-z0-9\-]+(?:-[A-Za-z0-9]+)*)', clean_col)
+            model_str = m_model.group(1) if m_model else ""
+            # 如果末尾带 Q (球墨铸铁)，连同纳入
+            m_model_full = re.search(r'([A-Za-z0-9\-]+(?:-[A-Za-z0-9]+)*[A-Za-z0-9]*)', clean_col)
+            if m_model_full and len(m_model_full.group(1)) > len(model_str):
+                model_str = m_model_full.group(1)
+            name_str = clean_col.replace(model_str, '').strip() if model_str else clean_col
+            name_str = name_str or clean_col
+            
+            # 构造完整且无表标题的单物料规格参数：包含规格与型号/系列
+            series_str = model_str or clean_col
+            raw_spec_clean = f"规格型号:{label};型号/系列:{series_str}"
+
             raw_rows.append({
                 "id": ref,
-                "raw_cells_dict": {mx['label_header']: label, "产品/型号(表头)": col_path, "单价": v},
+                "raw_cells_dict": {
+                    "品名": name_str,
+                    "规格型号": label,
+                    "型号/系列": series_str,
+                    "单价": v
+                },
                 "raw_full_line": raw_line,
-                "raw_spec": f"{mx['label_header']}:{label};型号/系列:{col_path}" + tt_part,
+                "raw_spec": raw_spec_clean,
                 "raw_price": price,
                 "raw_unit": mx['unit'],
                 "mpaths": [],
@@ -724,17 +746,14 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 elif not cat_code:
                     notes.append("类别编码未确定" + ("" if CATEGORY_CODE_MAP else " (未配置标准编码库 CATEGORY_CODE_FILE)"))
 
-                # 针对矩阵表（二维交叉表）物料的强隔离保护：
-                # 每个交叉格严格对应【唯一物料】，规格只能是行标题（如 DN40），型号只能是列标题（如 Z45T-16），品名只能是暗杆闸阀！
-                # 严禁将其他交叉格的参数并入！
-                if "品名" in item["raw_cells_dict"] and "型号" in item["raw_cells_dict"]:
+                if "型号/系列" in item["raw_cells_dict"]:
                     r_dict = item["raw_cells_dict"]
                     std_name = r_dict.get("品名") or std_name
                     structured_specs = {
-                        "规格": r_dict.get("规格", ""),
-                        "型号": r_dict.get("型号", "")
+                        "规格型号": r_dict.get("规格型号", ""),
+                        "型号/系列": r_dict.get("型号/系列", "")
                     }
-                    raw_spec_str = f"规格:{r_dict.get('规格', '')};型号:{r_dict.get('型号', '')}"
+                    raw_spec_str = f"规格型号:{r_dict.get('规格型号', '')};型号/系列:{r_dict.get('型号/系列', '')}"
                 else:
                     structured_specs = cleaned_res.get("structured_specs")
                     if not isinstance(structured_specs, dict) or not structured_specs:

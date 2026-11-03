@@ -186,7 +186,7 @@ class StandardizedWorkbookBuilder:
         for item in items:
             # 格式化多行结构化技术规格
             formatted_multiline_specs = item.format_multiline_specs()
-            # 净化矩阵物料展示：过滤产品/型号(表头)、规格型号等内部拼接标签，确保每行纯净独立
+            # 净化矩阵物料展示：过滤产品/型号(表头)、表标题等内部冗余标签，保留规格与型号/系列
             clean_lines = []
             for l in formatted_multiline_specs.split('\n'):
                 if '表头' in l or '表标题' in l: continue
