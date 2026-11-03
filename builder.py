@@ -189,7 +189,8 @@ class StandardizedWorkbookBuilder:
             # 净化矩阵物料展示：过滤产品/型号(表头)、表标题等内部冗余标签，保留规格与型号/系列
             clean_lines = []
             for l in formatted_multiline_specs.split('\n'):
-                if '表头' in l or '表标题' in l: continue
+                # 严格业务规则：规格参数只能是物理规格，严禁混入基价、单价、税率、运费等非物料参数！
+                if any(k in l for k in ['表头', '表标题', '基价', '单价', '总价', '金额', '铝锭基价', '铜基价', '指导价']): continue
                 clean_lines.append(l)
             formatted_multiline_specs = '\n'.join(clean_lines) if clean_lines else formatted_multiline_specs
             line_count = formatted_multiline_specs.count('\n') + 1

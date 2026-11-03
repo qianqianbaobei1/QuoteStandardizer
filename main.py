@@ -759,7 +759,7 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     if not isinstance(structured_specs, dict) or not structured_specs:
                         structured_specs = {k: v for k, v in item["raw_cells_dict"].items()}
                     structured_specs = {str(k): str(v) for k, v in structured_specs.items() if v not in (None, "")}
-                    raw_spec_str = item.get("raw_spec") or item["raw_full_line"]
+                    raw_spec_str = cleaned_res.get("raw_spec") or item.get("raw_spec") or item["raw_full_line"]
                 # 原文已是规范 “键:值;” 参数时原样采用 (不让模型改参数名/值，如 “厚度(mm):1.5”“是否曝露使用”)，模型结果只补充原文没有的键
                 verbatim = _verbatim_specs(item["raw_cells_dict"])
                 if verbatim:
@@ -818,7 +818,7 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     tax_desc=terms_info["tax_desc"],
                     tax_rate=terms_info["tax_rate"],
                     freight_settle=terms_info["freight_settle"],
-                    quote_desc=terms_info["quote_desc"],
+                    quote_desc=f"{terms_info['quote_desc']}；{cleaned_res['quote_desc_extra']}".strip('；') if cleaned_res.get('quote_desc_extra') else terms_info['quote_desc'],
                     quote_type=terms_info["quote_type"],
                     province=province,
                     city=city,
