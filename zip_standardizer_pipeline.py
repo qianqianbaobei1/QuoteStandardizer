@@ -267,32 +267,31 @@ class ZipQuoteStandardizerPipeline:
                                     ws.cell(r, c_idx).value = v
                                     break
 
-                # 规则 3: 系统级处理图片单元格——清空残余文字，设置行高并内嵌对应原图
+                # 规则 3: 严格区分“产品图”与“客户报价单图”
+                # 【重要规范】：
+                # - “厂家报价图片文件名”列：记录客户报价单/扫描件图文件名（如 quote_img1.png），用于溯源对账
+                # - “图片”列：只允许放置物料对应的“真实产品效果图/样品图/实物图”；
+                #   严禁把客户报价单/带公章扫描件（quote_img*）作为产品图塞入！若原包未提供真实产品图库，则“图片”列保持纯净留空。
                 if img_col:
-                    ws.row_dimensions[r].height = 95
-                    # 彻底清空图片列及后续无用重名列中的任何文件名文本
+                    # 检查是否有真实产品图
+                    product_img_found = None
                     for cc in range(img_col, ws.max_column + 1):
-                        ws.cell(r, cc).value = None
+                        val = str(ws.cell(r, cc).value or '').strip()
+                        # 如果单元格内记录了具体的产品图片名称（非 quote_img 且非空）
+                        if val and not val.lower().startswith('quote_img') and val in local_img_paths:
+                            product_img_found = local_img_paths[val]
+                        ws.cell(r, cc).value = None  # 清空文字，保持单元格纯净
 
-                    # 找到并插入对应图片
-                    target_img_name = row_img_file
-                    if target_img_name not in local_img_paths:
-                        # 兜底寻找首选报价图
-                        for candidate in sorted(local_img_paths.keys()):
-                            if 'quote_img' in candidate.lower():
-                                target_img_name = candidate
-                                break
-
-                    if target_img_name in local_img_paths:
-                        img_path = local_img_paths[target_img_name]
+                    if product_img_found:
+                        ws.row_dimensions[r].height = 95
                         try:
-                            img = OpenpyxlImage(img_path)
+                            img = OpenpyxlImage(product_img_found)
                             img.width = 135
                             img.height = 90
                             ws.add_image(img, f"{img_letter}{r}")
                             total_images_embedded += 1
                         except Exception as e:
-                            print(f"[Error] Failed to embed image {img_path}: {e}")
+                            print(f"[Error] Failed to embed product image {product_img_found}: {e}")
 
         # 4. 保存为交付标准文件
         out_path = os.path.join(self.output_dir, f"{supplier_name}-标准解析.xlsx")

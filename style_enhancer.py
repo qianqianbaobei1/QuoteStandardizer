@@ -110,6 +110,7 @@ def apply_enterprise_style(ws):
 
     for r in range(2, ws.max_row + 1):
         base_fill = zebra_odd if (r % 2 == 1) else zebra_even
+        max_lines = 1
         
         for c_idx, h in enumerate(headers, 1):
             cell = ws.cell(row=r, column=c_idx)
@@ -122,7 +123,10 @@ def apply_enterprise_style(ws):
                 cell.font = spec_font
                 cell.alignment = left_align_wrap
                 if cell.value:
-                    cell.value = format_specs_to_multiline(str(cell.value))
+                    formatted = format_specs_to_multiline(str(cell.value))
+                    cell.value = formatted
+                    lines_cnt = formatted.count('\n') + 1
+                    if lines_cnt > max_lines: max_lines = lines_cnt
             elif h in PRICE_HEADERS:
                 cell.font = price_font
                 cell.alignment = right_align
@@ -140,7 +144,12 @@ def apply_enterprise_style(ws):
             else:
                 cell.alignment = left_align_wrap
 
-        ws.row_dimensions[r].height = 100
+        # 自适应行高：根据多行文本行数动态计算；如果有图片则保证足够高度
+        row_has_image = any(getattr(img, 'anchor', None) and str(r) in str(img.anchor) for img in ws._images)
+        if row_has_image:
+            ws.row_dimensions[r].height = 95
+        else:
+            ws.row_dimensions[r].height = min(130, max(30, max_lines * 18 + 8))
 
     # 4. 列宽自适应比例布局
     for col in ws.columns:
