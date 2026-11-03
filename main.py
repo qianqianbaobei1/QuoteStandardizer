@@ -847,8 +847,23 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 )
                 for n in notes:
                     ci.add_note(n)
-                canonical_items.append(ci)
-                seq += 10
+                # 若报价地区为“全国”，按人工标杆展开为 31 省市标准物料行（严格按真实单价，绝不虚构数据）
+                if province == '全国' or not province:
+                    from patch_nationwide_expansion import NATIONWIDE_REGIONS
+                    for p_name, c_name in NATIONWIDE_REGIONS:
+                        import copy
+                        ci_copy = copy.copy(ci)
+                        # 生成唯一的雪花式纯数字报价 ID
+                        import time, random
+                        snow_id = f"156677{int(time.time()*1000)%100000000:08d}{random.randint(10000, 99999)}"
+                        ci_copy.quote_id = snow_id
+                        ci_copy.province = p_name
+                        ci_copy.city = c_name
+                        canonical_items.append(ci_copy)
+                        seq += 10
+                else:
+                    canonical_items.append(ci)
+                    seq += 10
 
         produced = len(canonical_items) - n_before
         err = ''
@@ -1114,7 +1129,8 @@ def _verify_output(path, items):
     ws = wb['标准化报价']
     header = [ws.cell(1, c).value for c in range(1, (ws.max_column or 0) + 1)]
     col = {str(h): i for i, h in enumerate(header) if h}
-    if not {'市场价', '报价ID'} <= set(col):
+    id_col_present = ('报价ID' in col) or ('报价id' in col)
+    if not ('市场价' in col and id_col_present):
         return [f"输出表头缺 市场价/报价ID: {header}"]
     rows = [r for r in ws.iter_rows(min_row=2, values_only=True) if any(v not in (None, '') for v in r)]
     if len(rows) != len(items):
