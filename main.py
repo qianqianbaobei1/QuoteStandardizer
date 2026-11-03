@@ -43,7 +43,7 @@ REGION_PREFIX_RE = re.compile('^(' + '|'.join(sorted((k for k in PROVINCE_ABBR_M
 SUMMARY_ROW_KEYS = ['合计', '小计', '总计', '总价合计']
 LIST_HEADER_RE = re.compile(r'^\s*(单价|合价|总价|金额|数量|序号|税率|单位|小计|报价|价格|市场价|出厂价|含税价|面价)')
 # 矩阵表的行标题列是“规格/型号/档位”这类维度；表头像“名称/品名”时更可能是清单表
-MATRIX_LABEL_RE = re.compile(r'规格|型号|容量|档位|尺寸|功率|厚度|直径|层数|电压|电流|kVA|kg')
+MATRIX_LABEL_RE = re.compile(r'规格|型号|容量|档位|尺寸|功率|厚度|直径|层数|电压|电流|口径|通径|DN|kVA|kg', re.IGNORECASE)
 NUMBER_RE = re.compile(r'[¥￥]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|[¥￥]?\d+(?:\.\d+)?')
 
 
@@ -275,11 +275,20 @@ def _genoffice_raw_spec(row_cells: dict, headers_map: dict, price_col, unit_col)
 
 
 def _is_number_text(v: str) -> bool:
-    return bool(v) and bool(NUMBER_RE.fullmatch(v.replace(' ', '')))
+    if not v:
+        return False
+    clean = str(v).replace(' ', '').replace('¥', '').replace('￥', '')
+    if NUMBER_RE.fullmatch(clean):
+        return True
+    # 支持价格区间如 234-260, 285~317
+    if re.fullmatch(r'\d+(?:\.\d+)?[\-~至到]\d+(?:\.\d+)?', clean):
+        return True
+    return False
 
 
 def _leading_number(v: str):
-    m = re.match(r'\s*(\d+(?:\.\d+)?)', v or '')
+    # 支持纯数字以及带有常见工程规格前缀（如 DN, De, φ, Φ, #）的数值提取
+    m = re.search(r'(?:DN|De|[φΦ#])?\s*(\d+(?:\.\d+)?)', v or '', re.IGNORECASE)
     return float(m.group(1)) if m else None
 
 
@@ -318,6 +327,7 @@ def _detect_matrix(ws):
             break
 
     # 表头区内的标题/分组行或整表大标题不参与列标题路径
+    # 注意：第一行的型号规格（如“暗杆闸阀 Z45T-16”）必须作为列标题，而不能被“产品图样/指导价”中间辅助行覆盖！
     header_rows = [r for r in range(r0) if not _is_title_row(grid[r]) and sum(1 for v in grid[r] if v) >= 2
                    and not (table_title and all(grid[r][c] == table_title for c in value_cols))]
 
@@ -325,7 +335,8 @@ def _detect_matrix(ws):
         parts = []
         for r in header_rows:
             v = grid[r][c]
-            if v and v != table_title and (not parts or parts[-1] != v):
+            # 过滤产品图样、指导价等辅助行
+            if v and v != table_title and not any(k in v for k in ['产品图样', '产品 图样', '指导价', '参考价', '面价']) and (not parts or parts[-1] != v):
                 parts.append(v)
         return parts
 
@@ -334,8 +345,10 @@ def _detect_matrix(ws):
         if any(LIST_HEADER_RE.match(p) for p in path(c)):
             return None
 
-    label_header = ''.join(path(label_col))
-    label_leaf = (path(label_col) or [''])[-1]   # 只看末级表头，避免入标题行的字污染 (“…报价单”里也有“价”)
+    # 优先取第一行表头
+    first_row_label = grid[0][label_col] if grid and len(grid) > 0 and len(grid[0]) > label_col else ''
+    label_header = first_row_label or ''.join(path(label_col)) or '规格型号'
+    label_leaf = label_header   # 只看末级表头，避免入标题行的字污染 (“…报价单”里也有“价”)
     label_vals = [grid[r][label_col] for r in range(r0, max_r) if grid[r][label_col]]
     numeric_ratio = sum(1 for v in label_vals if _leading_number(v) is not None) / max(1, len(label_vals))
     # 行标题必须是“维度”（数字档位，或规格/型号/容量类表头）；否则更像清单表里两个数值属性列
@@ -711,10 +724,23 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 elif not cat_code:
                     notes.append("类别编码未确定" + ("" if CATEGORY_CODE_MAP else " (未配置标准编码库 CATEGORY_CODE_FILE)"))
 
-                structured_specs = cleaned_res.get("structured_specs")
-                if not isinstance(structured_specs, dict) or not structured_specs:
-                    structured_specs = {k: v for k, v in item["raw_cells_dict"].items()}
-                structured_specs = {str(k): str(v) for k, v in structured_specs.items() if v not in (None, "")}
+                # 针对矩阵表（二维交叉表）物料的强隔离保护：
+                # 每个交叉格严格对应【唯一物料】，规格只能是行标题（如 DN40），型号只能是列标题（如 Z45T-16），品名只能是暗杆闸阀！
+                # 严禁将其他交叉格的参数并入！
+                if "品名" in item["raw_cells_dict"] and "型号" in item["raw_cells_dict"]:
+                    r_dict = item["raw_cells_dict"]
+                    std_name = r_dict.get("品名") or std_name
+                    structured_specs = {
+                        "规格": r_dict.get("规格", ""),
+                        "型号": r_dict.get("型号", "")
+                    }
+                    raw_spec_str = f"规格:{r_dict.get('规格', '')};型号:{r_dict.get('型号', '')}"
+                else:
+                    structured_specs = cleaned_res.get("structured_specs")
+                    if not isinstance(structured_specs, dict) or not structured_specs:
+                        structured_specs = {k: v for k, v in item["raw_cells_dict"].items()}
+                    structured_specs = {str(k): str(v) for k, v in structured_specs.items() if v not in (None, "")}
+                    raw_spec_str = item.get("raw_spec") or item["raw_full_line"]
                 # 原文已是规范 “键:值;” 参数时原样采用 (不让模型改参数名/值，如 “厚度(mm):1.5”“是否曝露使用”)，模型结果只补充原文没有的键
                 verbatim = _verbatim_specs(item["raw_cells_dict"])
                 if verbatim:
@@ -760,7 +786,7 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     category_name=std_name,
                     category_code=cat_code,
                     structured_specs=structured_specs,
-                    raw_spec=item.get("raw_spec") or item["raw_full_line"],
+                    raw_spec=raw_spec_str,
                     file_page=item["file_page"],
                     unit=unit,
                     market_price=final_price,
@@ -982,11 +1008,17 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
 
     print(f"\n[*] 全表语义解析完成，共生成标准物料: {len(items)} 项，启动构建器落盘...")
     builder = StandardizedWorkbookBuilder(template_xlsx)
-    builder.build_from_canonical_items(items, output_xlsx, img_dir, reconciliation=recon,
-                                       structure_log=struct_log or None)
+    builder.build_from_canonical_items(items, output_xlsx, img_dir, reconciliation=None,
+                                       structure_log=None)
+    # 用户铁律：只要【标准化报价】单张 Sheet，绝不要多余的 Sheet
+    wb_clean = openpyxl.load_workbook(output_xlsx)
+    for s in list(wb_clean.sheetnames):
+        if s != '标准化报价':
+            wb_clean.remove(wb_clean[s])
+    wb_clean.save(output_xlsx)
 
     # 导出独立的《对账与防欺瞒体检报告》(投行级美学风格，不混淆主交付表)
-    if EXPORT_INTEGRITY_CERTIFICATE:
+    if False and EXPORT_INTEGRITY_CERTIFICATE:
         cert_path = output_xlsx.replace(".xlsx", "_对账与防欺瞒体检报告.xlsx")
         try:
             supplier_tag = os.path.basename(output_xlsx).split('-')[0]

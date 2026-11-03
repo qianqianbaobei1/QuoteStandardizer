@@ -186,6 +186,12 @@ class StandardizedWorkbookBuilder:
         for item in items:
             # 格式化多行结构化技术规格
             formatted_multiline_specs = item.format_multiline_specs()
+            # 净化矩阵物料展示：过滤产品/型号(表头)、规格型号等内部拼接标签，确保每行纯净独立
+            clean_lines = []
+            for l in formatted_multiline_specs.split('\n'):
+                if '表头' in l or '表标题' in l: continue
+                clean_lines.append(l)
+            formatted_multiline_specs = '\n'.join(clean_lines) if clean_lines else formatted_multiline_specs
             line_count = formatted_multiline_specs.count('\n') + 1
 
             # 落地图片资产 (按需写入)
@@ -203,21 +209,17 @@ class StandardizedWorkbookBuilder:
                     saved_images.append((img_fn, img_dst))
 
             first_img_name = saved_images[0][0] if saved_images else (item.image_filenames[0] if item.image_filenames else '无')
-            img_folder_name = os.path.basename(img_dir) if (saved_images or item.image_filenames) else ''
+            img_folder_name = os.path.basename(img_dir) if saved_images else ''
 
-            # 诚实性设计：存在印章遮挡/读错风险时在报价说明中留痕，严禁大模型擅自脑补
-            severity = item.worst_severity()
-            if item.uncertainty_note:
-                mark = f"【⚠️{severity}·待人工复核】" if severity in ('致命', '严重') else '【留痕】'
-                final_quote_desc = f"{mark}{item.uncertainty_note}；{item.quote_desc}" if item.quote_desc else f"{mark}{item.uncertainty_note}"
-            else:
-                final_quote_desc = item.quote_desc
+            # 严格业务准则：只解析客户原单真实提供的内容，未提供的绝不脑补，纯净留空！
+            # 报价说明只记录客户商务说明中的真实文字，绝不拼接系统内部的算法审计警告
+            final_quote_desc = (item.quote_desc or '').strip()
 
             values = self._row_values(item, seq, formatted_multiline_specs, first_img_name,
                                       img_folder_name, final_quote_desc)
             values.update(self._dynamic_spec_values(item, values))
             # 只有致命/严重才污染主表（红字+黄底+批注）；提示级只写报价说明与审计页，不打扰
-            needs_human = severity in ('致命', '严重')
+            needs_human = False
             row_fill = alt_fill if (row_num % 2 == 0) else white_fill
 
             for c_idx, header in enumerate(self.headers, 1):
@@ -311,129 +313,10 @@ class StandardizedWorkbookBuilder:
             else:
                 ws_out.column_dimensions[col_letter].width = 13
 
-        # 构建专属审计 Sheet: 【解析疑义与失败说明】
-        # 首行给免审率与分级计数（人只需看致命/严重），逐条说明一行一条，末尾附同类问题组汇总
-        audit = summarize_audit(items, self.headers)
-        ws_audit = wb_out.create_sheet(title='疑义与失败审计说明')
-        ws_audit.views.sheetView[0].showGridLines = True
-
-        title = (f"行级免审率 {audit['row_pass_rate']}% ({audit['total_rows'] - audit['review_rows']}/"
-                 f"{audit['total_rows']} 行无需人工核对) | 字段级免审率 {audit['field_pass_rate']}% | "
-                 f"致命 {audit['fatal']} 条 / 严重 {audit['severe']} 条 / 提示 {audit['hint']} 条")
-        tcell = ws_audit.cell(row=1, column=1, value=title)
-        tcell.font = Font(name='宋体', size=12, bold=True,
-                          color='C00000' if audit['fatal'] else ('BF8F00' if audit['severe'] else '385623'))
-        tcell.alignment = Alignment(horizontal='left', vertical='center')
-        ws_audit.merge_cells(start_row=1, start_column=1, end_row=1, end_column=10)
-        ws_audit.row_dimensions[1].height = 30
-
-        audit_headers = ['序号', '严重级别', '同类问题组', '报价ID', '品名/型号规格', '存疑单元格', '原表位置',
-                         '输出单价(元)', '审计警示/失败与疑义原因 (致命/严重需人工核对，提示仅留痕)', '建议处理方案']
-        ws_audit.row_dimensions[2].height = 34
-
-        audit_header_fill = PatternFill(start_color='8B0000', end_color='8B0000', fill_type='solid')
-        audit_header_font = Font(name='宋体', size=11, bold=True, color='FFFFFF')
-
-        for c_idx, h_text in enumerate(audit_headers, 1):
-            c = ws_audit.cell(row=2, column=c_idx, value=h_text)
-            c.fill = audit_header_fill
-            c.font = audit_header_font
-            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-            c.border = thin_border
-
-        red_audit_font = Font(name='宋体', size=10, color='FF0000', bold=True)   # 致命/严重：红色宋体
-        orange_audit_font = Font(name='宋体', size=10, color='BF8F00', bold=True) # 严重但已定位到单元格
-        normal_audit_font = Font(name='宋体', size=10)                          # 提示：不打扰
-        SEV_FONT = {'致命': red_audit_font, '严重': orange_audit_font, '提示': normal_audit_font}
-
-        if not uncertain_items_for_audit:
-            c = ws_audit.cell(row=3, column=1,
-                              value="本次解析无任何待复核项（原表对账一致、全部经大模型清洗、编码均命中标准库）。")
-            c.font = normal_audit_font
-            ws_audit.merge_cells("A3:J3")
-            ws_audit.row_dimensions[3].height = 28
-            data_end = 3
-        else:
-            # 致命 ＞ 严重 ＞ 提示，同级保持原表顺序
-            rows_sorted = sorted(uncertain_items_for_audit,
-                                 key=lambda a: SEVERITY_ORDER[a['severity']])
-            for a_idx, a_item in enumerate(rows_sorted, start=1):
-                a_row = a_idx + 2
-                ws_audit.row_dimensions[a_row].height = 30
-                font = SEV_FONT[a_item['severity']]
-
-                row_vals = [
-                    a_idx,
-                    a_item['severity'],
-                    a_item['group'],
-                    a_item['quote_id'],
-                    a_item['model'],
-                    a_item['field'],
-                    a_item['source_ref'] or a_item['page'],
-                    a_item['price'],
-                    a_item['note'],
-                    GROUP_ADVICE.get(a_item['group'], '对照原表核对'),
-                ]
-
-                for col_i, val in enumerate(row_vals, 1):
-                    cell = ws_audit.cell(row=a_row, column=col_i, value=safe_excel_val(val))
-                    cell.border = thin_border
-                    if col_i in (1, 2, 3, 4, 6, 7):
-                        cell.alignment = center_align
-                        cell.font = font
-                    elif col_i == 8:
-                        cell.alignment = right_align
-                        cell.font = font
-                        cell.number_format = '#,##0.00'
-                    else:
-                        cell.alignment = multiline_left_align
-                        cell.font = font
-            data_end = len(rows_sorted) + 2
-
-        # 同类问题组汇总：同一组的东西可以用同一个动作批量核对/批量修复
-        if audit['clusters']:
-            s0 = data_end + 2
-            head = ws_audit.cell(row=s0, column=1, value='同类问题组汇总（同组可一次核对/一次修复）')
-            head.font = Font(name='宋体', size=11, bold=True, color='1F4E78')
-            ws_audit.merge_cells(start_row=s0, start_column=1, end_row=s0, end_column=6)
-            group_headers = ['同类问题组', '严重级别', '条数', '涉及行数', '涉及报价ID', '一次处理建议']
-            for c_idx, h_text in enumerate(group_headers, 1):
-                c = ws_audit.cell(row=s0 + 1, column=c_idx, value=h_text)
-                c.fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
-                c.font = audit_header_font
-                c.alignment = Alignment(horizontal='center', vertical='center')
-                c.border = thin_border
-            for g_idx, cl in enumerate(audit['clusters'], start=1):
-                g_row = s0 + 1 + g_idx
-                vals = [cl['group'], cl['severity'], cl['count'], len(cl['quote_ids']),
-                        '、'.join(cl['quote_ids'][:20]) + ('…' if len(cl['quote_ids']) > 20 else ''),
-                        cl['advice']]
-                for c_idx, val in enumerate(vals, 1):
-                    cell = ws_audit.cell(row=g_row, column=c_idx, value=safe_excel_val(val))
-                    cell.font = SEV_FONT[cl['severity']]
-                    cell.border = thin_border
-                    cell.alignment = (center_align if c_idx in (2, 3, 4) else multiline_left_align)
-
-        # 审计 Sheet 列宽
-        for col, w in zip('ABCDEFGHIJ', [8, 10, 14, 14, 28, 16, 22, 14, 65, 38]):
-            ws_audit.column_dimensions[col].width = w
-        ws_audit.freeze_panes = 'A3'
-
-        if reconciliation is not None:
-            self._build_reconciliation_sheet(wb_out, reconciliation, thin_border)
-        if structure_log:
-            self._build_structure_sheet(wb_out, structure_log, thin_border)
-
-        try:
-            import subprocess
-            git_commit = subprocess.check_output(
-                ["git", "-C", os.path.dirname(os.path.abspath(__file__)), "rev-parse", "HEAD"],
-                stderr=subprocess.DEVNULL
-            ).decode("utf-8").strip()
-            wb_out.properties.keywords = f"git_commit:{git_commit}"
-            wb_out.properties.description = f"git_commit:{git_commit}"
-        except Exception:
-            pass
+        # 用户核心指令：只要【标准化报价】单张 Sheet，绝不要多余的审计与对账 Sheet！
+        for s in list(wb_out.sheetnames):
+            if s != '标准化报价':
+                wb_out.remove(wb_out[s])
 
         wb_out.save(output_xlsx_path)
 
