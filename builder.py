@@ -29,6 +29,8 @@ STANDARD_HEADERS = [
 CENTER_HEADERS = {'报价ID', '类别编码', '顺序号', '报价地区省', '报价地区市', '单位', '工程价折扣比例', '折扣下限',
                   '折扣上限', '折扣系列', '是否含运费', '增值税税率', '运费结算方式', '是否含增值税', '价格填报类型'}
 PRICE_HEADERS = {'市场价', '工程价'}
+# 规格参数里不许出现的“参数名”关键词（基价/调价依据属于商务信息，不是物理规格）
+FORBIDDEN_SPEC_KEYS = ('表头', '表标题', '基价', '单价', '总价', '金额', '指导价', '调价')
 
 def safe_excel_val(val):
     """确保单元格内容不含非法控制字符，统一换行符，杜绝乱码与损坏"""
@@ -88,9 +90,11 @@ class StandardizedWorkbookBuilder:
                 continue
             key = self._norm_header(header)
             val = index.get(key)
-            if val is None and len(key) >= 2:   # 表头带单位、参数名不带（或反之）时按包含关系取值
+            if val is None and len(key) >= 2:
+                # 只认两种情况：参数名是表头的一部分，或参数名以表头开头（容量 ↔ 容量kVA）。
+                # 不允许反向前缀（表头“材料”不能命中参数“胎基材料”），否则会静默填错值
                 for sk, sv in index.items():
-                    if len(sk) >= 2 and (sk in key or key in sk):
+                    if len(sk) >= 2 and (sk in key or sk.startswith(key)):
                         val = sv
                         break
             if val is not None:
@@ -190,7 +194,9 @@ class StandardizedWorkbookBuilder:
             clean_lines = []
             for l in formatted_multiline_specs.split('\n'):
                 # 严格业务规则：规格参数只能是物理规格，严禁混入基价、单价、税率、运费等非物料参数！
-                if any(k in l for k in ['表头', '表标题', '基价', '单价', '总价', '金额', '铝锭基价', '铜基价', '指导价']): continue
+                # 只看“参数名”这一侧，避免值里出现“单价”二字就把整行真参数删掉
+                spec_key = l.split(':', 1)[0].strip()
+                if any(k in spec_key for k in FORBIDDEN_SPEC_KEYS): continue
                 clean_lines.append(l)
             formatted_multiline_specs = '\n'.join(clean_lines) if clean_lines else formatted_multiline_specs
             line_count = formatted_multiline_specs.count('\n') + 1
@@ -209,7 +215,8 @@ class StandardizedWorkbookBuilder:
                         f_out.write(img_bytes)
                     saved_images.append((img_fn, img_dst))
 
-            first_img_name = saved_images[0][0] if saved_images else (item.image_filenames[0] if item.image_filenames else '无')
+            # 没有图片就留空（项目原则：不知道就留空，不填“无”这种臆造值）
+            first_img_name = saved_images[0][0] if saved_images else (item.image_filenames[0] if item.image_filenames else '')
             img_folder_name = os.path.basename(img_dir) if saved_images else ''
 
             # 严格业务准则：只解析客户原单真实提供的内容，未提供的绝不脑补，纯净留空！

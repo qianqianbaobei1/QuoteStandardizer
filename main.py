@@ -26,6 +26,8 @@ from config import (DEFAULT_TEMPLATE_PATH, DEFAULT_OUTPUT_DIR, PROVINCE_ABBR_MAP
                     resolve_category_code, expand_region, EXTRACTOR_ENGINE, GEMINI_API_KEY, GEMINI_MODEL, VISION_MODEL,
                     EXPORT_INTEGRITY_CERTIFICATE, ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION)
 from models import CanonicalMaterialItem, SourceRowRecord, reconcile, summarize_audit
+from category_attribute_service import (resolve_and_verify_category, fetch_category_attributes,
+                                        validate_and_normalize_specs)
 from llm_agent import DeepSeekStandardizer, JevJudge, UNIT_PRICE_KEYS, TOTAL_PRICE_KEYS
 from config import STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE
 
@@ -94,7 +96,8 @@ def verify_terms_supplier(terms: dict, evidence_texts: list) -> dict:
     """
     terms = dict(terms or {})
     sup = terms.get('supplier')
-    if not sup or terms.get('_source') == 'manual':
+    # manual(人工 JSON) 与 dir(源目录名，人工维护的组织方式) 都是人给的，不需要公章旁证
+    if not sup or terms.get('_source') in ('manual', 'dir'):
         return terms
     core = core_name(sup)
     evidence = re.sub(r'\s', '', ''.join(evidence_texts))
@@ -739,7 +742,7 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 std_name = str(cleaned_res.get("standard_name") or "").strip()
                 if not std_name:
                     notes.append("未识别出物料名称")
-                from category_attribute_service import resolve_and_verify_category, fetch_category_attributes, validate_and_normalize_specs
+                # (模块级 import，见文件顶部)
                 cat_code, cat_src, cat_notes = resolve_and_verify_category(std_name, item.get("raw_spec") or item.get("raw_full_line", ""), cleaned_res.get("category_code"))
                 notes.extend(cat_notes)
                 if cat_src == 'llm':
@@ -872,6 +875,8 @@ def _unify_group_names(items, group_of):
         code, _ = Counter(m.category_code for m in members if m.category_name == name).most_common(1)[0]
         src = next(m.category_source for m in members if m.category_name == name and m.category_code == code)
         for m in members:
+            if m.category_name != name or m.category_code != code:
+                m.add_note(f"同系列多数票统一为“{name}”/编码“{code or '空'}”")
             m.category_name, m.category_code, m.category_source = name, code, src
 
 
@@ -1039,12 +1044,7 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
     builder = StandardizedWorkbookBuilder(template_xlsx)
     builder.build_from_canonical_items(items, output_xlsx, img_dir, reconciliation=None,
                                        structure_log=None)
-    # 用户铁律：只要【标准化报价】单张 Sheet，绝不要多余的 Sheet
-    wb_clean = openpyxl.load_workbook(output_xlsx)
-    for s in list(wb_clean.sheetnames):
-        if s != '标准化报价':
-            wb_clean.remove(wb_clean[s])
-    wb_clean.save(output_xlsx)
+    # 单表由 builder 内部保证，此处不再重复读写一次（旧代码会二次 load/save，白费 IO）
 
     # 导出独立的《对账与防欺瞒体检报告》(独立文件，不进主表 Sheet；.env 里 EXPORT_INTEGRITY_CERTIFICATE=0 可关闭)
     if EXPORT_INTEGRITY_CERTIFICATE:

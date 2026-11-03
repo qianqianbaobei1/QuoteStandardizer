@@ -11,7 +11,6 @@ import time
 import zipfile
 import traceback
 from pathlib import Path
-import pandas as pd
 
 from main import process_excel, process_pdf
 from terms_extractor import find_terms_image, TermsExtractor
@@ -90,6 +89,16 @@ def find_primary_quote_file(vendor_dir: Path) -> Path:
     candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
     return candidates[0][2]
 
+def _count_delivery_rows(path: str) -> int:
+    """交付件数据行数（用已依赖的 openpyxl，不再为一个 len() 拉进 pandas）"""
+    import openpyxl
+    try:
+        ws = openpyxl.load_workbook(path, read_only=True, data_only=True)['标准化报价']
+    except Exception:
+        return 0
+    return max(0, (ws.max_row or 1) - 1)
+
+
 def verify_delivery_file(path: str) -> list:
     """交付件独立体检：文件可读回、主表单 Sheet、有数据行、市场价为正数值。
     给不经过 main._verify_output 的链路（ZIP 流水线、批处理脚本）使用。"""
@@ -109,6 +118,7 @@ def verify_delivery_file(path: str) -> list:
     if '市场价' not in col:
         return errs + ["缺少「市场价」列"]
     rows = 0
+    zero = 0
     for r in range(2, ws.max_row + 1):
         v = ws.cell(r, col['市场价']).value
         if v in (None, ''):
@@ -116,13 +126,16 @@ def verify_delivery_file(path: str) -> list:
         rows += 1
         try:
             if float(v) <= 0:
-                errs.append(f"第{r}行 市场价不为正: {v}")
+                zero += 1
         except (TypeError, ValueError):
             errs.append(f"第{r}行 市场价非数值: {v}")
         if len(errs) > 10:
             break
     if rows == 0:
         errs.append("没有任何数据行")
+    # 个别 0 价行由对账/批注负责（原表本就无价）；过半才是真坏了
+    elif zero > rows * 0.5:
+        errs.append(f"{zero}/{rows} 行市场价不为正")
     return errs
 
 
@@ -159,7 +172,19 @@ def run_single_vendor(vendor_dir: Path, output_dir: Path) -> dict:
                 terms_dict = TermsExtractor(terms_path).extract_terms()
             except Exception as e:
                 print(f"[{vname}] 商务条款提取跳过/异常: {e}")
-                
+
+        # 目录名是人工维护的供应商名，最可靠：拿它当主体，公章识别只作旁证
+        # (否则文件名无公司名时，公章里读到的别家名字会直接变成交付件文件名)
+        dir_supplier = re.sub(r'^\d+[\._、\s]*', '', vendor_dir.name).strip()
+        terms_dict = dict(terms_dict or {})
+        if dir_supplier and terms_dict.get('_source') != 'manual':
+            detected = terms_dict.get('supplier')
+            terms_dict['supplier'] = dir_supplier
+            terms_dict['_source'] = terms_dict.get('_source') or 'dir'
+            if detected and str(detected).strip() != dir_supplier:
+                terms_dict['_supplier_note'] = f"公章识别为“{detected}”，以源目录名“{dir_supplier}”为准"
+                print(f"[{vname}] 公章“{detected}”与目录名不符，采用目录名")
+
         output_dir.mkdir(parents=True, exist_ok=True)
         
         if ext in [".xlsx", ".xlsm"]:
@@ -178,7 +203,7 @@ def run_single_vendor(vendor_dir: Path, output_dir: Path) -> dict:
         if not out_file or not os.path.exists(out_file):
             res["error_msg"] = "未生成交付 Excel 文件"
             return res
-        res["item_count"] = len(pd.read_excel(out_file))
+        res["item_count"] = _count_delivery_rows(out_file)
         if failures:
             res["error_msg"] = f"完整性校验未通过 {len(failures)} 项: {failures[0]}"
         elif res["item_count"] == 0:

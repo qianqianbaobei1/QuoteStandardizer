@@ -13,14 +13,18 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 
 from config import (DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, LLM_MAX_RETRIES, LLM_TEMPERATURE,
-                    CATEGORY_CODE_MAP, TYPESAFE_API_KEY, TYPESAFE_BASE_URL, TYPESAFE_MODEL)
+                    CATEGORY_CODE_MAP, CODE_LIBRARY_MAX_LINES, JEV_ROW_BATCH,
+                    TYPESAFE_API_KEY, TYPESAFE_BASE_URL, TYPESAFE_MODEL)
 
 # 表头关键词：单价类优先于合价/金额类，避免把“合价=数量×单价”当成单价
 UNIT_PRICE_KEYS = ['单价', '面价', '出厂价', '市场价', '预算价', '含税价', '报价', '价格']
 TOTAL_PRICE_KEYS = ['合价', '总价', '金额', '小计', '合计']
 UNIT_KEYS = ['计量单位', '单位']
 NAME_KEYS = ['名称', '品名', '产品', '材料', '设备']
-CODE_LIBRARY_TEXT = "；".join(f"{name}={code}" for name, code in CATEGORY_CODE_MAP.items())
+# 只注入前 N 条：整个库逐批重发会成倍放大 token 成本，且模型实际无法逐条比对上千项
+_code_items = list(CATEGORY_CODE_MAP.items())[:max(0, CODE_LIBRARY_MAX_LINES)]
+CODE_LIBRARY_TEXT = "；".join(f"{name}={code}" for name, code in _code_items)
+CODE_LIBRARY_TRUNCATED = len(CATEGORY_CODE_MAP) > len(_code_items)
 JUNK_SPEC_KEYS = {'其他关键属性', '供应商', '品牌', '价格', '单价', '单位', '铝锭基价', '基价', '铜基价', '基价/吨', '铝锭基价/吨', '表标题', '指导价'}
 IGNORE_SPEC_KEYS = ['单价', '价格', '序号', '图片', '金额', '合价', '总价', '小计', '数量', '备注', '单位']
 
@@ -189,6 +193,9 @@ class DeepSeekStandardizer:
         if not self.api_key:
             return self._dynamic_batch_fallback(items)
 
+        if CODE_LIBRARY_TRUNCATED and CODE_LIBRARY_TEXT:
+            print(f"[DeepSeek] 编码库 {len(CATEGORY_CODE_MAP)} 条，按 CODE_LIBRARY_MAX_LINES="
+                  f"{CODE_LIBRARY_MAX_LINES} 注入前 {len(_code_items)} 条 (可用 .env 调大)")
         user_content = (f"供应商: {supplier_hint or '未知'}，品牌: {brand_hint or '未知'}。\n"
                         f"标准分类编码库：\n{CODE_LIBRARY_TEXT or '(空)'}\n"
                         "待清洗物料数据清单：\n" + json.dumps(items, ensure_ascii=False))
@@ -344,7 +351,7 @@ TABLE_TYPES = {
     "list": "清单式：每一行是一个物料，单价在某一列",
     "matrix": "矩阵式：行标题(如规格档位) × 列标题(如型号)，交叉格是价格",
 }
-JEV_ROW_BATCH = 40
+# JEV_ROW_BATCH 已移到 config
 
 
 class JevJudge:

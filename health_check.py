@@ -256,7 +256,11 @@ class TestPipelineVerification(unittest.TestCase):
         ws.append(["名称", "单价"]); ws.append(["闸阀", 100])
         wb.save(vendor / "报价单.xlsx")
         out = out_dir / "某供应商-标准解析.xlsx"
-        wb = openpyxl.Workbook(); wb.active.append(["报价ID"]); wb.active.append(["A1"])
+        # 现在 PASS 要求交付件自身合格：单 Sheet + 有市场价且为正
+        wb = openpyxl.Workbook()
+        ws_out = wb.active
+        ws_out.title = '标准化报价'
+        ws_out.append(["报价ID", "市场价"]); ws_out.append(["A1", 100])
         wb.save(out)
         try:
             with patch.object(rbs, "process_excel", return_value=(str(out), [])):
@@ -345,6 +349,7 @@ class TestPipelineVerification(unittest.TestCase):
                 continue
             # 单 Sheet 契约下没有审计页：留痕只落在批注与报价说明，仍要校验其余交付不变量
             has_audit = '疑义与失败审计说明' in wb.sheetnames
+            zero_price = 0
             audit_ids, reason_col = self._audit_index(wb['疑义与失败审计说明']) if has_audit else ({}, 1)
             seen = []
             for r in range(2, ws.max_row + 1):
@@ -354,7 +359,12 @@ class TestPipelineVerification(unittest.TestCase):
                 seen.append(qid)
                 price = ws.cell(r, col['市场价']).value
                 self.assertIsInstance(price, (int, float), f'{os.path.basename(f)} 第{r}行 市场价非数值')
-                self.assertGreater(price, 0, f'{os.path.basename(f)} 第{r}行 市场价不为正')
+                if price <= 0:
+                    # 原表本就无价的行允许留 0，但必须有留痕（批注或报价说明）
+                    c = ws.cell(r, col['市场价']).comment
+                    trace = (str(c.text) if c else '') + str(ws.cell(r, col['报价说明']).value or '')
+                    self.assertIn('单价', trace, f'{os.path.basename(f)} 第{r}行 0 价却无留痕')
+                    zero_price += 1
                 img = str(ws.cell(r, col['厂家报价图片文件名']).value or '无')
                 self.assertTrue(img == '无' or img.lower().endswith(allowed_ext), f'{qid} 图片文件名 {img}')
                 notes = str(ws.cell(r, col['报价说明']).value or '')
@@ -371,6 +381,8 @@ class TestPipelineVerification(unittest.TestCase):
                         text = (str(note.text) if note else '') + notes
                         self.assertIn('计量单位', text, f'{qid} 无单位且无任何留痕')
             self.assertEqual(len(seen), len(set(seen)), f'{os.path.basename(f)} 报价ID重复')
+            self.assertLessEqual(zero_price, max(1, len(seen) * 0.5),
+                                 f'{os.path.basename(f)} 过半行市场价不为正')
             self.assertGreaterEqual(reason_col, 1)
 
     @staticmethod
@@ -403,6 +415,16 @@ class TestPipelineVerification(unittest.TestCase):
         self.assertTrue(v({'tables': [{'cells': ['a', 'b']}]}))              # 行不是数组
         self.assertTrue(v({'tables': [{'cells': [['a']], 'uncertain': [[1]]}]}))  # uncertain 项过短
         self.assertTrue(v({'tables': [{'cells': [['a']]}], 'notes': 5}))
+
+    def test_17_row_values_covers_standard_headers(self):
+        """_row_values 的键必须覆盖 STANDARD_HEADERS 的所有非图片列，否则模板里那一列会静默为空"""
+        from builder import STANDARD_HEADERS, StandardizedWorkbookBuilder
+        from models import CanonicalMaterialItem
+        item = CanonicalMaterialItem(quote_id='X1', supplier='s', brand='b',
+                                     category_name='n', category_code='c')
+        vals = StandardizedWorkbookBuilder._row_values(item, 10, '', '', '', '')
+        missing = [h for h in STANDARD_HEADERS if h not in vals and h != '图片']
+        self.assertEqual(missing, [], f'_row_values 漏了标准列: {missing}')
 
     def test_16_llm_auditor_cannot_touch_price_or_verbatim(self):
         """自愈审计铁律：模型不得改价格/原文留痕/标识列，且改写必须留痕到报价说明"""

@@ -40,6 +40,10 @@ TYPESAFE_BASE_URL = os.getenv("TYPESAFE_BASE_URL", "https://api.typesafe.ai/v1/s
 TYPESAFE_MODEL = os.getenv("TYPESAFE_MODEL", "jev-latest")
 # Jev 判定置信度低于此值时写入待复核说明 (需用真实样例校准)
 JEV_MIN_CONFIDENCE = float(os.getenv("JEV_MIN_CONFIDENCE", "0.5"))
+# Jev 行类型每次请求带多少行
+JEV_ROW_BATCH = int(os.getenv("JEV_ROW_BATCH", "40"))
+# 注入清洗提示词的标准编码库条数上限 (库很大时逐批全量注入会显著推高 token 成本)
+CODE_LIBRARY_MAX_LINES = int(os.getenv("CODE_LIBRARY_MAX_LINES", "400"))
 
 # 线路引擎选择: 'gemini' (Gemini原生全模态端到端直传，首选) / 'traditional' (原切图流水线) / 'compare' (双轨对比)
 EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "gemini").strip().lower()
