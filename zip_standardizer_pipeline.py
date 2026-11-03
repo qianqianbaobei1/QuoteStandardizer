@@ -281,31 +281,37 @@ class ZipQuoteStandardizerPipeline:
                                     ws.cell(r, c_idx).value = v
                                     break
 
-                # 规则 3: 严格区分“产品图”与“客户报价单图”
-                # 【重要规范】：
-                # - “厂家报价图片文件名”列：记录客户报价单/扫描件图文件名（如 quote_img1.png），用于溯源对账
-                # - “图片”列：只允许放置物料对应的“真实产品效果图/样品图/实物图”；
-                #   严禁把客户报价单/带公章扫描件（quote_img*）作为产品图塞入！若原包未提供真实产品图库，则“图片”列保持纯净留空。
+                # 规则 3: 严格按照“只要压缩包内有对应产品图片，就内嵌到对应产品单元格”
+                # 规则规范：
+                # 1. 扫描行内图片列记录的文件名（如 热镀锌槽钢.jpg / 槽式电缆桥架.jpg 等）
+                # 2. 检查压缩包内解压出的图片资产中是否存在该文件，或产品小样图库中的对应图片
+                # 3. 严禁把非产品图的客户整页报价单扫描底稿（quote_img*）作为产品图
+                # 4. 若匹配到真实产品图，单元格清空文字并缩放嵌入（宽 135，高 90）；若包内没有该产品图片文件，则保持单元格清空
                 if img_col:
-                    # 检查是否有真实产品图
-                    product_img_found = None
+                    matched_product_img_path = None
                     for cc in range(img_col, ws.max_column + 1):
                         val = str(ws.cell(r, cc).value or '').strip()
-                        # 如果单元格内记录了具体的产品图片名称（非 quote_img 且非空）
-                        if val and not val.lower().startswith('quote_img') and val in local_img_paths:
-                            product_img_found = local_img_paths[val]
-                        ws.cell(r, cc).value = None  # 清空文字，保持单元格纯净
+                        if val:
+                            base_val = os.path.basename(val)
+                            # 过滤非产品图（报价单底稿图 quote_img 不作为产品图嵌入）
+                            if not base_val.lower().startswith('quote_img'):
+                                # 在包内所有图片中匹配该产品图
+                                for local_name, local_path in local_img_paths.items():
+                                    if local_name == base_val or local_name == val or (base_val and base_val in local_name):
+                                        matched_product_img_path = local_path
+                                        break
+                        ws.cell(r, cc).value = None  # 彻底清空原有文件名文字，杜绝文字重叠
 
-                    if product_img_found:
+                    if matched_product_img_path and os.path.exists(matched_product_img_path):
                         ws.row_dimensions[r].height = 95
                         try:
-                            img = OpenpyxlImage(product_img_found)
+                            img = OpenpyxlImage(matched_product_img_path)
                             img.width = 135
                             img.height = 90
                             ws.add_image(img, f"{img_letter}{r}")
                             total_images_embedded += 1
                         except Exception as e:
-                            print(f"[Error] Failed to embed product image {product_img_found}: {e}")
+                            print(f"[Error] Failed to embed product image {matched_product_img_path}: {e}")
 
         # 4. 保存为交付标准文件
         out_path = os.path.join(self.output_dir, f"{supplier_name}-标准解析.xlsx")
