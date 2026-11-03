@@ -11,6 +11,7 @@ QuoteStandardizer - 报价单解析与原表对账
 import os
 import sys
 import re
+import copy
 import hashlib
 import argparse
 import json
@@ -24,7 +25,8 @@ from terms_extractor import TermsExtractor, normalize_terms, find_terms_image, m
 from builder import StandardizedWorkbookBuilder
 from config import (DEFAULT_TEMPLATE_PATH, DEFAULT_OUTPUT_DIR, PROVINCE_ABBR_MAP, CATEGORY_CODE_MAP,
                     resolve_category_code, expand_region, EXTRACTOR_ENGINE, GEMINI_API_KEY, GEMINI_MODEL, VISION_MODEL,
-                    EXPORT_INTEGRITY_CERTIFICATE, ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION)
+                    EXPORT_INTEGRITY_CERTIFICATE, ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION,
+                    EXPAND_NATIONWIDE, NATIONWIDE_REGIONS)
 from models import CanonicalMaterialItem, SourceRowRecord, reconcile, summarize_audit
 from category_attribute_service import (resolve_and_verify_category, fetch_category_attributes,
                                         validate_and_normalize_specs)
@@ -847,23 +849,8 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 )
                 for n in notes:
                     ci.add_note(n)
-                # 若报价地区为“全国”，按人工标杆展开为 31 省市标准物料行（严格按真实单价，绝不虚构数据）
-                if province == '全国' or not province:
-                    from patch_nationwide_expansion import NATIONWIDE_REGIONS
-                    for p_name, c_name in NATIONWIDE_REGIONS:
-                        import copy
-                        ci_copy = copy.copy(ci)
-                        # 生成唯一的雪花式纯数字报价 ID
-                        import time, random
-                        snow_id = f"156677{int(time.time()*1000)%100000000:08d}{random.randint(10000, 99999)}"
-                        ci_copy.quote_id = snow_id
-                        ci_copy.province = p_name
-                        ci_copy.city = c_name
-                        canonical_items.append(ci_copy)
-                        seq += 10
-                else:
-                    canonical_items.append(ci)
-                    seq += 10
+                canonical_items.append(ci)
+                seq += 10
 
         produced = len(canonical_items) - n_before
         err = ''
@@ -1043,8 +1030,9 @@ def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
 def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=None,
             sheet_stats=None, source_path=""):
     """落盘 + 校验。返回 (交付文件路径, 失败清单)；失败清单非空时调用方必须置退出码 2"""
-    # 原表 ↔ 结果逐行对账与四维体检量化核算
+    # 原表 ↔ 结果逐行对账与四维体检量化核算（只对原表行做，展开行不参与对账）
     recon = reconcile(source_rows, items)
+    items = _expand_nationwide(items, recon)
     integrity_summary = getattr(recon, "summary", {})
     _print_recon_summary(recon)
 
@@ -1129,8 +1117,12 @@ def _verify_output(path, items):
     ws = wb['标准化报价']
     header = [ws.cell(1, c).value for c in range(1, (ws.max_column or 0) + 1)]
     col = {str(h): i for i, h in enumerate(header) if h}
-    id_col_present = ('报价ID' in col) or ('报价id' in col)
-    if not ('市场价' in col and id_col_present):
+    # 表头有小写 d 的 '报价id'（人工标杆 36 列）与 '报价ID' 两种写法。
+    # 注意 0 是合法列索引，必须用 is None 判空，不能靠 or
+    id_col = col.get('报价ID')
+    if id_col is None:
+        id_col = col.get('报价id')
+    if id_col is None or '市场价' not in col:
         return [f"输出表头缺 市场价/报价ID: {header}"]
     rows = [r for r in ws.iter_rows(min_row=2, values_only=True) if any(v not in (None, '') for v in r)]
     if len(rows) != len(items):
@@ -1141,7 +1133,7 @@ def _verify_output(path, items):
     for i, (it, r) in enumerate(zip(items, rows), 2):
         if len(errs) > 20:
             break
-        qid = r[col['报价ID']]
+        qid = r[id_col]
         ids.append(qid)
         if str(qid) != it.quote_id:
             errs.append(f"第{i}行 报价ID {qid} ≠ {it.quote_id}")
@@ -1155,6 +1147,32 @@ def _verify_output(path, items):
     if dup:
         errs.append(f"报价ID 重复: {[str(d) for d in dup[:5]]}")
     return errs
+
+
+def _expand_nationwide(items, recon):
+    """
+    全国 / 无地区的报价按省市铺开成 31 行（人工标杆口径）。
+    要点：
+    - 在 reconcile 之后做，对账仍只对原表物理行，不会判成“一行生成 31 条输出”
+    - 报价ID 由原 ID + 省市序号确定性派生（不能用随机数，否则同一份报价单两次跑出不同结果）
+    - 每一行都写留痕，说明这行是展开出来的，不是原表里的
+    """
+    if not EXPAND_NATIONWIDE:
+        return items
+    bad_refs = {r['source_ref'] for r in recon if str(r.get('status', '')).startswith('异常')}
+    out = []
+    for it in items:
+        region = (it.province or '').strip()
+        if region not in ('', '全国') or it.source_ref in bad_refs:
+            out.append(it)
+            continue
+        for idx, (prov, city) in enumerate(NATIONWIDE_REGIONS, 1):
+            dup = copy.copy(it)
+            dup.quote_id = f"{it.quote_id}{idx:02d}"
+            dup.province, dup.city = prov, city
+            dup.add_note(f"全国报价，按 {prov} 展开（原行仅一行，此行非原表独立行）")
+            out.append(dup)
+    return out
 
 
 def _print_recon_summary(recon: list):

@@ -49,8 +49,10 @@ class LLMAuditor:
     # 价格只取原表、原文留痕不可改写：模型无权动这些列
     IMMUTABLE_FIELDS = {'报价ID', '市场价', '工程价', '厂家原始规格参数', '厂家报价文件页码',
                         '顺序号', '供应商名称', '类别编码'}
-    # 只允许自愈这四项；其余列即使模型返回也一律忽略
-    HEALABLE_FIELDS = ('名称规格', '规格参数', '单位', '报价说明')
+    # 只允许自愈这三项；其余列即使模型返回也一律忽略。
+    # 单位不在此列：写法归一由 main.normalize_unit 单一负责，审计再改会反向归一
+    # （实测出现把标准写法 m² 又改回 ㎡，导致交付表与 normalize_unit 口径打架）
+    HEALABLE_FIELDS = ('名称规格', '规格参数', '报价说明')
 
     def __init__(self):
         self.api_key = DEEPSEEK_API_KEY
