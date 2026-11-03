@@ -1046,6 +1046,16 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
     print("=" * 70)
 
     print(f"\n[*] 全表语义解析完成，共生成标准物料: {len(items)} 项，启动构建器落盘...")
+    if not items:
+        err_msg = "本次未解析出任何有效物料（0 条），严禁生成或导出空的交付文件"
+        print(f"[Fatal] {err_msg}: {output_xlsx}")
+        if os.path.exists(output_xlsx):
+            try:
+                os.remove(output_xlsx)
+            except Exception:
+                pass
+        return None, [err_msg]
+
     builder = StandardizedWorkbookBuilder(template_xlsx)
     builder.build_from_canonical_items(items, output_xlsx, img_dir, reconciliation=None,
                                        structure_log=None)

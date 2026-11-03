@@ -161,6 +161,9 @@ class StandardizedWorkbookBuilder:
         """
         基于 CanonicalMaterialItem 统一物料模型进行企业级输出构建
         """
+        if not items:
+            raise ValueError(f"物料列表为空，严禁生成或输出空的报价表格文件: {output_xlsx_path}")
+
         # 图片目录按需延迟创建，杜绝在磁盘生成无用的空图片库文件夹
         has_any_image = any(len(it.image_bytes_list) > 0 for it in items)
         if has_any_image:
