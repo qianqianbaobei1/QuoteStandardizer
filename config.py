@@ -58,7 +58,7 @@ GEMINI_THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
 # 防欺瞒工程参数配置
 ANTI_HALLUCINATION_MATH_AUDIT = os.getenv("ANTI_HALLUCINATION_MATH_AUDIT", "1").strip().lower() in ("1", "true")
 ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION = os.getenv("ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION", "1").strip().lower() in ("1", "true")
-EXPORT_INTEGRITY_CERTIFICATE = os.getenv("EXPORT_INTEGRITY_CERTIFICATE", "1").strip().lower() in ("1", "true")
+EXPORT_INTEGRITY_CERTIFICATE = os.getenv("EXPORT_INTEGRITY_CERTIFICATE", "0").strip().lower() in ("1", "true")
 
 # LLM 调用重试次数
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
