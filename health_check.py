@@ -341,9 +341,11 @@ class TestPipelineVerification(unittest.TestCase):
             wb = openpyxl.load_workbook(f, data_only=True)
             ws = wb['标准化报价']
             col = {str(c.value): c.column for c in ws[1] if c.value}
-            if '疑义与失败审计说明' not in wb.sheetnames:
+            if '疑义与失败审计说明' not in wb.sheetnames and '市场价' not in col:
                 continue
-            audit_ids, reason_col = self._audit_index(wb['疑义与失败审计说明'])
+            # 单 Sheet 契约下没有审计页：留痕只落在批注与报价说明，仍要校验其余交付不变量
+            has_audit = '疑义与失败审计说明' in wb.sheetnames
+            audit_ids, reason_col = self._audit_index(wb['疑义与失败审计说明']) if has_audit else ({}, 1)
             seen = []
             for r in range(2, ws.max_row + 1):
                 qid = ws.cell(r, col['报价ID']).value
@@ -356,11 +358,18 @@ class TestPipelineVerification(unittest.TestCase):
                 img = str(ws.cell(r, col['厂家报价图片文件名']).value or '无')
                 self.assertTrue(img == '无' or img.lower().endswith(allowed_ext), f'{qid} 图片文件名 {img}')
                 notes = str(ws.cell(r, col['报价说明']).value or '')
-                if _re.search(r'待人工复核|留痕', notes):
-                    self.assertIn(str(qid), audit_ids, f'{qid} 主表留痕但审计页漏项')
-                if not ws.cell(r, col['单位']).value:
-                    reasons = ' '.join(audit_ids.get(str(qid), {}).get('reasons', []))
-                    self.assertIn('计量单位', reasons, f'{qid} 无单位却没写原因')
+                if has_audit:
+                    if _re.search(r'待人工复核|留痕', notes):
+                        self.assertIn(str(qid), audit_ids, f'{qid} 主表留痕但审计页漏项')
+                    if not ws.cell(r, col['单位']).value:
+                        reasons = ' '.join(audit_ids.get(str(qid), {}).get('reasons', []))
+                        self.assertIn('计量单位', reasons, f'{qid} 无单位却没写原因')
+                else:
+                    # 无审计页时，无单位必须在主表留痕（批注或报价说明）
+                    if not ws.cell(r, col['单位']).value:
+                        note = ws.cell(r, col['市场价']).comment
+                        text = (str(note.text) if note else '') + notes
+                        self.assertIn('计量单位', text, f'{qid} 无单位且无任何留痕')
             self.assertEqual(len(seen), len(set(seen)), f'{os.path.basename(f)} 报价ID重复')
             self.assertGreaterEqual(reason_col, 1)
 
