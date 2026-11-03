@@ -180,7 +180,9 @@ def run_single_vendor(vendor_dir: Path, output_dir: Path) -> dict:
         if dir_supplier and terms_dict.get('_source') != 'manual':
             detected = terms_dict.get('supplier')
             terms_dict['supplier'] = dir_supplier
-            terms_dict['_source'] = terms_dict.get('_source') or 'dir'
+            # 必须强制改标为 dir：TermsExtractor 会写 _source='vision'，
+            # 那样下面 verify_terms_supplier 就会拿文件名当旁证把目录名也否掉
+            terms_dict['_source'] = 'dir'
             if detected and str(detected).strip() != dir_supplier:
                 terms_dict['_supplier_note'] = f"公章识别为“{detected}”，以源目录名“{dir_supplier}”为准"
                 print(f"[{vname}] 公章“{detected}”与目录名不符，采用目录名")

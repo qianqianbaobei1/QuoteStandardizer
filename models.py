@@ -265,7 +265,10 @@ def reconcile(source_rows: List[SourceRowRecord], items: List[CanonicalMaterialI
         if r.decision != 'item':
             # 跳过行的防漏检审计
             is_suspicious_kill = False
-            if r.raw_price > 0:
+            # 已明确标注“矩阵单元格非数值”的格是说明文字（如“DN250以上是PN10价格”），
+            # 数字只是文字的一部分，属于自证跳过，不能再算“有单价却被跳过”
+            explained = str(r.decision).startswith('矩阵单元格非数值')
+            if r.raw_price > 0 and not explained:
                 raw_lower = r.raw_text.lower()
                 # 检查是否包含规格特征词
                 has_spec_feat = any(k in raw_lower for k in MATERIAL_FEATURE_KEYWORDS)
