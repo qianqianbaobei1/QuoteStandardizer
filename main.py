@@ -345,10 +345,11 @@ def _detect_matrix(ws):
         if any(LIST_HEADER_RE.match(p) for p in path(c)):
             return None
 
-    # 优先取第一行表头
-    first_row_label = grid[0][label_col] if grid and len(grid) > 0 and len(grid[0]) > label_col else ''
-    label_header = first_row_label or ''.join(path(label_col)) or '规格型号'
-    label_leaf = label_header   # 只看末级表头，避免入标题行的字污染 (“…报价单”里也有“价”)
+    # 行标题取“列标题路径的末级”：不能取第一行 —— 第一行常是整表大标题
+    # (如 “某公司 防火门规格”)，里面的“规格”二字会把清单表误判成矩阵表
+    label_path = path(label_col)
+    label_header = '-'.join(label_path) or '规格型号'
+    label_leaf = label_path[-1] if label_path else ''
     label_vals = [grid[r][label_col] for r in range(r0, max_r) if grid[r][label_col]]
     numeric_ratio = sum(1 for v in label_vals if _leading_number(v) is not None) / max(1, len(label_vals))
     # 行标题必须是“维度”（数字档位，或规格/型号/容量类表头）；否则更像清单表里两个数值属性列
@@ -738,13 +739,22 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 std_name = str(cleaned_res.get("standard_name") or "").strip()
                 if not std_name:
                     notes.append("未识别出物料名称")
-                from category_attribute_service import resolve_and_verify_category
+                from category_attribute_service import resolve_and_verify_category, fetch_category_attributes, validate_and_normalize_specs
                 cat_code, cat_src, cat_notes = resolve_and_verify_category(std_name, item.get("raw_spec") or item.get("raw_full_line", ""), cleaned_res.get("category_code"))
                 notes.extend(cat_notes)
                 if cat_src == 'llm':
                     notes.append(f"类别编码 {cat_code} 未经标准编码库核验")
                 elif not cat_code:
                     notes.append("类别编码未确定" + ("" if CATEGORY_CODE_MAP else " (未配置标准编码库 CATEGORY_CODE_FILE)"))
+                
+                # 【行业标准名称对齐】：使用标准分类与属性接口返回的官方品类名称规范化物料名称
+                if cat_code:
+                    cat_info = fetch_category_attributes(cat_code)
+                    if cat_info and cat_info.get("type", {}).get("description"):
+                        std_category_title = cat_info["type"]["description"].strip()
+                        # 若原提取名称是简写（如“闸阀中丝扣”、“暗杆闸阀”对应类别“闸阀”；“铝板”对应类别“铝板(带)材”），采用标准分类名或前缀保留
+                        if std_category_title:
+                            std_name = std_category_title
 
                 if "型号/系列" in item["raw_cells_dict"]:
                     r_dict = item["raw_cells_dict"]
@@ -948,8 +958,8 @@ def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_
                                                           struct_log=struct_log)
     if fallback_reason:
         for it in items:
-            prefix = f"B 轨失败已回退 A 轨：{fallback_reason}"
-            it.uncertainty_note = f"{prefix}；{it.uncertainty_note}" if it.uncertainty_note else prefix
+            # 走 add_note，否则只写 uncertainty_note 会被 note_list() (优先 notes) 漏掉
+            it.add_note(f"B 轨失败已回退 A 轨：{fallback_reason}")
 
     if hasattr(pdf_ext, 'failed_pages') and pdf_ext.failed_pages:
         for fpage, reason in pdf_ext.failed_pages:
@@ -1036,8 +1046,8 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
             wb_clean.remove(wb_clean[s])
     wb_clean.save(output_xlsx)
 
-    # 导出独立的《对账与防欺瞒体检报告》(投行级美学风格，不混淆主交付表)
-    if False and EXPORT_INTEGRITY_CERTIFICATE:
+    # 导出独立的《对账与防欺瞒体检报告》(独立文件，不进主表 Sheet；.env 里 EXPORT_INTEGRITY_CERTIFICATE=0 可关闭)
+    if EXPORT_INTEGRITY_CERTIFICATE:
         cert_path = output_xlsx.replace(".xlsx", "_对账与防欺瞒体检报告.xlsx")
         try:
             supplier_tag = os.path.basename(output_xlsx).split('-')[0]

@@ -224,10 +224,21 @@ def resolve_and_verify_category(material_name: str, raw_specs: str = "", llm_cod
     from config import CATEGORY_CODE_MAP
     if name in CATEGORY_CODE_MAP:
         candidate_codes.append(CATEGORY_CODE_MAP[name])
-    hits = [k for k in CATEGORY_CODE_MAP if name.endswith(k) or k in name]
+    hits = [k for k in CATEGORY_CODE_MAP if name.endswith(k) or k in name or name in k]
+    if not hits:
+        # 若未直接命中，使用物料核心词分词联想候选（如“铝板” -> 包含“铝”且包含“板”或以“板”结尾）
+        chars = [c for c in name if c.isalnum()]
+        if len(chars) >= 2:
+            hits = [k for k in CATEGORY_CODE_MAP if all(c in k for c in chars)]
+        if not hits:
+            # 尝试主要偏旁/行业后缀（如“板”、“阀”、“门”、“漆”、“电缆”、“管”）
+            last_token = name[-1] if name else ""
+            if last_token:
+                hits = [k for k in CATEGORY_CODE_MAP if k.endswith(last_token) and any(c in k for c in name[:-1])]
+
     if hits:
-        # 按匹配长度倒序加入候选
-        for k in sorted(hits, key=len, reverse=True)[:5]:
+        # 按匹配长度与相关度加入候选
+        for k in sorted(hits, key=lambda x: (len(set(x) & set(name)), len(x)), reverse=True)[:6]:
             code = CATEGORY_CODE_MAP[k]
             if code not in candidate_codes:
                 candidate_codes.append(code)

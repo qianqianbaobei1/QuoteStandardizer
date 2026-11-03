@@ -7,3 +7,5 @@ category_attrs_cache.json
 *.pyc
 *.pyo
 .venv/
+.vscode/
+标准材料类别与属性接口规范.xlsx

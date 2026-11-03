@@ -115,7 +115,8 @@ class CanonicalMaterialItem:
     notes: List[str] = field(default_factory=list)
 
     def add_note(self, note: str):
-        if note and note not in self.uncertainty_note:
+        # 按“逐条说明”去重：不能用子串包含（“单价不一致”会被“单价不一致: 原表 100 / 输出 90”吞掉）
+        if note and note not in self.notes:
             self.uncertainty_note = f"{self.uncertainty_note}；{note}" if self.uncertainty_note else note
             self.notes.append(note)
 

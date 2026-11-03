@@ -46,6 +46,12 @@ AUDIT_FIX_PROMPT = """你是一个国家级建设工程招投标与建材物料�
 """
 
 class LLMAuditor:
+    # 价格只取原表、原文留痕不可改写：模型无权动这些列
+    IMMUTABLE_FIELDS = {'报价ID', '市场价', '工程价', '厂家原始规格参数', '厂家报价文件页码',
+                        '顺序号', '供应商名称', '类别编码'}
+    # 只允许自愈这四项；其余列即使模型返回也一律忽略
+    HEALABLE_FIELDS = ('名称规格', '规格参数', '单位', '报价说明')
+
     def __init__(self):
         self.api_key = DEEPSEEK_API_KEY
         self.base_url = DEEPSEEK_BASE_URL.rstrip('/')
@@ -111,18 +117,30 @@ class LLMAuditor:
                                         break
                                 if not target_row and s_int + 1 <= ws.max_row:
                                     target_row = s_int + 1
-                            except:
+                            except (ValueError, TypeError):
                                 pass
                             
                         if target_row:
+                            heal_log = []
                             for f_name, f_val in fixes.items():
-                                if f_val is not None and f_name in headers:
-                                    col_idx = headers.index(f_name) + 1
-                                    orig_val = ws.cell(target_row, col_idx).value
-                                    if str(orig_val).strip() != str(f_val).strip():
-                                        ws.cell(target_row, col_idx).value = f_val
-                                        healed_count += 1
-                                        print(f"    [自愈修复成功] 行 {target_row} 字段 [{f_name}]: 原始值='{str(orig_val)[:30]}...' -> 自愈值='{str(f_val)[:30]}...'")
+                                if f_val is None or f_name not in headers:
+                                    continue
+                                if f_name in self.IMMUTABLE_FIELDS or f_name not in self.HEALABLE_FIELDS:
+                                    print(f"    [自愈拦截] 行 {target_row} 字段 [{f_name}] 不允许模型改写 (价格/原文留痕/标识列)")
+                                    continue
+                                col_idx = headers.index(f_name) + 1
+                                orig_val = ws.cell(target_row, col_idx).value
+                                if str(orig_val).strip() != str(f_val).strip():
+                                    ws.cell(target_row, col_idx).value = f_val
+                                    healed_count += 1
+                                    heal_log.append(f"{f_name}:{str(orig_val)[:20]}→{str(f_val)[:20]}")
+                                    print(f"    [自愈修复成功] 行 {target_row} 字段 [{f_name}]: 原始值='{str(orig_val)[:30]}...' -> 自愈值='{str(f_val)[:30]}...'")
+                            # 自愈必须留痕：改写内容回填到报价说明，否则交付表无法溯源
+                            if heal_log and '报价说明' in headers:
+                                dc = headers.index('报价说明') + 1
+                                old = str(ws.cell(target_row, dc).value or '').strip()
+                                stamp = '[模型自愈] ' + '；'.join(heal_log)
+                                ws.cell(target_row, dc).value = f"{old}；{stamp}".strip('；') if old else stamp
             except Exception as e:
                 print(f"    [LLM Auditor Chunk Error] 审计分批自愈调用异常: {e}")
 

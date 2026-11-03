@@ -220,7 +220,7 @@ class StandardizedWorkbookBuilder:
                                       img_folder_name, final_quote_desc)
             values.update(self._dynamic_spec_values(item, values))
             # 只有致命/严重才污染主表（红字+黄底+批注）；提示级只写报价说明与审计页，不打扰
-            needs_human = False
+            needs_human = item.worst_severity() in ('致命', '严重')
             row_fill = alt_fill if (row_num % 2 == 0) else white_fill
 
             for c_idx, header in enumerate(self.headers, 1):
@@ -237,14 +237,14 @@ class StandardizedWorkbookBuilder:
                     cell.alignment = right_align
                     if isinstance(val, (int, float)):
                         cell.number_format = '#,##0.00'
-                    # 置信度不足 / 对账异常：浅黄高亮、红色宋体加粗并在市场价插入批注
-                    if needs_human:
-                        cell.fill = warning_fill
-                        cell.font = warning_font
-                        if header == '市场价':
-                            cell.comment = Comment(f"【{item.worst_severity()}】{item.uncertainty_note}", "造价审计员")
                 else:
                     cell.alignment = multiline_left_align
+                # 致命/严重：整行红字 + 黄底（市场价额外写批注）
+                if needs_human:
+                    cell.fill = warning_fill
+                    cell.font = warning_font
+                    if header == '市场价':
+                        cell.comment = Comment(f"【{item.worst_severity()}】{item.uncertainty_note}", "造价审计员")
 
             # 动态计算最适行高:
             # 基础文本每行约 16pt，有图片时最少 68pt，多行文本时根据行数自适应提升

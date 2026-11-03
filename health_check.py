@@ -132,7 +132,7 @@ class TestQuoteStandardizerHealth(unittest.TestCase):
         self.assertEqual(r99_status, "异常:原表无此行")
 
     def test_06_builder_structure_and_fonts(self):
-        """测试 WorkbookBuilder 33 列输出、全宋体、多行排版、审计页与对账页生成"""
+        """纯净单表交付：33 列、全宋体、多行排版，致命/严重行主表红字黄底留痕"""
         builder = StandardizedWorkbookBuilder(None)
         self.assertEqual(len(builder.headers), 33)
         item = CanonicalMaterialItem(
@@ -157,25 +157,21 @@ class TestQuoteStandardizerHealth(unittest.TestCase):
             builder.build_from_canonical_items([item], test_out_path, img_dir=os.path.join(tempfile.gettempdir(), "_qs_builder_tmp_imgs"))
             wb = openpyxl.load_workbook(test_out_path)
             
-            # 校验包含三个核心 Sheet
-            self.assertIn('标准化报价', wb.sheetnames)
-            self.assertIn('疑义与失败审计说明', wb.sheetnames)
-            
+            # 契约：只要【标准化报价】单张 Sheet（审计内容靠主表红字黄底+批注承载）
+            self.assertEqual(wb.sheetnames, ['标准化报价'])
+
             ws_main = wb['标准化报价']
             self.assertEqual(ws_main.max_column, 33)
             self.assertEqual(ws_main.cell(row=2, column=1).value, "WB00010")
             # 校验宋体
             self.assertEqual(ws_main.cell(row=2, column=1).font.name, "宋体")
-            
-            # 校验审计说明 Sheet: 首行免审率、二级表头、原因列红色宋体
-            ws_audit = wb['疑义与失败审计说明']
-            self.assertIn('行级免审率', str(ws_audit.cell(row=1, column=1).value))
-            self.assertEqual(ws_audit.cell(row=2, column=2).value, '严重级别')
-            self.assertGreaterEqual(ws_audit.max_row, 3)
-            c_reason = ws_audit.cell(row=3, column=9)
-            self.assertEqual(c_reason.font.name, "宋体")
-            self.assertEqual(c_reason.font.color.rgb, "00BF8F00")   # 印章遮挡 = 严重，橙红宋体
-            self.assertEqual(ws_audit.cell(row=3, column=2).value, '严重')
+
+            # 审计分级落到主表：`公章遮挡单价` 属严重 → 整行红字黄底，市场价带批注
+            name_cell = ws_main.cell(row=2, column=3)
+            self.assertEqual(name_cell.font.color.rgb, "00C00000", "严重行应红字")
+            self.assertEqual(name_cell.fill.start_color.rgb, "00FFF2CC", "严重行应黄底")
+            price_col = next(i for i in range(1, 34) if ws_main.cell(row=1, column=i).value == '市场价')
+            self.assertIsNotNone(ws_main.cell(row=2, column=price_col).comment, "市场价应带审计批注")
         finally:
             if os.path.exists(test_out_path):
                 os.remove(test_out_path)
@@ -398,6 +394,34 @@ class TestPipelineVerification(unittest.TestCase):
         self.assertTrue(v({'tables': [{'cells': ['a', 'b']}]}))              # 行不是数组
         self.assertTrue(v({'tables': [{'cells': [['a']], 'uncertain': [[1]]}]}))  # uncertain 项过短
         self.assertTrue(v({'tables': [{'cells': [['a']]}], 'notes': 5}))
+
+    def test_16_llm_auditor_cannot_touch_price_or_verbatim(self):
+        """自愈审计铁律：模型不得改价格/原文留痕/标识列，且改写必须留痕到报价说明"""
+        import openpyxl
+        from unittest import mock
+        from llm_auditor import LLMAuditor
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        headers = ['报价ID', '名称规格', '规格参数', '厂家原始规格参数', '单位', '市场价', '报价说明']
+        ws.append(headers)
+        ws.append(['WL00010', '旧品名', '厚度:1.5', '原文:厚度1.5;基价18000', '㎡', 128.5, ''])
+
+        fake = {'choices': [{'message': {'content': __import__('json').dumps({
+            'need_healing': True, 'summary': 'x', 'corrections': [{
+                'row_id': 1,
+                'fixes': {'名称规格': '成品名', '市场价': 99.0,
+                          '厂家原始规格参数': '被模型改写', '单位': 'm²', '报价说明': '基价另计'}
+            }]})}}]}
+        with mock.patch('llm_auditor.requests.post') as post:
+            post.return_value = mock.Mock(status_code=200, json=lambda: fake)
+            LLMAuditor().verify_and_auto_heal(ws, headers)
+
+        vals = {h: ws.cell(2, i + 1).value for i, h in enumerate(headers)}
+        self.assertEqual(vals['市场价'], 128.5, '价格只能取原表，模型无权改写')
+        self.assertEqual(vals['厂家原始规格参数'], '原文:厚度1.5;基价18000', '原文留痕不可改写')
+        self.assertEqual(vals['名称规格'], '成品名', '允许字段应当被自愈')
+        self.assertIn('[模型自愈]', str(vals['报价说明']), '自愈必须留痕到报价说明')
 
 
 if __name__ == '__main__':
