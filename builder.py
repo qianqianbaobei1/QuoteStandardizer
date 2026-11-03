@@ -244,9 +244,10 @@ class StandardizedWorkbookBuilder:
                         f_out.write(img_bytes)
                     saved_images.append((img_fn, img_dst))
 
-            # 没有图片就留空（项目原则：不知道就留空，不填“无”这种臆造值）
-            first_img_name = saved_images[0][0] if saved_images else (item.image_filenames[0] if item.image_filenames else '')
-            img_folder_name = os.path.basename(img_dir) if saved_images else ''
+            first_img_name = saved_images[0][0] if saved_images else (item.image_filenames[0] if (hasattr(item, 'image_filenames') and item.image_filenames) else '')
+            # 只要存在图片引用或图片资产，就必须准确填入图片文件夹名称
+            has_img_ref = bool(saved_images or first_img_name or (hasattr(item, 'image_filenames') and item.image_filenames))
+            img_folder_name = os.path.basename(img_dir) if (has_img_ref and img_dir) else ''
 
             # 严格业务准则：只解析客户原单真实提供的内容，未提供的绝不脑补，纯净留空！
             # 报价说明只记录客户商务说明中的真实文字，绝不拼接系统内部的算法审计警告
