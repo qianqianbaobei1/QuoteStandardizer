@@ -568,7 +568,9 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
 
             if _is_title_row(row_values):
                 decision = '分组标题行'
-            elif len(set(row_cells_dict.values()) & header_values) >= max(2, len(row_cells_dict) // 2):
+            elif (len(set(row_cells_dict.values()) & header_values) >= max(2, len(row_cells_dict) // 2)
+                  and not (price_val > 0 and has_spec_feat)):
+                # 与「合计/小计行」同一护栏：有单价 + 带物料特征的行即使撞了表头文字，也不是表头
                 decision = '重复表头行'
             elif any(v.replace(' ', '') in SUMMARY_ROW_KEYS for v in row_values if v):
                 # 防误杀：若带有单价且包含物料特征词，坚决不能当汇总行跳过！

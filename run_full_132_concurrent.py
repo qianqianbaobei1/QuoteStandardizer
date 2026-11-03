@@ -43,6 +43,18 @@ for agent_dir in sorted(root_agents.iterdir()):
                 if v.is_dir() and not v.name.startswith('.'):
                     all_tasks.append((agent_dir.name, v.name, v))
 
+def _clean_name(vendor_name: str) -> str:
+    return re.sub(r'^\d+[\._、\s]*', '', vendor_name).strip()
+
+
+def already_done(vendor_name: str):
+    """断点续跑：交付件存在且体检合格才算完成，避免重复烧 token"""
+    xlsx = output_dir / f"{_clean_name(vendor_name)}-标准解析.xlsx"
+    if not xlsx.exists():
+        return False
+    return not verify_delivery_file(str(xlsx))
+
+
 print(f"==================== 全量 132 家建材报价单并发标准化解析启动 ====================")
 print(f"  -> 待解析目标总数: {len(all_tasks)} 家")
 print(f"  -> 标准三级分类库容量: {len(CATEGORY_CODE_MAP)} 条")
@@ -55,7 +67,10 @@ def process_single_task(args):
     agent_name, vendor_name, vendor_path = args
     start_t = time.time()
     # 供应商规范清洗名称
-    clean_vname = re.sub(r'^\d+[\._、\s]*', '', vendor_name).strip()
+    clean_vname = _clean_name(vendor_name)
+    if already_done(vendor_name):
+        print(f"[SKIP] [{agent_name}] {clean_vname} 已交付且体检合格，跳过")
+        return (clean_vname, agent_name, "SKIP", "已完成", 0, 0)
     
     primary_file = find_primary_quote_file(vendor_path)
     if not primary_file:
@@ -131,13 +146,21 @@ with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
 
 print("\n==================== 全量 132 家解析汇总报告 ====================")
 success_cnt = sum(1 for r in completed_results if r[2] == "PASS")
-fail_cnt = sum(1 for r in completed_results if r[2] != "PASS")
+skip_cnt = sum(1 for r in completed_results if r[2] == "SKIP")
+fail_cnt = sum(1 for r in completed_results if r[2] not in ("PASS", "SKIP"))
 total_items = sum(r[4] for r in completed_results)
-print(f"总计: {len(completed_results)} 家 | 成功: {success_cnt} 家 | 失败/空单: {fail_cnt} 家 | 共解析标准物料: {total_items} 条")
+print(f"总计: {len(completed_results)} 家 | 成功: {success_cnt} 家 | 跳过(已完成): {skip_cnt} 家 | "
+      f"失败/空单: {fail_cnt} 家 | 本次解析标准物料: {total_items} 条")
+report_path = output_dir / "_批量解析结果.txt"
+with open(report_path, "w", encoding="utf-8") as fh:
+    fh.write(f"总计 {len(completed_results)} 家 | 成功 {success_cnt} | 跳过 {skip_cnt} | 失败 {fail_cnt}\n\n")
+    for vname, aname, st, info, cnt, d in sorted(completed_results, key=lambda x: (x[2], x[0])):
+        fh.write(f"{st:5s} {cnt:5d}行 [{aname}] {vname}\n        {info}\n")
+print(f"[报告] 明细已写入 {report_path}")
 if fail_cnt:
     print("\n失败清单:")
     for vname, aname, st, info, cnt, d in completed_results:
-        if st != 'PASS':
+        if st not in ('PASS', 'SKIP'):
             print(f"  ✗ [{aname}] {vname}: {info}")
 # 任一家失败即退出码 2（与 run_batch_standardize 口径一致）
 sys.exit(0 if fail_cnt == 0 else 2)
