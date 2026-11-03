@@ -132,9 +132,20 @@ def apply_enterprise_style(ws):
                 cell.alignment = right_align
                 try:
                     if cell.value is not None and str(cell.value).strip() != '':
-                        num_val = float(str(cell.value).replace('¥', '').replace(',', ''))
-                        cell.value = num_val
-                        cell.number_format = '¥#,##0.00'
+                        raw_str = str(cell.value).strip().replace('¥', '').replace('￥', '').replace(',', '').replace('元', '')
+                        # 检测原始小数位数
+                        if '.' in raw_str:
+                            dec_places = len(raw_str.split('.')[1])
+                            num_val = float(raw_str)
+                            cell.value = num_val
+                            if dec_places > 0:
+                                cell.number_format = '0.' + ('0' * dec_places)
+                            else:
+                                cell.number_format = '0'
+                        else:
+                            num_val = int(raw_str) if raw_str.isdigit() else float(raw_str)
+                            cell.value = num_val
+                            cell.number_format = '0'
                 except Exception:
                     pass
             elif h in CENTER_HEADERS:

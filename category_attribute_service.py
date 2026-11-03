@@ -235,17 +235,19 @@ def resolve_and_verify_category(material_name: str, raw_specs: str = "", llm_cod
     if llm_code and str(llm_code).strip() not in candidate_codes:
         candidate_codes.append(str(llm_code).strip())
 
-    # 2. 如果候选多于 1 个或者匹配不确切，调用 Jev 裁判进行置信度概率打分
-    if len(candidate_codes) > 1 or (candidate_codes and not (name in CATEGORY_CODE_MAP)):
+    # 2. 候选决策：严格调用 Jev 概率裁决，选择概率/指标比例最高的分类
+    if candidate_codes:
         jev_res = jev_score_category(name, raw_specs, candidate_codes)
-        if jev_res and jev_res.get("category_code"):
-            conf = jev_res.get("confidence", 0.0)
-            chosen = jev_res.get("category_code")
-            if conf >= 0.8:
-                return chosen, "jev", notes
-            else:
-                notes.append(f"Jev 分类裁决置信度偏低 ({conf:.2f})，归属为 {chosen}，需人工复核")
-                return chosen, "jev", notes
+        if jev_res:
+            probs = jev_res.get("probabilities", {})
+            # 过滤掉 NONE，按概率数值从高到低绝对排序，取最高概率的分类
+            valid_probs = {k: v for k, v in probs.items() if k != "NONE" and k in candidate_codes}
+            if valid_probs:
+                best_code = max(valid_probs.items(), key=lambda x: x[1])[0]
+                highest_prob = valid_probs[best_code]
+                return best_code, "jev_max_prob", notes
+            elif jev_res.get("category_code"):
+                return jev_res["category_code"], "jev", notes
 
     if candidate_codes:
         return candidate_codes[0], "dict", notes

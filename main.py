@@ -703,7 +703,9 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 std_name = str(cleaned_res.get("standard_name") or "").strip()
                 if not std_name:
                     notes.append("未识别出物料名称")
-                cat_code, cat_src = resolve_category_code(std_name, cleaned_res.get("category_code"))
+                from category_attribute_service import resolve_and_verify_category
+                cat_code, cat_src, cat_notes = resolve_and_verify_category(std_name, item.get("raw_spec") or item.get("raw_full_line", ""), cleaned_res.get("category_code"))
+                notes.extend(cat_notes)
                 if cat_src == 'llm':
                     notes.append(f"类别编码 {cat_code} 未经标准编码库核验")
                 elif not cat_code:
