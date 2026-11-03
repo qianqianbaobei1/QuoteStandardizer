@@ -20,16 +20,15 @@ from models import (CanonicalMaterialItem, GROUP_ADVICE, SEVERITY_ORDER, classif
                     summarize_audit)
 
 # 未配置模板时使用的内置标准表头 (GenOffice 33 列)
-# 人工标杆 36 列标准表头
+# 用户确认唯一标准 33 列表头规范
 STANDARD_HEADERS = [
-    '报价id', '名称规格', '品牌', '厂家原始规格参数', '厂家报价文件页码', '厂家报价图片文件名',
-    '顺序号', '报价地区省', '报价地区市', '单位', '市场价', '工程价', '工程价折扣比例',
-    '折扣下限', '折扣上限', '折扣系列', '是否含运费', '运费说明', '是否含增值税', '税费说明',
-    '增值税税率%', '运费结算方式', '报价说明', '价格填报类型', '项目类型', '工程用量',
-    '报价时间', '品种', '类型', '型号', '图片文件夹', '图片1', '图片2', '图片3', '图片4', '图片5'
+    '报价ID', '供应商名称', '名称规格', '类别编码', '品牌', '规格参数', '厂家原始规格参数', '厂家报价文件页码',
+    '厂家报价图片文件名', '顺序号', '报价地区省', '报价地区市', '单位', '市场价', '工程价', '工程价折扣比例',
+    '折扣下限', '折扣上限', '折扣系列', '运费说明', '是否含运费', '税费说明', '增值税税率', '运费结算方式',
+    '是否含增值税', '报价说明', '价格填报类型', '图片文件夹', '图片', '图片', '图片', '图片', '图片'
 ]
-CENTER_HEADERS = {'报价id', '顺序号', '报价地区省', '报价地区市', '单位', '工程价折扣比例', '折扣下限',
-                  '折扣上限', '折扣系列', '是否含运费', '增值税税率%', '运费结算方式', '是否含增值税', '价格填报类型'}
+CENTER_HEADERS = {'报价ID', '类别编码', '顺序号', '报价地区省', '报价地区市', '单位', '工程价折扣比例', '折扣下限',
+                  '折扣上限', '折扣系列', '是否含运费', '增值税税率', '运费结算方式', '是否含增值税', '价格填报类型'}
 PRICE_HEADERS = {'市场价', '工程价'}
 # 规格参数里不许出现的“参数名”关键词（基价/调价依据属于商务信息，不是物理规格）
 FORBIDDEN_SPEC_KEYS = ('表头', '表标题', '基价', '单价', '总价', '金额', '指导价', '调价')
@@ -105,63 +104,56 @@ class StandardizedWorkbookBuilder:
 
     @staticmethod
     def _row_values(item, seq, formatted_specs, first_img_name, img_folder_name, final_quote_desc):
-        """按人工标杆 36 列组织一行数据。绝不虚构内容，未提供的一律留空！"""
-        # 提取真实提取出的技术参数（品种、类型、型号等）
-        specs = item.structured_specs or {}
-        # 寻找品种、类型、型号
-        val_pz = specs.get('品种') or specs.get('品名') or ''
-        val_lx = specs.get('类型') or specs.get('种类') or ''
-        val_xh = specs.get('型号') or specs.get('型号/系列') or specs.get('规格型号') or ''
-        
+        """严格按标准 33 列表头字典映射，绝不错列，绝不虚构内容！"""
         # 格式化税率
-        tax_str = f"{item.tax_rate:.2f}" if isinstance(item.tax_rate, (int, float)) else (item.tax_rate or '')
-        
-        # 图片列映射
-        img1 = item.image_filenames[0] if (hasattr(item, 'image_filenames') and item.image_filenames) else ''
-        img2 = item.image_filenames[1] if (hasattr(item, 'image_filenames') and len(item.image_filenames) > 1) else ''
-        img3 = item.image_filenames[2] if (hasattr(item, 'image_filenames') and len(item.image_filenames) > 2) else ''
-        img4 = item.image_filenames[3] if (hasattr(item, 'image_filenames') and len(item.image_filenames) > 3) else ''
-        img5 = item.image_filenames[4] if (hasattr(item, 'image_filenames') and len(item.image_filenames) > 4) else ''
-        if first_img_name and not img1:
+        tax_val = item.tax_rate if item.tax_rate is not None else ''
+
+        # 图片列映射（5列“图片”）
+        # 优先使用提取出的图片物理文件名（如 预制混凝土叠合板.jpg）
+        img1 = ''
+        if hasattr(item, 'image_filenames') and item.image_filenames:
+            img1 = item.image_filenames[0]
+        elif first_img_name and not str(first_img_name).startswith('quote_img'):
             img1 = first_img_name
 
+        # 只要存在真实产品图片引用或图片资产，就必须准确填入图片文件夹名称
+        has_real_img = bool(img1)
+        folder_val = img_folder_name if (has_real_img and img_folder_name) else ''
+
         return {
-            '报价id': item.quote_id,
-            '名称规格': item.category_name,
-            '品牌': item.brand,
-            '厂家原始规格参数': item.raw_spec,
-            '厂家报价文件页码': item.file_page,
-            '厂家报价图片文件名': first_img_name,
+            '报价ID': str(item.quote_id),
+            '供应商名称': item.supplier or '',
+            '名称规格': item.category_name or '',
+            '类别编码': item.category_code or '',
+            '品牌': item.brand or '',
+            '规格参数': formatted_specs or '',
+            '厂家原始规格参数': item.raw_spec or '',
+            '厂家报价文件页码': item.file_page or '',
+            '厂家报价图片文件名': first_img_name or '',
             '顺序号': seq,
-            '报价地区省': item.province,
-            '报价地区市': item.city,
-            '单位': item.unit,
+            '报价地区省': item.province or '',
+            '报价地区市': item.city or '',
+            '单位': item.unit or '',
             '市场价': item.market_price,
-            '工程价': item.project_price,
-            '工程价折扣比例': item.discount_ratio,
-            '折扣下限': item.discount_min if item.discount_min is not None else item.discount_ratio,
-            '折扣上限': item.discount_max if item.discount_max is not None else item.discount_ratio,
-            '折扣系列': item.discount_series,
-            '是否含运费': item.is_freight_included,
-            '运费说明': item.freight_desc,
-            '是否含增值税': item.is_tax_included,
-            '税费说明': item.tax_desc,
-            '增值税税率%': tax_str,
-            '运费结算方式': item.freight_settle,
-            '报价说明': final_quote_desc,
-            '价格填报类型': item.quote_type,
-            '项目类型': '',    # 客户原单若无提供则严格留空
-            '工程用量': '',    # 客户原单若无提供则严格留空
-            '报价时间': '',    # 客户原单若无提供则严格留空
-            '品种': val_pz,
-            '类型': val_lx,
-            '型号': val_xh,
-            '图片文件夹': img_folder_name,
-            '图片1': img1,
-            '图片2': img2,
-            '图片3': img3,
-            '图片4': img4,
-            '图片5': img5,
+            '工程价': item.project_price if item.project_price is not None else item.market_price,
+            '工程价折扣比例': item.discount_ratio if item.discount_ratio is not None else 1.0,
+            '折扣下限': item.discount_min if item.discount_min is not None else (item.discount_ratio if item.discount_ratio is not None else 1.0),
+            '折扣上限': item.discount_max if item.discount_max is not None else (item.discount_ratio if item.discount_ratio is not None else 1.0),
+            '折扣系列': item.discount_series or '无折扣',
+            '运费说明': item.freight_desc or '',
+            '是否含运费': item.is_freight_included or '',
+            '税费说明': item.tax_desc or '',
+            '增值税税率': tax_val,
+            '运费结算方式': item.freight_settle or '',
+            '是否含增值税': item.is_tax_included or '',
+            '报价说明': final_quote_desc or '',
+            '价格填报类型': item.quote_type or '',
+            '图片文件夹': folder_val,
+            '_img1': img1,
+            '_img2': '',
+            '_img3': '',
+            '_img4': '',
+            '_img5': '',
         }
 
     def build_from_canonical_items(self, items: list, output_xlsx_path: str, img_dir: str, reconciliation: list = None,
@@ -260,8 +252,14 @@ class StandardizedWorkbookBuilder:
             needs_human = item.worst_severity() in ('致命', '严重')
             row_fill = alt_fill if (row_num % 2 == 0) else white_fill
 
+            img_col_counter = 1
             for c_idx, header in enumerate(self.headers, 1):
-                val = safe_excel_val(values.get(header, ''))  # 安全清洗非法字符，保障无损坏
+                if header == '图片':
+                    val = values.get(f'_img{img_col_counter}', '')
+                    img_col_counter += 1
+                else:
+                    val = values.get(header, '')
+                val = safe_excel_val(val)  # 安全清洗非法字符，保障无损坏
                 cell = ws_out.cell(row=row_num, column=c_idx, value=val)
                 cell.font = body_font
                 cell.fill = row_fill

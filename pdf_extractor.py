@@ -487,12 +487,21 @@ def _strip_fence(text: str) -> str:
 
 
 def _fill_merged_none(raw_rows, grid):
-    """PyMuPDF 表格中 None 表示被合并覆盖的格子：用左侧/上方的值填充"""
-    for r, row in enumerate(raw_rows):
-        for c, v in enumerate(row):
-            if v is None:
-                if c > 0 and raw_rows[r][c - 1] is not None or (c > 0 and grid[r][c - 1]):
-                    grid[r][c] = grid[r][c - 1]
-                elif r > 0:
-                    grid[r][c] = grid[r - 1][c]
+    """
+    PyMuPDF 表格中 None 表示被合并覆盖的格子。
+    在报价单/数据表中，跨行合并（如分类、品牌、单位等向下合并）占绝大多数；
+    跨列合并在同一行中也可能出现，但绝不能把左侧的值（如价格、规格）横向填入右侧不同的列（如品牌、单位列）。
+    因此：优先同列向上寻找合并起始值（纵向穿透）；仅当同列上方无有效值且同一行左侧为有效合并时才考虑横向。
+    """
+    num_rows = len(raw_rows)
+    num_cols = max(len(r) for r in raw_rows) if raw_rows else 0
+    for c in range(num_cols):
+        for r in range(num_rows):
+            if r < len(raw_rows) and c < len(raw_rows[r]):
+                if raw_rows[r][c] is None:
+                    # 优先沿同列向上继承（纵向合并单元格）
+                    if r > 0 and grid[r - 1][c]:
+                        grid[r][c] = grid[r - 1][c]
+                    elif c > 0 and grid[r][c - 1] and raw_rows[r][c - 1] is not None:
+                        grid[r][c] = grid[r][c - 1]
     return grid
