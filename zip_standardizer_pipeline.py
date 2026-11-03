@@ -248,6 +248,20 @@ class ZipQuoteStandardizerPipeline:
                             if len(common) >= 3 or (len(c_name) <= 3 and len(common) >= 2):
                                 matched_spec = it.get('spec')
                                 break
+                    # 最后兜底：基于同图+价格+单位精准兜底对齐（解决 OCR 品名误差）
+                    if not matched_spec:
+                        price_col = headers.index('市场价') + 1 if '市场价' in headers else None
+                        row_p = ws.cell(r, price_col).value if price_col else None
+                        if row_p:
+                            try:
+                                r_pval = float(str(row_p).replace('¥', '').replace(',', ''))
+                                for it in all_transcriptions:
+                                    if it.get('_img_source') == row_img_file and it.get('price'):
+                                        if abs(float(it['price']) - r_pval) < 0.01:
+                                            matched_spec = it.get('spec')
+                                            break
+                            except Exception:
+                                pass
 
                     if matched_spec:
                         ws.cell(r, spec_col).value = matched_spec
