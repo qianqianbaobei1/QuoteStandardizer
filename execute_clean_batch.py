@@ -9,14 +9,16 @@ import time
 from pathlib import Path
 import openpyxl
 
-from run_batch_standardize import find_primary_quote_file, run_single_vendor
+from run_batch_standardize import find_primary_quote_file, run_single_vendor, verify_delivery_file
 from zip_standardizer_pipeline import ZipQuoteStandardizerPipeline
 from style_enhancer import apply_enterprise_style
 from llm_auditor import LLMAuditor
 
-# 源目录不再写死在代码里：命令行第一个参数 > 环境变量 QS_SOURCE_ROOT > 本机默认
-DEFAULT_SRC_ROOT = '/Users/qianqianawodebaobei/Desktop/数据异化'
-src_root = Path(sys.argv[1] if len(sys.argv) > 1 else os.getenv('QS_SOURCE_ROOT', DEFAULT_SRC_ROOT))
+# 源目录不写进代码：命令行第一个参数 > 环境变量 QS_SOURCE_ROOT
+src_root = Path(sys.argv[1] if len(sys.argv) > 1 else os.getenv('QS_SOURCE_ROOT', ''))
+if not str(src_root).strip() or str(src_root) in ('.', './') or not src_root.is_dir():
+    print('用法: python3 execute_clean_batch.py <源目录>   (或设置 QS_SOURCE_ROOT)')
+    raise SystemExit(1)
 output_dir = Path('deliveries')
 output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -81,7 +83,13 @@ for idx, (batch_name, vendor_name, vendor_path) in enumerate(todo_tasks, 1):
                                 f"完整性校验未通过 {len(res_dict['failures'])} 项: {res_dict['failures'][0]}", 0))
                 continue
             
+        # ZIP 等不经过 main 校验的链路，也要独立体检后才算产出
         if out_xlsx and os.path.exists(out_xlsx):
+            delivery_errs = verify_delivery_file(out_xlsx)
+            if delivery_errs:
+                results.append((vendor_name, "FAIL",
+                                f"交付件体检未通过 {len(delivery_errs)} 项: {delivery_errs[0]}", 0))
+                continue
             # 严格后处理：保证单 Sheet，应用美学样式，自检
             wb = openpyxl.load_workbook(out_xlsx)
             # 只留标准化报价

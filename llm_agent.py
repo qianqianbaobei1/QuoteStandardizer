@@ -12,8 +12,8 @@ import time
 import requests
 from concurrent.futures import ThreadPoolExecutor
 
-from config import (DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, LLM_MAX_RETRIES, CATEGORY_CODE_MAP,
-                    TYPESAFE_API_KEY, TYPESAFE_BASE_URL, TYPESAFE_MODEL)
+from config import (DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, LLM_MAX_RETRIES, LLM_TEMPERATURE,
+                    CATEGORY_CODE_MAP, TYPESAFE_API_KEY, TYPESAFE_BASE_URL, TYPESAFE_MODEL)
 
 # 表头关键词：单价类优先于合价/金额类，避免把“合价=数量×单价”当成单价
 UNIT_PRICE_KEYS = ['单价', '面价', '出厂价', '市场价', '预算价', '含税价', '报价', '价格']
@@ -119,7 +119,7 @@ class DeepSeekStandardizer:
                 {"role": "system", "content": SYSTEM_PROMPT_LAYOUT_DYNAMIC},
                 {"role": "user", "content": user_content}
             ],
-            "temperature": 0.1,
+            "temperature": LLM_TEMPERATURE,
             "response_format": {"type": "json_object"}
         }
 
@@ -198,7 +198,7 @@ class DeepSeekStandardizer:
                 {"role": "system", "content": SYSTEM_PROMPT_BATCH_DYNAMIC},
                 {"role": "user", "content": user_content}
             ],
-            "temperature": 0.1,
+            "temperature": LLM_TEMPERATURE,
             "response_format": {"type": "json_object"}
         }
 

@@ -58,12 +58,16 @@ EXPORT_INTEGRITY_CERTIFICATE = os.getenv("EXPORT_INTEGRITY_CERTIFICATE", "1").st
 
 # LLM 调用重试次数
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
+# 清洗/审计温度：0 最确定但可能牺牲归纳能力；默认 0.1
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
 
 DEFAULT_OUTPUT_DIR = os.getenv("OUTPUT_DIR") or os.path.join(CURRENT_DIR, "deliveries")
 # 输出模板 (取第 1 行作为表头)；未配置时使用 builder.STANDARD_HEADERS
 DEFAULT_TEMPLATE_PATH = os.getenv("TEMPLATE_PATH", "")
 # 标准分类编码文件 (.csv / .xlsx，前两列为 名称、编码)；未配置时不做编码库匹配
 CATEGORY_CODE_FILE = os.getenv("CATEGORY_CODE_FILE", "")
+# 类别属性/填写要求接口；留空则只按标准编码库的本地规则，不调外部接口
+CATEGORY_ATTRS_API_URL = os.getenv("CATEGORY_ATTRS_API_URL", "")
 
 # 省级行政区全称、简称与常用别名
 PROVINCE_ABBR_MAP = {

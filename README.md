@@ -43,6 +43,7 @@ OUTPUT_DIR=                           # 默认 ./deliveries
 STRUCTURE_ENGINE=llm                  # llm (默认) / jev / compare
 TYPESAFE_API_KEY=                     # jev、compare 模式需要
 JEV_MIN_CONFIDENCE=0.5                # Jev 置信度低于此值时写入待复核说明
+LLM_TEMPERATURE=0.1                   # 清洗/审计温度；0 最确定但可能牺牲归纳能力
 ```
 
 ## 试点：用 TypeSafe Jev 判定表格结构

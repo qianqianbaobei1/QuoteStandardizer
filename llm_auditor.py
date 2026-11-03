@@ -5,7 +5,7 @@ llm_auditor.py - 大语言模型深度业务逻辑终审与强制闭环自愈回
 import json
 import re
 import requests
-from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+from config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, LLM_TEMPERATURE
 
 AUDIT_FIX_PROMPT = """你是一个国家级建设工程招投标与建材物料领域的终审专家。
 现在需要对即将交付客户的建材报价单进行【强制终审检查与自动自愈回填】。
@@ -88,7 +88,7 @@ class LLMAuditor:
                     {'role': 'system', 'content': '你是一个资深严谨的造价与数据治理专家。'},
                     {'role': 'user', 'content': prompt}
                 ],
-                'temperature': 0.1,
+                'temperature': LLM_TEMPERATURE,
                 'response_format': {'type': 'json_object'}
             }
             try:

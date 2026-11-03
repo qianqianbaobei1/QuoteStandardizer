@@ -90,6 +90,42 @@ def find_primary_quote_file(vendor_dir: Path) -> Path:
     candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
     return candidates[0][2]
 
+def verify_delivery_file(path: str) -> list:
+    """交付件独立体检：文件可读回、主表单 Sheet、有数据行、市场价为正数值。
+    给不经过 main._verify_output 的链路（ZIP 流水线、批处理脚本）使用。"""
+    import openpyxl
+    try:
+        wb = openpyxl.load_workbook(path, data_only=True)
+    except Exception as e:
+        return [f"交付文件无法读回: {e}"]
+    if '标准化报价' not in wb.sheetnames:
+        return [f"缺少「标准化报价」Sheet: {wb.sheetnames}"]
+    errs = []
+    extra = [s for s in wb.sheetnames if s != '标准化报价']
+    if extra:
+        errs.append(f"主交付含多余 Sheet: {extra}")
+    ws = wb['标准化报价']
+    col = {str(c.value): c.column for c in ws[1] if c.value}
+    if '市场价' not in col:
+        return errs + ["缺少「市场价」列"]
+    rows = 0
+    for r in range(2, ws.max_row + 1):
+        v = ws.cell(r, col['市场价']).value
+        if v in (None, ''):
+            continue
+        rows += 1
+        try:
+            if float(v) <= 0:
+                errs.append(f"第{r}行 市场价不为正: {v}")
+        except (TypeError, ValueError):
+            errs.append(f"第{r}行 市场价非数值: {v}")
+        if len(errs) > 10:
+            break
+    if rows == 0:
+        errs.append("没有任何数据行")
+    return errs
+
+
 def run_single_vendor(vendor_dir: Path, output_dir: Path) -> dict:
     vname = vendor_dir.name
     res = {

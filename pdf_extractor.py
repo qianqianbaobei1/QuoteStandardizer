@@ -340,9 +340,13 @@ class PDFTableExtractor:
             tables = self._grids_from_tiles(page, base, num_tiles=3)
         else:
             tables = self._normalize_tables(first)
-            # 若单页识别出的行数大于阈值，也支持容错
+            # 行数超阈值：本实现不做行数驱动的切块（只在模型自报截断时切块），如实标注待复核
             if tables and len(tables[0][0]) > VISION_MAX_ROWS_PER_TILE and len(tables[0][0]) >= 60:
-                print(f"    [*] 页面行数 ({len(tables[0][0])}) 超过阈值，切块验证重合...")
+                n_rows = len(tables[0][0])
+                self.cell_issue[(f"{base}#1", 1, 1)] = (
+                    f"本页识别 {n_rows} 行，超过单块阈值 {VISION_MAX_ROWS_PER_TILE} 行，未做切块复查")
+                print(f"    [!] {base}: 页面行数 {n_rows} 超过阈值 {VISION_MAX_ROWS_PER_TILE}，"
+                      f"未做切块复查，已标注待复核")
 
         if not tables:
             # 切块重试一次 (num_tiles=3)

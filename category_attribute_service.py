@@ -2,7 +2,7 @@
 """
 材料类别特定参数及要求服务 (Material Category Attribute Service)
 - 对应 Sheet1: 876条三级分类编码标准库
-- 对应 Sheet2: 获取材料类别特定参数及要求接口 (https://ugw.m2.com.cn/agents-toolkit/api/material-category/attrs)
+- 对应 Sheet2: 获取材料类别特定参数及要求接口 (地址由 CATEGORY_ATTRS_API_URL 提供，不内置默认)
 - 负责：
   1. 编码匹配与映射 (resolve_standard_category)
   2. 类别属性与规范约束缓存拉取 (fetch_category_attributes)
@@ -11,16 +11,23 @@
 import os
 import re
 import json
+import threading
 import urllib.request
 import urllib.error
 from typing import Dict, Any, Optional, Tuple, List
 
+from config import CATEGORY_ATTRS_API_URL
+
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "category_attrs_cache.json")
 # 类别属性接口地址：不配置则不调用，直接用本地规则 (CATEGORY_CODE_FILE)
-API_URL = os.getenv("CATEGORY_ATTRS_API_URL", "")
+API_URL = CATEGORY_ATTRS_API_URL
 
 # 内存缓存
 _ATTR_CACHE: Dict[str, Any] = {}
+# 并发写保护：多线程批处理时会同时 save_cache，不锁会写出半截 JSON 或互相覆盖
+_CACHE_LOCK = threading.Lock()
+_DIRTY = 0
+SAVE_EVERY = int(os.getenv("CATEGORY_CACHE_SAVE_EVERY", "20"))
 
 def load_cache():
     global _ATTR_CACHE
@@ -31,12 +38,20 @@ def load_cache():
         except Exception:
             _ATTR_CACHE = {}
 
-def save_cache():
-    try:
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(_ATTR_CACHE, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+def save_cache(force: bool = False):
+    """原子落盘：先写临时文件再 os.replace，失败不会留下半截缓存；每 SAVE_EVERY 条写一次"""
+    global _DIRTY
+    with _CACHE_LOCK:
+        _DIRTY += 1
+        if not force and SAVE_EVERY > 0 and _DIRTY % SAVE_EVERY != 0:
+            return
+        try:
+            tmp = f"{CACHE_FILE}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(_ATTR_CACHE, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, CACHE_FILE)
+        except Exception:
+            pass
 
 load_cache()
 

@@ -11,6 +11,7 @@ zip_standardizer_pipeline.py - 系统级报价单压缩包端到端标准化流�
 5. 自动去除多余无用表单（如无需审计表时纯净交付）
 """
 import os
+import sys
 import io
 import re
 import json
@@ -228,45 +229,56 @@ class ZipQuoteStandardizerPipeline:
 
                 # 规则 1: 若当前规格参数为空，系统级从视觉转录结果中精准匹配回填
                 if (not cur_spec or str(cur_spec).strip() == '') and spec_col:
-                    matched_spec = None
+                    matched_spec, match_how = None, ''
                     c_name = self.clean_name(row_name)
-                    # 优先按同图片+序号匹配
-                    for it in all_transcriptions:
-                        if it.get('_img_source') == row_img_file and str(it.get('seq')) == str(row_seq):
-                            matched_spec = it.get('spec')
-                            break
-                    # 次优先按品名完全匹配
-                    if not matched_spec:
-                        for it in all_transcriptions:
-                            t_name = self.clean_name(it.get('name', ''))
-                            if t_name and (t_name == c_name or t_name in c_name or c_name in t_name):
-                                matched_spec = it.get('spec')
-                                break
-                    # 再次优先跨图名称部分匹配
-                    if not matched_spec:
-                        for it in all_transcriptions:
-                            t_name = self.clean_name(it.get('name', ''))
-                            common = set(c_name) & set(t_name)
-                            if len(common) >= 3 or (len(c_name) <= 3 and len(common) >= 2):
-                                matched_spec = it.get('spec')
-                                break
-                    # 最后兜底：基于同图+价格+单位精准兜底对齐（解决 OCR 品名误差）
+
+                    def _unique(cands):
+                        """候选必须唯一：多条候选宁可留空也不猜（否则静默错配无法发现）"""
+                        specs = {str(it.get('spec')).strip() for it in cands if str(it.get('spec') or '').strip()}
+                        return (specs.pop(), '') if len(specs) == 1 else (None, '')
+
+                    # 一级：同图片 + 序号（确定性最高）
+                    hit = [it for it in all_transcriptions
+                           if it.get('_img_source') == row_img_file and str(it.get('seq')) == str(row_seq)]
+                    matched_spec, _ = _unique(hit)
+                    if matched_spec:
+                        match_how = '同图+序号'
+
+                    # 二级：品名完全匹配（含包含关系，但只接受唯一命中）
+                    if not matched_spec and c_name:
+                        hit = [it for it in all_transcriptions
+                               if (lambda t: t and (t == c_name or t in c_name or c_name in t))(self.clean_name(it.get('name', '')))]
+                        matched_spec, _ = _unique(hit)
+                        if matched_spec:
+                            match_how = '品名匹配'
+
+                    # 三级：字符重叠不作依据（“钢制防火门甲级” vs “乙级” 字符交集仍达 86%，必然错配）
+                    # 宁可留空，也不靠模糊相似度猜规格
+
+                    # 四级兜底：同图 + 价格（仅比价格，不比单位；价格必须唯一命中）
                     if not matched_spec:
                         price_col = headers.index('市场价') + 1 if '市场价' in headers else None
                         row_p = ws.cell(r, price_col).value if price_col else None
                         if row_p:
                             try:
                                 r_pval = float(str(row_p).replace('¥', '').replace(',', ''))
-                                for it in all_transcriptions:
-                                    if it.get('_img_source') == row_img_file and it.get('price'):
-                                        if abs(float(it['price']) - r_pval) < 0.01:
-                                            matched_spec = it.get('spec')
-                                            break
-                            except Exception:
+                                hit = [it for it in all_transcriptions
+                                       if it.get('_img_source') == row_img_file and it.get('price')
+                                       and abs(float(it['price']) - r_pval) < 0.01]
+                                matched_spec, _ = _unique(hit)
+                                if matched_spec:
+                                    match_how = '同图+价格(未比对单位)'
+                            except (TypeError, ValueError):
                                 pass
 
                     if matched_spec:
                         ws.cell(r, spec_col).value = matched_spec
+                        # 回填必留痕：供人工抽查是靠哪一条规则猜的
+                        if '报价说明' in headers:
+                            dc = headers.index('报价说明') + 1
+                            old = str(ws.cell(r, dc).value or '').strip()
+                            stamp = f'[规格回填] 来源:{match_how}'
+                            ws.cell(r, dc).value = f'{old}；{stamp}'.strip('；') if old else stamp
                         cur_spec = matched_spec
                         total_specs_filled += 1
 
@@ -332,11 +344,11 @@ class ZipQuoteStandardizerPipeline:
         return out_path
 
 if __name__ == '__main__':
-    pipeline = ZipQuoteStandardizerPipeline()
-    test_zips = [
-        ('/Users/qianqianawodebaobei/.gemini/antigravity/brain/ff156e75-4bef-45d5-828b-c11d0e4d6b2e/.user_uploaded/media_1793673628042_60ff8e76.zip', '青岛沃丰钢铁有限公司'),
-        ('/Users/qianqianawodebaobei/.gemini/antigravity/brain/ff156e75-4bef-45d5-828b-c11d0e4d6b2e/.user_uploaded/media_1793673628730_4ec3dd31.zip', '天津柴进电缆桥架制造有限公司'),
-        ('/Users/qianqianawodebaobei/.gemini/antigravity/brain/ff156e75-4bef-45d5-828b-c11d0e4d6b2e/.user_uploaded/media_1793673628039_d9369ba2.zip', '深圳市凝光时代科技有限公司')
-    ]
-    for zp, sname in test_zips:
-        pipeline.process_zip(zp, sname)
+    # 用法: python3 zip_standardizer_pipeline.py <报价单.zip> [供应商名称]
+    if len(sys.argv) < 2:
+        print(__doc__)
+        print('用法: python3 zip_standardizer_pipeline.py <报价单.zip> [供应商名称]')
+        raise SystemExit(1)
+    return_path = ZipQuoteStandardizerPipeline().process_zip(
+        sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)
+    print(return_path)
