@@ -1,3 +1,4 @@
+from llm_auditor import LLMAuditor
 from style_enhancer import apply_enterprise_style
 # -*- coding: utf-8 -*-
 """
@@ -30,6 +31,7 @@ class ZipQuoteStandardizerPipeline:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
         self.transcription_cache = {}
+        self.auditor = LLMAuditor()
 
     def extract_image_tables(self, img_bytes: bytes, img_name: str) -> list:
         """调用 Vision 视觉大模型，系统级转录报价单图片中的所有物料及属性规格"""
@@ -316,6 +318,13 @@ class ZipQuoteStandardizerPipeline:
         # 4. 保存为交付标准文件
         out_path = os.path.join(self.output_dir, f"{supplier_name}-标准解析.xlsx")
         for ws in wb.worksheets:
+            apply_enterprise_style(ws)
+        for ws in wb.worksheets:
+            sheet_headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+            try:
+                self.auditor.verify_and_auto_heal(ws, sheet_headers)
+            except Exception as e:
+                print(f"[Warning] 自我核对执行提示: {e}")
             apply_enterprise_style(ws)
         wb.save(out_path)
         print(f"[✓] 标准化成功: {out_path}")
