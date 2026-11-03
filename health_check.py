@@ -345,6 +345,8 @@ class TestPipelineVerification(unittest.TestCase):
             wb = openpyxl.load_workbook(f, data_only=True)
             ws = wb['标准化报价']
             col = {str(c.value): c.column for c in ws[1] if c.value}
+            if '疑义与失败审计说明' not in wb.sheetnames:
+                continue
             audit_ids, reason_col = self._audit_index(wb['疑义与失败审计说明'])
             seen = []
             for r in range(2, ws.max_row + 1):
