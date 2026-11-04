@@ -16,7 +16,7 @@ import urllib.request
 import urllib.error
 from typing import Dict, Any, Optional, Tuple, List
 
-from config import CATEGORY_ATTRS_API_URL
+from config import CATEGORY_ATTRS_API_URL, CATEGORY_TREE
 
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "category_attrs_cache.json")
 # 类别属性接口地址：不配置则不调用，直接用本地规则 (CATEGORY_CODE_FILE)
@@ -169,6 +169,56 @@ def validate_and_normalize_specs(category_code: str, specs: Dict[str, Any]) -> T
     return norm_specs, notes
 
 
+def _jev_pick(material_name: str, raw_specs: str, options: Dict[str, str]) -> Optional[str]:
+    """让 Jev 在给定选项里选一个（类别逐级下钻用）。只返回标签，不做任何额外推断"""
+    from llm_agent import JevJudge
+    judge = JevJudge()
+    if not judge.available or len(options) < 2:
+        return None
+    ans = judge.ask(
+        f"待判定物料名称: {material_name}\n原始技术参数与描述: {raw_specs or '(空)'}",
+        {"cat": {"type": "choice",
+                 "question": f"请为物料“{material_name}”选择最贴合的工程材料类别：",
+                 "criteria": options}},
+        timeout=12)
+    if not ans or "cat" not in ans:
+        return None
+    probs = {k: v for k, v in (ans["cat"].get("probabilities") or {}).items() if k in options}
+    if not probs:
+        return None
+    return max(probs.items(), key=lambda kv: kv[1])[0]
+
+
+# 同一物料名在一个批次里会重复成百上千行，下钻结果按名称缓存，不重复花 Jev 请求
+_DRILL_CACHE: Dict[str, Tuple[str, List[str]]] = {}
+
+
+def drill_down_category(material_name: str, raw_specs: str = "") -> Tuple[str, List[str]]:
+    """
+    标准库没有这个叫法时（灯管/球泡灯/线型灯）：按 一级→二级→三级 逐级让 Jev 选，
+    每级只给十几个选项，而不是把两千个节点塑给模型或直接掉进“000101 其他类别”。
+    """
+    name = (material_name or '').strip()
+    if not name or not CATEGORY_TREE:
+        return "", []
+    if name in _DRILL_CACHE:
+        return _DRILL_CACHE[name]
+
+    l1 = _jev_pick(name, raw_specs, {a: f"一级类别：{a}" for a in sorted({r[0] for r in CATEGORY_TREE})})
+    l2, code = "", ""
+    if l1 and l1 != '其他类别':
+        l2s = sorted({r[1] for r in CATEGORY_TREE if r[0] == l1})
+        l2 = l2s[0] if len(l2s) == 1 else _jev_pick(
+            name, raw_specs, {b: f"一级“{l1}”下的二级类别：{b}" for b in l2s})
+        if l2:
+            l3s = [(r[2], r[3]) for r in CATEGORY_TREE if r[0] == l1 and r[1] == l2]
+            code = l3s[0][0] if len(l3s) == 1 else (_jev_pick(
+                name, raw_specs, {c: f"二级“{l2}”下的三级类别：{n}" for c, n in l3s}) or '')
+    notes = [f"“{name}”标准库无同名节点，按一级/二级下钻判定为 {l1 or '?'} / {l2 or '?'}"]
+    _DRILL_CACHE[name] = (code, notes)
+    return code, notes
+
+
 def jev_score_category(material_name: str, raw_specs: str, candidate_codes: List[str]) -> Optional[Dict[str, Any]]:
     """
     使用 TypeSafe Jev 对候选分类进行选择题裁决与概率打分。
@@ -223,9 +273,15 @@ def jev_score_category(material_name: str, raw_specs: str, candidate_codes: List
         "probabilities": probabilities
     }
 
+def _finish(code: str, source: str, notes: List[str]) -> Tuple[str, str, List[str]]:
+    """“其他类别”(000101) 是库里的垃圾桶节点，选到它时必须留痕，不能静默当成正经分类"""
+    if code == '000101':
+        notes = notes + ["类别编码落到“000101 其他类别”：标准库无贴合节点，需人工确认分类"]
+    return code, source, notes
+
+
 def resolve_and_verify_category(material_name: str, raw_specs: str = "", llm_code: Optional[str] = None) -> Tuple[str, str, List[str]]:
-    """
-    结合标准库匹配、Jev 概率裁决打分与接口限定值校验的综合判定：
+    """结合标准库匹配、Jev 概率裁决打分与接口限定值校验的综合判定：
     返回: (category_code, source, notes)
     source: 'dict' (词库直中/接口校验通过), 'jev' (Jev 高置信度裁决), 'llm' (模型推荐), '' (未确定)
     """
@@ -246,10 +302,12 @@ def resolve_and_verify_category(material_name: str, raw_specs: str = "", llm_cod
         if len(chars) >= 2:
             hits = [k for k in CATEGORY_CODE_MAP if all(c in k for c in chars)]
         if not hits:
-            # 尝试主要偏旁/行业后缀（如“板”、“阀”、“门”、“漆”、“电缆”、“管”）
+            # 末字中心词联想（如“闸阀”“蝶阀”的“阀”）。只认汉字重叠：字母数字重叠会把
+            # “LED灯管”里的 E 匹配到“HDPE管”，进而把灯管分到 HDPE 管（142315）
+            cjk_chars = [c for c in name[:-1] if '\u4e00' <= c <= '\u9fa5']
             last_token = name[-1] if name else ""
-            if last_token:
-                hits = [k for k in CATEGORY_CODE_MAP if k.endswith(last_token) and any(c in k for c in name[:-1])]
+            if last_token and cjk_chars:
+                hits = [k for k in CATEGORY_CODE_MAP if k.endswith(last_token) and any(c in k for c in cjk_chars)]
 
     if hits:
         # 按匹配长度与相关度加入候选
@@ -257,10 +315,17 @@ def resolve_and_verify_category(material_name: str, raw_specs: str = "", llm_cod
             code = CATEGORY_CODE_MAP[k]
             if code not in candidate_codes:
                 candidate_codes.append(code)
-
     if llm_code and str(llm_code).strip() not in candidate_codes:
         candidate_codes.append(str(llm_code).strip())
 
+    # “其他类别”(000101) 是库里的垃圾桶节点：不许让它当选
+    candidate_codes = [c for c in candidate_codes if c != '000101']
+
+    if not candidate_codes:
+        drill_code, drill_notes = drill_down_category(name, raw_specs)
+        notes.extend(drill_notes)
+        if drill_code:
+            return _finish(drill_code, "jev_drill", notes)
     # 2. 候选决策：严格调用 Jev 概率裁决，选择概率/指标比例最高的分类
     if candidate_codes:
         jev_res = jev_score_category(name, raw_specs, candidate_codes)
@@ -271,14 +336,14 @@ def resolve_and_verify_category(material_name: str, raw_specs: str = "", llm_cod
             if valid_probs:
                 best_code = max(valid_probs.items(), key=lambda x: x[1])[0]
                 highest_prob = valid_probs[best_code]
-                return best_code, "jev_max_prob", notes
+                return _finish(best_code, "jev_max_prob", notes)
             elif jev_res.get("category_code"):
-                return jev_res["category_code"], "jev", notes
+                return _finish(jev_res["category_code"], "jev", notes)
 
     if candidate_codes:
-        return candidate_codes[0], "dict", notes
+        return _finish(candidate_codes[0], "dict", notes)
 
     if llm_code and re.fullmatch(r'[A-Za-z0-9]+', str(llm_code).strip()):
-        return str(llm_code).strip(), "llm", [f"类别编码 {llm_code} 未经标准编码库核验"]
+        return _finish(str(llm_code).strip(), "llm", notes + [f"类别编码 {llm_code} 未经标准编码库核验"])
 
     return "", "", ["类别编码未确定"]

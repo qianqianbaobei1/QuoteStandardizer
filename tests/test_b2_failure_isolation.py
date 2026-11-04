@@ -28,6 +28,10 @@ class TestB2FailureIsolation(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp(prefix="b2_test_")
         self.output_dir = os.path.join(self.test_dir, "output")
         os.makedirs(self.output_dir, exist_ok=True)
+        # 独立对账报告默认关闭 (EXPORT_INTEGRITY_CERTIFICATE=0)；本测试要验证它，显式打开
+        cert_patcher = patch("main.EXPORT_INTEGRITY_CERTIFICATE", True)
+        cert_patcher.start()
+        self.addCleanup(cert_patcher.stop)
 
         # 生成一个包含 2 页的测试 PDF (无文字层，强制进入视觉通道)
         self.pdf_path = os.path.join(self.test_dir, "test_2pages_scan.pdf")

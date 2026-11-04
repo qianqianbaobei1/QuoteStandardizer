@@ -43,7 +43,8 @@ JEV_MIN_CONFIDENCE = float(os.getenv("JEV_MIN_CONFIDENCE", "0.5"))
 # Jev 行类型每次请求带多少行
 JEV_ROW_BATCH = int(os.getenv("JEV_ROW_BATCH", "40"))
 # 注入清洗提示词的标准编码库条数上限 (库很大时逐批全量注入会显著推高 token 成本并引起延迟)
-CODE_LIBRARY_MAX_LINES = int(os.getenv("CODE_LIBRARY_MAX_LINES", "50"))
+# 每批注入多少条“相关资料库”条目 (按本批物料文字筛，不是库的前 N 条)
+CODE_LIBRARY_MAX_LINES = int(os.getenv("CODE_LIBRARY_MAX_LINES", "300"))
 
 # 线路引擎选择: 'gemini' (Gemini原生全模态端到端直传，首选) / 'traditional' (原切图流水线) / 'compare' (双轨对比)
 EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "traditional").strip().lower()
@@ -56,9 +57,14 @@ GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.6-flash")
 GEMINI_THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
 
 # 防欺瞒工程参数配置
+# 隐藏内容口径：Excel 里被隐藏的工作表 / 行 / 列一律不解析（厂商常把后台结算价、停用档位藏在隐藏表里）
+SKIP_HIDDEN_CONTENT = os.getenv("SKIP_HIDDEN_CONTENT", "1").strip().lower() in ("1", "true")
+
 ANTI_HALLUCINATION_MATH_AUDIT = os.getenv("ANTI_HALLUCINATION_MATH_AUDIT", "1").strip().lower() in ("1", "true")
 ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION = os.getenv("ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION", "1").strip().lower() in ("1", "true")
-EXPORT_INTEGRITY_CERTIFICATE = os.getenv("EXPORT_INTEGRITY_CERTIFICATE", "1").strip().lower() in ("1", "true")
+EXPORT_INTEGRITY_CERTIFICATE = os.getenv("EXPORT_INTEGRITY_CERTIFICATE", "0").strip().lower() in ("1", "true")
+# 严格引擎模式：1 时禁止任何静默回退，若请求引擎不可用或失败则直接硬失败退出；0 为兼容平滑模式 (但仍写入 degraded=true)
+STRICT_ENGINE = os.getenv("STRICT_ENGINE", "0").strip().lower() in ("1", "true")
 
 # LLM 调用重试次数
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
@@ -157,20 +163,48 @@ NATIONWIDE_REGIONS = [
 ]
 
 
+def _read_category_rows(path: str) -> list:
+    """把标准编码库文件读成原始行 (xlsx/csv 两路都认)"""
+    if not path or not os.path.exists(path):
+        return []
+    if path.lower().endswith(('.xlsx', '.xlsm')):
+        import openpyxl
+        ws = openpyxl.load_workbook(path, read_only=True, data_only=True).active
+        return [list(r) for r in ws.iter_rows(values_only=True)]
+    with open(path, encoding='utf-8-sig', newline='') as f:
+        return [list(r) for r in csv.reader(f)]
+
+
+def _load_category_tree(path: str) -> list:
+    """(一级名称, 二级名称, 三级编码, 三级名称)。按二级类别扩展候选时要用整棵树"""
+    rows = _read_category_rows(path)
+    if not rows:
+        return []
+    headers = [str(c or '').strip() for c in rows[0]]
+    idx = {k: next((i for i, h in enumerate(headers) if k in h), -1)
+           for k in ('一级类别名称', '二级类别名称', '三级类别编码', '三级类别名称')}
+    if any(i == -1 for i in idx.values()):
+        return []
+    tree = []
+    for r in rows[1:]:
+        if len(r) <= max(idx.values()):
+            continue
+        l3c = str(r[idx['三级类别编码']] or '').strip()
+        l3n = str(r[idx['三级类别名称']] or '').strip()
+        if not (l3c and l3n):
+            continue
+        tree.append((str(r[idx['一级类别名称']] or '').strip(),
+                     str(r[idx['二级类别名称']] or '').strip(), l3c, l3n))
+    return tree
+
+
 def _load_category_codes(path: str) -> dict:
     """读取标准分类编码文件：支持前两列为(名称,编码)或(编码,名称)，以及标准6列库(三级类别编码/名称)"""
     if not path:
         return {}
     if not os.path.exists(path):
         raise FileNotFoundError(f"CATEGORY_CODE_FILE 不存在: {path}")
-    rows = []
-    if path.lower().endswith(('.xlsx', '.xlsm')):
-        import openpyxl
-        ws = openpyxl.load_workbook(path, read_only=True, data_only=True).active
-        rows = [list(r) for r in ws.iter_rows(values_only=True)]
-    else:
-        with open(path, encoding='utf-8-sig', newline='') as f:
-            rows = [list(r) for r in csv.reader(f)]
+    rows = _read_category_rows(path)
     if not rows:
         return {}
     headers = [str(c or '').strip() for c in rows[0]]
@@ -200,6 +234,9 @@ def _load_category_codes(path: str) -> dict:
 
 
 CATEGORY_CODE_MAP = _load_category_codes(CATEGORY_CODE_FILE)
+
+# 整棵三级类别树：名称 → 编码命中不了时，按二级/一级类别扩展候选（灯管 → 灯具、光源 下的节点）
+CATEGORY_TREE = _load_category_tree(CATEGORY_CODE_FILE)
 
 
 def normalize_province(text) -> str:

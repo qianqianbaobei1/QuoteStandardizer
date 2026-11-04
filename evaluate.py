@@ -327,6 +327,41 @@ def _row_label(row, i):
     return f'#{i + 1} ' + ' '.join(p for p in parts if p)
 
 
+def check_math_consistency(rows: list, tol: float = 0.01) -> dict:
+    """
+    数学勾稽 warning 模式：
+    当行同时存在 qty、unit_price/price、amount/total 时检查 abs(qty*price - amount) <= max(tol, amount * 0.002)
+    仅告警与统计，绝对不改值。
+    """
+    audited = 0
+    suspects = []
+    for idx, r in enumerate(rows, 1):
+        p_val = canon_num(r.get('市场价') or r.get('单价') or r.get('price'))
+        q_val = canon_num(r.get('数量') or r.get('qty'))
+        a_val = canon_num(r.get('合价') or r.get('金额') or r.get('amount') or r.get('总价'))
+
+        if p_val is not None and p_val > 0 and q_val is not None and q_val > 0 and a_val is not None and a_val > 0:
+            audited += 1
+            expected = p_val * q_val
+            diff = abs(expected - a_val)
+            allowed_tol = max(tol, a_val * 0.002)
+            if diff > allowed_tol:
+                suspects.append({
+                    "row": idx,
+                    "price": p_val,
+                    "qty": q_val,
+                    "amount": a_val,
+                    "expected": round(expected, 2),
+                    "diff": round(diff, 2)
+                })
+
+    return {
+        "audited_rows": audited,
+        "suspect_count": len(suspects),
+        "suspects": suspects
+    }
+
+
 def diff_pair(a, b, label):
     diffs = []
     for field, kind, code, tol in FIELDS:
@@ -349,6 +384,14 @@ def diff_pair(a, b, label):
         ca, cb = canon_value(kind, va), canon_value(kind, vb)
         if ca is None and cb is None:
             continue
+
+        # P0-4 步①过渡等价：针对折扣比例字段，一边为空且另一边为 1.0 时视为等价，不判错
+        if field in ('工程价折扣比例', '折扣下限', '折扣上限'):
+            if (ca is None and cb == 1.0) or (ca == 1.0 and cb is None):
+                diffs.append(dict(label=label, field=field, ours=va, theirs=vb,
+                                  code='E00_EQUIV', level='INFO', note='空折扣与1.0过渡等价'))
+                continue
+
         if ca is None or cb is None:
             # 一边有值一边为空：本质上是缺失（E03/E11 等），而不是写法差异
             diffs.append(dict(label=label, field=field, ours=va, theirs=vb, code=code,
