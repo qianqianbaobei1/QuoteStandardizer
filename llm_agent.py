@@ -14,7 +14,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 from config import (DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, LLM_MAX_RETRIES, LLM_TEMPERATURE,
                     CATEGORY_CODE_MAP, CODE_LIBRARY_MAX_LINES, JEV_ROW_BATCH,
-                    TYPESAFE_API_KEY, TYPESAFE_BASE_URL, TYPESAFE_MODEL)
+                    TYPESAFE_API_KEY, TYPESAFE_BASE_URL, TYPESAFE_MODEL,
+                    GEMINI_API_KEY, GEMINI_MODEL)
+from gemini_client import GeminiClient
 
 # 表头关键词：单价类优先于合价/金额类，避免把“合价=数量×单价”当成单价
 UNIT_PRICE_KEYS = ['单价', '面价', '出厂价', '市场价', '预算价', '含税价', '报价', '价格']
@@ -87,6 +89,7 @@ class DeepSeekStandardizer:
         self.api_key = DEEPSEEK_API_KEY if api_key is None else api_key
         self.base_url = (base_url or DEEPSEEK_BASE_URL).rstrip('/')
         self.model = model or DEEPSEEK_MODEL
+        self.gemini_client = GeminiClient() if GEMINI_API_KEY else None
 
     def _post_chat(self, payload: dict, timeout: int, tag: str):
         """调用 chat/completions，带重试；失败返回 None 并打印原因 (不再静默)"""
@@ -112,11 +115,28 @@ class DeepSeekStandardizer:
         return None
 
     def analyze_sheet_layout(self, sheet_name: str, sample_rows: list) -> dict:
-        """调用 DeepSeek 动态推导任意工作表的空间拓扑与列角色"""
-        if not self.api_key or not sample_rows:
+        """优先调用 Gemini (Gemini 3.8 / 3.6 Flash) 动态推导任意工作表的空间拓扑与列角色"""
+        if not sample_rows:
             return self._dynamic_layout_fallback(sheet_name, sample_rows)
 
         user_content = f"工作表: {sheet_name}\n样本数据如下：\n" + json.dumps(sample_rows, ensure_ascii=False, indent=2)
+
+        # 优先 Gemini 引擎
+        if self.gemini_client:
+            res_json = self.gemini_client.generate_json(
+                prompt=user_content,
+                system_prompt=SYSTEM_PROMPT_LAYOUT_DYNAMIC,
+                timeout=25
+            )
+            if res_json:
+                parsed = self._validate_layout(res_json, sample_rows)
+                if parsed:
+                    parsed["_source"] = "gemini"
+                    return parsed
+
+        if not self.api_key:
+            return self._dynamic_layout_fallback(sheet_name, sample_rows)
+
         payload = {
             "model": self.model,
             "messages": [
@@ -184,40 +204,56 @@ class DeepSeekStandardizer:
 
     def standardize_batch(self, items: list, supplier_hint="", brand_hint="") -> list:
         """
-        调用 DeepSeek 批量实体槽位注入与工艺无损提炼。
-        每条结果带 _source 字段：'llm' 为模型清洗，'fallback' 为规则降级 (需人工复核)
+        调用 Gemini 3.8 / 3.6 Flash (或 DeepSeek 备用) 批量实体槽位注入与工艺无损提炼。
+        每条结果带 _source 字段：'gemini'/'llm' 为模型清洗，'fallback' 为规则降级 (需人工复核)
         """
         if not items:
             return []
 
-        if not self.api_key:
-            return self._dynamic_batch_fallback(items)
-
         if CODE_LIBRARY_TRUNCATED and CODE_LIBRARY_TEXT:
-            print(f"[DeepSeek] 编码库 {len(CATEGORY_CODE_MAP)} 条，按 CODE_LIBRARY_MAX_LINES="
+            print(f"[*] 编码库 {len(CATEGORY_CODE_MAP)} 条，按 CODE_LIBRARY_MAX_LINES="
                   f"{CODE_LIBRARY_MAX_LINES} 注入前 {len(_code_items)} 条 (可用 .env 调大)")
         user_content = (f"供应商: {supplier_hint or '未知'}，品牌: {brand_hint or '未知'}。\n"
                         f"标准分类编码库：\n{CODE_LIBRARY_TEXT or '(空)'}\n"
                         "待清洗物料数据清单：\n" + json.dumps(items, ensure_ascii=False))
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT_BATCH_DYNAMIC},
-                {"role": "user", "content": user_content}
-            ],
-            "temperature": LLM_TEMPERATURE,
-            "response_format": {"type": "json_object"}
-        }
 
-        content = self._post_chat(payload, timeout=60, tag="Batch")
         results = None
-        if content:
-            try:
-                results = self._extract_list(json.loads(self._clean_json_str(content)))
-            except Exception as e:
-                print(f"[DeepSeek Batch Warning] JSON 解析失败: {e}")
+
+        # 优先调用 Gemini 引擎
+        if self.gemini_client:
+            res_json = self.gemini_client.generate_json(
+                prompt=user_content,
+                system_prompt=SYSTEM_PROMPT_BATCH_DYNAMIC,
+                timeout=45
+            )
+            if res_json:
+                results = self._extract_list(res_json)
+                if results:
+                    for r in results:
+                        if isinstance(r, dict):
+                            r["_source"] = "gemini"
+
+        # 备选调用 DeepSeek
+        if results is None and self.api_key:
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT_BATCH_DYNAMIC},
+                    {"role": "user", "content": user_content}
+                ],
+                "temperature": LLM_TEMPERATURE,
+                "response_format": {"type": "json_object"}
+            }
+
+            content = self._post_chat(payload, timeout=60, tag="Batch")
+            if content:
+                try:
+                    results = self._extract_list(json.loads(self._clean_json_str(content)))
+                except Exception as e:
+                    print(f"[DeepSeek Batch Warning] JSON 解析失败: {e}")
+
         if results is None:
-            print("[DeepSeek Batch Warning] 本批切入规则降级。")
+            print("[LLM Batch Warning] 模型未返回有效清洗结果，切入规则降级。")
             return self._dynamic_batch_fallback(items)
 
         for r in results:

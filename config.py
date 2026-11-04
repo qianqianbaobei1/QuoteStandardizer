@@ -42,8 +42,8 @@ TYPESAFE_MODEL = os.getenv("TYPESAFE_MODEL", "jev-latest")
 JEV_MIN_CONFIDENCE = float(os.getenv("JEV_MIN_CONFIDENCE", "0.5"))
 # Jev 行类型每次请求带多少行
 JEV_ROW_BATCH = int(os.getenv("JEV_ROW_BATCH", "40"))
-# 注入清洗提示词的标准编码库条数上限 (库很大时逐批全量注入会显著推高 token 成本)
-CODE_LIBRARY_MAX_LINES = int(os.getenv("CODE_LIBRARY_MAX_LINES", "400"))
+# 注入清洗提示词的标准编码库条数上限 (库很大时逐批全量注入会显著推高 token 成本并引起延迟)
+CODE_LIBRARY_MAX_LINES = int(os.getenv("CODE_LIBRARY_MAX_LINES", "50"))
 
 # 线路引擎选择: 'gemini' (Gemini原生全模态端到端直传，首选) / 'traditional' (原切图流水线) / 'compare' (双轨对比)
 EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "gemini").strip().lower()
@@ -58,7 +58,7 @@ GEMINI_THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
 # 防欺瞒工程参数配置
 ANTI_HALLUCINATION_MATH_AUDIT = os.getenv("ANTI_HALLUCINATION_MATH_AUDIT", "1").strip().lower() in ("1", "true")
 ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION = os.getenv("ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION", "1").strip().lower() in ("1", "true")
-EXPORT_INTEGRITY_CERTIFICATE = os.getenv("EXPORT_INTEGRITY_CERTIFICATE", "0").strip().lower() in ("1", "true")
+EXPORT_INTEGRITY_CERTIFICATE = os.getenv("EXPORT_INTEGRITY_CERTIFICATE", "1").strip().lower() in ("1", "true")
 
 # LLM 调用重试次数
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
@@ -72,6 +72,13 @@ DEFAULT_TEMPLATE_PATH = os.getenv("TEMPLATE_PATH", "")
 CATEGORY_CODE_FILE = os.getenv("CATEGORY_CODE_FILE", "")
 # 类别属性/填写要求接口；留空则只按标准编码库的本地规则，不调外部接口
 CATEGORY_ATTRS_API_URL = os.getenv("CATEGORY_ATTRS_API_URL", "")
+
+# 材料配图接口配置 (来自 工料机类别.xlsx Sheet3)
+ILLUSTRATION_API_BASE_URL = os.getenv("ILLUSTRATION_API_BASE_URL", "https://ugw.m2.com.cn/agents-toolkit")
+ILLUSTRATION_TASK_CREATE_URL = os.getenv("ILLUSTRATION_TASK_CREATE_URL") or f"{ILLUSTRATION_API_BASE_URL.rstrip('/')}/api/material/illustrations"
+ILLUSTRATION_TASK_QUERY_URL = os.getenv("ILLUSTRATION_TASK_QUERY_URL") or f"{ILLUSTRATION_API_BASE_URL.rstrip('/')}/api/material/illustration-tasks"
+ENABLE_MATERIAL_ILLUSTRATION = os.getenv("ENABLE_MATERIAL_ILLUSTRATION", "1").strip().lower() in ("1", "true")
+DOWNLOAD_ILLUSTRATION_IMAGES = os.getenv("DOWNLOAD_ILLUSTRATION_IMAGES", "0").strip().lower() in ("1", "true")
 
 # 省级行政区全称、简称与常用别名
 PROVINCE_ABBR_MAP = {

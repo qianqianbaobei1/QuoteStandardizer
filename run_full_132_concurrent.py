@@ -28,10 +28,15 @@ from llm_auditor import LLMAuditor
 output_dir = Path('deliveries')
 output_dir.mkdir(parents=True, exist_ok=True)
 
-# 1. 扫描原始供应商目录：命令行第一个参数 > 环境变量 QS_SOURCE_ROOT
-root_agents = Path(sys.argv[1] if len(sys.argv) > 1 else os.getenv('QS_SOURCE_ROOT', ''))
+# 1. 扫描原始供应商目录：命令行第一个参数 > 环境变量 QS_SOURCE_ROOT > 默认全量经办人目录
+DEFAULT_SOURCE_ROOT = "/Users/qianqianawodebaobei/Desktop/数据异化/四人建材报价标准解析与评差全量汇总/02_四位经办人分类完整档案"
+cli_arg = sys.argv[1] if (len(sys.argv) > 1 and not sys.argv[1].startswith('-')) else ""
+source_path_str = cli_arg or os.getenv('QS_SOURCE_ROOT', DEFAULT_SOURCE_ROOT)
+root_agents = Path(source_path_str)
+
 if not str(root_agents).strip() or str(root_agents) in ('.', './') or not root_agents.is_dir():
-    print('用法: python3 run_full_132_concurrent.py <02_四位经办人分类完整档案 目录>   (或设置 QS_SOURCE_ROOT)')
+    print(f'未找到有效源文件目录: {root_agents}')
+    print('用法: python3 run_full_132_concurrent.py [<02_四位经办人分类完整档案 目录>] [--force]')
     sys.exit(1)
 all_tasks = []
 
@@ -47,8 +52,12 @@ def _clean_name(vendor_name: str) -> str:
     return re.sub(r'^\d+[\._、\s]*', '', vendor_name).strip()
 
 
+FORCE_RERUN = os.getenv('FORCE_RERUN', '0').strip().lower() in ('1', 'true') or '--force' in sys.argv
+
 def already_done(vendor_name: str):
-    """断点续跑：交付件存在且体检合格才算完成，避免重复烧 token"""
+    """断点续跑：若开启 FORCE_RERUN 则全部重跑；否则交付件存在且体检合格才跳过"""
+    if FORCE_RERUN:
+        return False
     xlsx = output_dir / f"{_clean_name(vendor_name)}-标准解析.xlsx"
     if not xlsx.exists():
         return False
@@ -131,36 +140,42 @@ def process_single_task(args):
     except Exception as e:
         return (clean_vname, agent_name, "FAIL", str(e), 0, 0)
 
-# 使用 4 线程并发执行，平衡 API 吞吐与系统负载
-MAX_WORKERS = 4
-completed_results = []
+def main():
+    # 使用 4 线程并发执行，平衡 API 吞吐与系统负载
+    max_workers_env = os.getenv("MAX_WORKERS", "4")
+    MAX_WORKERS = int(max_workers_env) if max_workers_env.isdigit() else 4
+    completed_results = []
 
-print(f"\n[*] 启动 {MAX_WORKERS} 线程池执行...")
-with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-    futures = {executor.submit(process_single_task, task): task for task in all_tasks}
-    for fut in as_completed(futures):
-        res = fut.result()
-        completed_results.append(res)
-        vname, aname, st, info, cnt, d = res
-        print(f"进度: {len(completed_results)}/{len(all_tasks)} | {vname}: {st} ({cnt}行)")
+    print(f"\n[*] 启动 {MAX_WORKERS} 线程池执行...")
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(process_single_task, task): task for task in all_tasks}
+        for fut in as_completed(futures):
+            res = fut.result()
+            completed_results.append(res)
+            vname, aname, st, info, cnt, d = res
+            print(f"进度: {len(completed_results)}/{len(all_tasks)} | {vname}: {st} ({cnt}行)")
 
-print("\n==================== 全量 132 家解析汇总报告 ====================")
-success_cnt = sum(1 for r in completed_results if r[2] == "PASS")
-skip_cnt = sum(1 for r in completed_results if r[2] == "SKIP")
-fail_cnt = sum(1 for r in completed_results if r[2] not in ("PASS", "SKIP"))
-total_items = sum(r[4] for r in completed_results)
-print(f"总计: {len(completed_results)} 家 | 成功: {success_cnt} 家 | 跳过(已完成): {skip_cnt} 家 | "
-      f"失败/空单: {fail_cnt} 家 | 本次解析标准物料: {total_items} 条")
-report_path = output_dir / "_批量解析结果.txt"
-with open(report_path, "w", encoding="utf-8") as fh:
-    fh.write(f"总计 {len(completed_results)} 家 | 成功 {success_cnt} | 跳过 {skip_cnt} | 失败 {fail_cnt}\n\n")
-    for vname, aname, st, info, cnt, d in sorted(completed_results, key=lambda x: (x[2], x[0])):
-        fh.write(f"{st:5s} {cnt:5d}行 [{aname}] {vname}\n        {info}\n")
-print(f"[报告] 明细已写入 {report_path}")
-if fail_cnt:
-    print("\n失败清单:")
-    for vname, aname, st, info, cnt, d in completed_results:
-        if st not in ('PASS', 'SKIP'):
-            print(f"  ✗ [{aname}] {vname}: {info}")
-# 任一家失败即退出码 2（与 run_batch_standardize 口径一致）
-sys.exit(0 if fail_cnt == 0 else 2)
+    print("\n==================== 全量 132 家解析汇总报告 ====================")
+    success_cnt = sum(1 for r in completed_results if r[2] == "PASS")
+    skip_cnt = sum(1 for r in completed_results if r[2] == "SKIP")
+    fail_cnt = sum(1 for r in completed_results if r[2] not in ("PASS", "SKIP"))
+    total_items = sum(r[4] for r in completed_results)
+    print(f"总计: {len(completed_results)} 家 | 成功: {success_cnt} 家 | 跳过(已完成): {skip_cnt} 家 | "
+          f"失败/空单: {fail_cnt} 家 | 本次解析标准物料: {total_items} 条")
+    report_path = output_dir / "_批量解析结果.txt"
+    with open(report_path, "w", encoding="utf-8") as fh:
+        fh.write(f"总计 {len(completed_results)} 家 | 成功 {success_cnt} | 跳过 {skip_cnt} | 失败 {fail_cnt}\n\n")
+        for vname, aname, st, info, cnt, d in sorted(completed_results, key=lambda x: (x[2], x[0])):
+            fh.write(f"{st:5s} {cnt:5d}行 [{aname}] {vname}\n        {info}\n")
+    print(f"[报告] 明细已写入 {report_path}")
+    if fail_cnt:
+        print("\n失败清单:")
+        for vname, aname, st, info, cnt, d in completed_results:
+            if st not in ('PASS', 'SKIP'):
+                print(f"  ✗ [{aname}] {vname}: {info}")
+    # 任一家失败即退出码 2（与 run_batch_standardize 口径一致）
+    sys.exit(0 if fail_cnt == 0 else 2)
+
+
+if __name__ == '__main__':
+    main()

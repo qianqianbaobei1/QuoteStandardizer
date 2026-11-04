@@ -203,8 +203,8 @@ class TermsExtractor:
         # 1. 优先使用 Gemini 原生全模态视觉
         if genai and GEMINI_API_KEY:
             try:
-                # 增加客户端超时保护 (5秒快速探活，失败即跳过或降级)
-                http_opts = types.HttpOptions(timeout=5.0) if hasattr(types, "HttpOptions") else None
+                # 增加客户端超时保护 (15秒超时保护，满足 Google API 最小 10s 要求)
+                http_opts = types.HttpOptions(timeout=15.0) if hasattr(types, "HttpOptions") else None
                 client_kwargs = {"api_key": GEMINI_API_KEY}
                 if http_opts: client_kwargs["http_options"] = http_opts
                 client = genai.Client(**client_kwargs)

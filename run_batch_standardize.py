@@ -12,7 +12,7 @@ import zipfile
 import traceback
 from pathlib import Path
 
-from main import process_excel, process_pdf
+from main import process_excel, process_pdf, _field_value_problems
 from terms_extractor import find_terms_image, TermsExtractor
 from config import DEFAULT_TEMPLATE_PATH
 
@@ -136,6 +136,10 @@ def verify_delivery_file(path: str) -> list:
     # 个别 0 价行由对账/批注负责（原表本就无价）；过半才是真坏了
     elif zero > rows * 0.5:
         errs.append(f"{zero}/{rows} 行市场价不为正")
+    # 固定字段值域：品牌列不许是价格，地区列不许是价格/规格串
+    all_rows = [r for r in ws.iter_rows(min_row=2, values_only=True)
+                if any(v not in (None, '') for v in r)]
+    errs.extend(_field_value_problems([c.value for c in ws[1]], all_rows))
     return errs
 
 

@@ -15,10 +15,13 @@ import sys
 import io
 import re
 import json
+import copy
 import base64
 import zipfile
+from difflib import SequenceMatcher
 import openpyxl
 from openpyxl.drawing.image import Image as OpenpyxlImage
+from openpyxl.comments import Comment
 from openpyxl.utils import get_column_letter
 import requests
 
@@ -26,6 +29,89 @@ from config import (
     DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, VISION_MODEL,
     DEFAULT_OUTPUT_DIR
 )
+from builder import STANDARD_HEADERS
+
+# 线上导出与 GenOffice 33 列标准只差个大小写/百分号，统一按标准列名交付
+HEADER_ALIAS = {'报价id': '报价ID', '增值税税率%': '增值税税率'}
+
+
+def normalize_headers(ws):
+    """把表头改写成标准列名（保留其余列不动）"""
+    for c in range(1, ws.max_column + 1):
+        cell = ws.cell(1, c)
+        name = str(cell.value).strip() if cell.value is not None else ''
+        if name in HEADER_ALIAS:
+            cell.value = HEADER_ALIAS[name]
+
+def collapse_to_single_sheet(wb, sheet_name='标准化报价', column_order=None):
+    """把多张分类 Sheet 合并成一张交付主表（线上导出按类别分了多张表）。
+    列按表头名对齐，重名按出现次序区分，缺列留空；样式、批注、内嵌图片随单元格迁移。
+    column_order 传入标准列名（如 STANDARD_HEADERS）时，缺的标准列补空列、列序按标准排，动态列跟在后头。"""
+    need_rewrite = bool(column_order) or wb.sheetnames != [sheet_name]
+    if not need_rewrite:
+        return wb[sheet_name]
+
+    def keys_of(ws):
+        seen, keys = {}, []
+        for c in range(1, ws.max_column + 1):
+            name = ws.cell(1, c).value
+            key = str(name).strip() if name not in (None, '') else f'@col{c}'
+            n = seen.get(key, 0)
+            seen[key] = n + 1
+            keys.append((key, n))
+        return keys
+
+    sheets = [(ws, keys_of(ws)) for ws in wb.worksheets]
+    order, head = [], {}
+    for ws, keys in sheets:
+        for c, k in enumerate(keys, 1):
+            if k not in head:
+                head[k] = ws.cell(1, c).value
+                order.append(k)
+
+    if column_order:
+        seen, desired = {}, []
+        for name in column_order:
+            key = str(name).strip()
+            n = seen.get(key, 0)
+            seen[key] = n + 1
+            desired.append((key, n))
+        for k in desired:
+            if k not in head:
+                head[k] = k[0]  # 标准列但原表没有：补一个空列，表头用标准名
+        order = desired + [k for k in order if k not in desired]
+    col_idx = {k: i + 1 for i, k in enumerate(order)}
+
+    out = wb.create_sheet('__merged__')
+    for k in order:
+        out.cell(1, col_idx[k], head[k])
+
+    r_out = 2
+    for ws, keys in sheets:
+        cmap = {c: col_idx[k] for c, k in enumerate(keys, 1)}
+        for r in range(2, ws.max_row + 1):
+            for c, k in enumerate(keys, 1):
+                src = ws.cell(r, c)
+                if src.value is None:
+                    continue
+                dst = out.cell(r_out + r - 2, cmap[c])
+                dst.value = src.value
+                dst._style = copy.copy(src._style)  # ponytail: 公开 API 无批量复制，升级 openpyxl 时校验
+                if src.comment is not None:
+                    dst.comment = src.comment
+        for img in list(getattr(ws, '_images', [])):
+            frm = img.anchor._from
+            frm.row += r_out - 2
+            if frm.col + 1 in cmap:
+                frm.col = cmap[frm.col + 1] - 1
+            out.add_image(img)
+        r_out += max(0, ws.max_row - 1)
+
+    for ws, _ in sheets:
+        wb.remove(ws)
+    out.title = sheet_name
+    return out
+
 
 class ZipQuoteStandardizerPipeline:
     def __init__(self, output_dir=DEFAULT_OUTPUT_DIR):
@@ -122,9 +208,13 @@ class ZipQuoteStandardizerPipeline:
 
     @staticmethod
     def parse_spec_dict(spec_text: str) -> dict:
-        """结构化解析规格参数字符串为字典映射"""
+        """结构化解析规格参数字符串为字典映射，严禁混入内部编码与非物理属性"""
         if not spec_text:
             return {}
+        forbidden = ('表头', '表标题', '基价', '单价', '总价', '金额', '指导价', '调价',
+                     '产品编码', '物料编码', '商品编码', '内部编码', '条形码', '编码', '条码', '代码',
+                     '税号', '账号', '帐号', '开户行', '一级类别', '二级类别', '三级类别', '材料名称', '属性项属性值',
+                     '物料名称', '类别名称', '分类编码')
         res = {}
         items = re.split(r'[;\n；]', str(spec_text))
         for it in items:
@@ -133,10 +223,14 @@ class ZipQuoteStandardizerPipeline:
                 continue
             if ':' in it:
                 k, v = it.split(':', 1)
-                res[k.strip()] = v.strip()
+                k_clean = k.strip()
+                if not any(fb in k_clean for fb in forbidden):
+                    res[k_clean] = v.strip()
             elif '：' in it:
                 k, v = it.split('：', 1)
-                res[k.strip()] = v.strip()
+                k_clean = k.strip()
+                if not any(fb in k_clean for fb in forbidden):
+                    res[k_clean] = v.strip()
         return res
 
     @staticmethod
@@ -205,11 +299,14 @@ class ZipQuoteStandardizerPipeline:
         total_images_embedded = 0
 
         for ws in wb.worksheets:
+            normalize_headers(ws)
             headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
-            
+
             # 定位关键列
             spec_col = headers.index('厂家原始规格参数') + 1 if '厂家原始规格参数' in headers else None
+            multiline_spec_col = headers.index('规格参数') + 1 if '规格参数' in headers else None
             name_col = headers.index('名称规格') + 1 if '名称规格' in headers else None
+            page_col = headers.index('厂家报价文件页码') + 1 if '厂家报价文件页码' in headers else None
             img_file_col = headers.index('厂家报价图片文件名') + 1 if '厂家报价图片文件名' in headers else None
             img_col = headers.index('图片') + 1 if '图片' in headers else None
             seq_col = headers.index('顺序号') + 1 if '顺序号' in headers else None
@@ -225,7 +322,39 @@ class ZipQuoteStandardizerPipeline:
                 row_name = str(ws.cell(r, name_col).value or "").strip() if name_col else ""
                 row_seq = ws.cell(r, seq_col).value if seq_col else None
                 cur_spec = ws.cell(r, spec_col).value if spec_col else None
-                row_img_file = str(ws.cell(r, img_file_col).value or "quote_img1.png").strip() if img_file_col else "quote_img1.png"
+
+                # 彻底净化现有规格参数：剥除混入的产品编码与内部杂质
+                if spec_col and cur_spec:
+                    raw_s = str(cur_spec)
+                    cleaned_s = re.sub(r'(?:^|[;；\s])(?:产品编码|物料编码|商品编码|内部编码|条形码|条码|代码|三级类别编码|二级类别|一级类别|材料名称|属性项属性值)\s*[:：][^;；\n]*', '', raw_s)
+                    cleaned_s = re.sub(r'^[;；\s]+|[;；\s]+$', '', cleaned_s).strip()
+                    ws.cell(r, spec_col).value = cleaned_s if cleaned_s else None
+                    cur_spec = cleaned_s
+
+                if multiline_spec_col:
+                    multi_s = str(ws.cell(r, multiline_spec_col).value or '')
+                    if multi_s:
+                        clean_lines = []
+                        for l in multi_s.split('\n'):
+                            k = l.split(':', 1)[0].strip() if ':' in l else (l.split('：', 1)[0].strip() if '：' in l else l.strip())
+                            if any(fb in k for fb in ('产品编码', '物料编码', '商品编码', '内部编码', '条形码', '编码', '条码', '代码', '三级类别编码', '二级类别', '一级类别', '材料名称', '属性项属性值', '物料名称', '类别名称', '分类编码')):
+                                continue
+                            clean_lines.append(l)
+                        ws.cell(r, multiline_spec_col).value = '\n'.join(clean_lines) if clean_lines else None
+
+                row_img_file = str(ws.cell(r, img_file_col).value or "").strip() if img_file_col else ""
+                if not row_img_file:
+                    page_val = str(ws.cell(r, page_col).value or "").strip() if page_col else ""
+                    m_p = re.search(r'\d+', page_val)
+                    if m_p:
+                        row_img_file = f"quote_img{m_p.group(0)}.png"
+                    elif page_val:
+                        safe_p = re.sub(r'[\/\\:\*\?\"<>\|]', '_', page_val).strip()
+                        row_img_file = f"quote_img_{safe_p}.png"
+                    else:
+                        row_img_file = "quote_img1.png"
+                    if img_file_col:
+                        ws.cell(r, img_file_col).value = row_img_file
 
                 # 规则 1: 若当前规格参数为空，系统级从视觉转录结果中精准匹配回填
                 if (not cur_spec or str(cur_spec).strip() == '') and spec_col:
@@ -273,12 +402,10 @@ class ZipQuoteStandardizerPipeline:
 
                     if matched_spec:
                         ws.cell(r, spec_col).value = matched_spec
-                        # 回填必留痕：供人工抽查是靠哪一条规则猜的
-                        if '报价说明' in headers:
-                            dc = headers.index('报价说明') + 1
-                            old = str(ws.cell(r, dc).value or '').strip()
-                            stamp = f'[规格回填] 来源:{match_how}'
-                            ws.cell(r, dc).value = f'{old}；{stamp}'.strip('；') if old else stamp
+                        # 回填必留痕，但不污染业务字段：痕迹挂在规格参数单元格的批注里，供人工抽查是靠哪条规则猜的
+                        target = ws.cell(r, spec_col)
+                        prev = f'{target.comment.text}；' if target.comment and target.comment.text else ''
+                        target.comment = Comment(f'{prev}[规格回填] 来源:{match_how}', 'QuoteStandardizer')
                         cur_spec = matched_spec
                         total_specs_filled += 1
 
@@ -291,7 +418,9 @@ class ZipQuoteStandardizerPipeline:
                             h_norm = self.clean_name(h_text)
                             for k, v in spec_dict.items():
                                 k_norm = self.clean_name(k)
-                                if (k_norm == h_norm or k_norm in h_norm or h_norm in k_norm) and not ws.cell(r, c_idx).value:
+                                # 只认「表头 = 属性名」或「表头 = 属性名+单位后缀」；
+                                # 双向包含会错配（实测 spec 的「类型:电容式」被填进「项目类型」列）
+                                if (k_norm == h_norm or h_norm.startswith(k_norm)) and not ws.cell(r, c_idx).value:
                                     ws.cell(r, c_idx).value = v
                                     break
 
@@ -303,8 +432,10 @@ class ZipQuoteStandardizerPipeline:
                 # 4. 若匹配到真实产品图，单元格清空文字并缩放嵌入（宽 135，高 90）；若包内没有该产品图片文件，则保持单元格清空
                 if img_col:
                     matched_product_img_path = None
+                    row_img_cells = []
                     for cc in range(img_col, ws.max_column + 1):
                         val = str(ws.cell(r, cc).value or '').strip()
+                        row_img_cells.append(cc)
                         if val:
                             base_val = os.path.basename(val)
                             # 过滤非产品图（报价单底稿图 quote_img 不作为产品图嵌入）
@@ -314,9 +445,11 @@ class ZipQuoteStandardizerPipeline:
                                     if local_name == base_val or local_name == val or (base_val and base_val in local_name):
                                         matched_product_img_path = local_path
                                         break
-                        ws.cell(r, cc).value = None  # 彻底清空原有文件名文字，杜绝文字重叠
 
                     if matched_product_img_path and os.path.exists(matched_product_img_path):
+                        # 只有真的嵌了图才清空文字，否则保留原图片文件名（清空等于丢信息）
+                        for cc in row_img_cells:
+                            ws.cell(r, cc).value = None
                         ws.row_dimensions[r].height = 95
                         try:
                             img = OpenpyxlImage(matched_product_img_path)
@@ -326,9 +459,47 @@ class ZipQuoteStandardizerPipeline:
                             total_images_embedded += 1
                         except Exception as e:
                             print(f"[Error] Failed to embed product image {matched_product_img_path}: {e}")
+                    else:
+                        # 规则 4: 接入材料配图接口，通过材料名称在接口检索配图，并回填图片在线链接
+                        try:
+                            from material_illustration_service import default_illustration_service
+                            from openpyxl.styles import Font
+                            if row_name:
+                                illust = default_illustration_service.fetch_illustration_by_name(
+                                    row_name,
+                                    company_name=supplier_name,
+                                    specification=str(cur_spec or "")
+                                )
+                                if illust and illust.get("pictureUrl"):
+                                    pic_url = illust["pictureUrl"]
+                                    pic_name = illust.get("pictureName") or ""
+                                    folder_name = illust.get("folderName") or ""
+                                    cell_img = ws.cell(r, img_col)
+                                    cell_img.value = pic_url
+                                    cell_img.hyperlink = pic_url
+                                    cell_img.font = Font(name='宋体', size=10, color='0563C1', underline='single')
+                                    if img_file_col:
+                                        ws.cell(r, img_file_col).value = None
+                                    folder_col = headers.index('图片文件夹') + 1 if '图片文件夹' in headers else None
+                                    if folder_col and folder_name and not ws.cell(r, folder_col).value:
+                                        ws.cell(r, folder_col).value = folder_name
+                        except Exception:
+                            pass
 
-        # 4. 保存为交付标准文件
+        # 4. 保存为交付标准文件（多 Sheet 收口成单张「标准化报价」，列序对齐 GenOffice 33 列）
+        collapse_to_single_sheet(wb, column_order=STANDARD_HEADERS)
         out_path = os.path.join(self.output_dir, f"{supplier_name}-标准解析.xlsx")
+        ws_main = wb['标准化报价']
+        main_hdr = [c.value for c in ws_main[1]]
+        if '供应商名称' in main_hdr:
+            sc = main_hdr.index('供应商名称') + 1
+            for r in range(2, ws_main.max_row + 1):
+                cell = ws_main.cell(r, sc)
+                if not cell.value:
+                    cell.value = supplier_name
+                    cell.comment = Comment('来源:压缩包文件名推断', 'QuoteStandardizer')
+        name_col = main_hdr.index('名称规格') + 1
+        orig_names = {r: ws_main.cell(r, name_col).value for r in range(2, ws_main.max_row + 1)}
         for ws in wb.worksheets:
             apply_enterprise_style(ws)
         for ws in wb.worksheets:
@@ -338,6 +509,17 @@ class ZipQuoteStandardizerPipeline:
             except Exception as e:
                 print(f"[Warning] 自我核对执行提示: {e}")
             apply_enterprise_style(ws)
+
+        # 5. 品名以原表为准：模型自愈可以查错别字，但不能整行换成另一个物料的名字
+        #    （实测：「广播劝放」→「广播功放」该留；「班级信息发布终端」→「光模块」必须回退）
+        for r, v in orig_names.items():
+            cur = ws_main.cell(r, name_col).value
+            if cur != v:
+                if SequenceMatcher(None, str(v or ''), str(cur or '')).ratio() >= 0.6:
+                    print(f"[名称纠错] 行{r}: {v!r} -> {cur!r}")
+                else:
+                    print(f"[名称保护] 行{r} 模型自愈改名 {cur!r} -> 回退原表 {v!r}")
+                    ws_main.cell(r, name_col).value = v
         wb.save(out_path)
         print(f"[✓] 标准化成功: {out_path}")
         print(f"    - 处理总行数: {total_rows_processed} | 补齐规格行: {total_specs_filled} | 内嵌图片: {total_images_embedded}\n")

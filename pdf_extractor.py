@@ -353,7 +353,7 @@ class PDFTableExtractor:
             tables = self._grids_from_tiles(page, base, num_tiles=3)
         if not tables:
             raise RuntimeError(f"{base}: 视觉模型未返回表格，请检查 VISION_* 配置或模型是否支持图片输入")
-        if first.get("page_title"):
+        if first and first.get("page_title"):
             self.page_titles.append(str(first["page_title"]))
 
         second_tables = None

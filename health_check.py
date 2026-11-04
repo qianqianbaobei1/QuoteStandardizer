@@ -427,7 +427,7 @@ class TestPipelineVerification(unittest.TestCase):
         self.assertEqual(missing, [], f'_row_values 漏了标准列: {missing}')
 
     def test_16_llm_auditor_cannot_touch_price_or_verbatim(self):
-        """自愈审计铁律：模型不得改价格/原文留痕/标识列，且改写必须留痕到报价说明"""
+        """自愈审计铁律：模型不得改价格/原文留痕/标识列，且改写必须留痕（痕到批注，不污染业务字段）"""
         import openpyxl
         from unittest import mock
         from llm_auditor import LLMAuditor
@@ -452,7 +452,29 @@ class TestPipelineVerification(unittest.TestCase):
         self.assertEqual(vals['市场价'], 128.5, '价格只能取原表，模型无权改写')
         self.assertEqual(vals['厂家原始规格参数'], '原文:厚度1.5;基价18000', '原文留痕不可改写')
         self.assertEqual(vals['名称规格'], '成品名', '允许字段应当被自愈')
-        self.assertIn('[模型自愈]', str(vals['报价说明']), '自愈必须留痕到报价说明')
+        self.assertEqual(vals['报价说明'], '基价另计', '报价说明里的业务修正照常写入')
+        self.assertIn('[模型自愈]', str(ws.cell(2, 2).comment.text), '自愈痕迹必须留痕到被改单元格的批注')
+
+    def test_18_fixed_fields_reject_foreign_values(self):
+        """固定字段值域门禁：品牌/地区列读到价格时必须拦下，不能当成品牌/省名落盘"""
+        from main import _looks_like_brand, _region_fields, _field_value_problems
+        # 品牌：价格/数量/规格串都不是品牌
+        for v in ('1340', 1340, '¥2,450', '1,280.00', '4.8', '13%'):
+            self.assertFalse(_looks_like_brand(v), f'{v!r} 不应被当成品牌')
+        for v in ('山东佰腾', '3M', '奥斯特', 'TOTO'):
+            self.assertTrue(_looks_like_brand(v), f'{v!r} 应被当成品牌')
+        # 地区：认不出的原值不准回填到省列（特普丽原单“报价区域”列里就是单价）
+        prov, city, note = _region_fields('11')
+        self.assertEqual(prov, '')
+        self.assertIn('不是省市名称', note)
+        self.assertEqual(_region_fields('京津冀+山东')[0], '北京市、天津市、河北省、山东省')
+        # 读回体检：整表里能定位到出问题的那一行
+        header = ['品牌', '报价地区省']
+        rows = [['奥斯特', '广东省'], ['1340', '11']]
+        errs = _field_value_problems(header, rows)
+        self.assertEqual(len(errs), 2)
+        self.assertTrue(any('第3行' in e and '品牌' in e for e in errs))
+        self.assertTrue(any('第3行' in e and '报价地区省' in e for e in errs))
 
 
 if __name__ == '__main__':

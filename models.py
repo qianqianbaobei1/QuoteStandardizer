@@ -80,6 +80,7 @@ class CanonicalMaterialItem:
 
     raw_spec: str = ""                 # 厂家原始规格参数 (原文留痕)
     file_page: str = ""                # 原始文件来源页 / Sheet
+    quote_image_filename: str = ""     # 厂家报价原件截图文件名 (对应页面/Sheet的原件截图)
     unit: str = ""                     # 计量单位
 
     market_price: float = 0.0          # 原表单价
@@ -135,9 +136,27 @@ class CanonicalMaterialItem:
     image_filenames: List[str] = field(default_factory=list)
     image_bytes_list: List[bytes] = field(default_factory=list)
 
+    # 材料配图接口资产 (来自工料机类别.xlsx Sheet3 材料配图接口)
+    picture_url: str = ""                               # 配图在线链接
+    picture_urls: List[str] = field(default_factory=list) # 全部配图在线链接
+    illustration_picture_name: str = ""                 # 配图规范文件名
+    illustration_folder: str = ""                       # 配图所属目录
+
     def format_multiline_specs(self) -> str:
-        """规格参数多行展示：按参数原顺序每行一项 “参数名:值”；没有参数时为空"""
-        return "\n".join(f"{k}:{v}" for k, v in self.structured_specs.items() if v not in (None, ""))
+        """规格参数多行展示：按参数原顺序每行一项 “参数名:值”；过滤非物理参数内部编码；没有参数时为空"""
+        forbidden = ('表头', '表标题', '基价', '单价', '总价', '金额', '指导价', '调价',
+                     '产品编码', '物料编码', '商品编码', '内部编码', '条形码', '编码', '条码', '代码',
+                     '税号', '账号', '帐号', '开户行', '一级类别', '二级类别', '三级类别', '材料名称', '属性项属性值',
+                     '物料名称', '类别名称', '分类编码')
+        lines = []
+        for k, v in self.structured_specs.items():
+            if v in (None, ""):
+                continue
+            k_str = str(k).strip()
+            if any(fb in k_str for fb in forbidden):
+                continue
+            lines.append(f"{k}:{v}")
+        return "\n".join(lines)
 
 
 @dataclass

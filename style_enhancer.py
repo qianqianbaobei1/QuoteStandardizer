@@ -34,7 +34,7 @@ PRICE_HEADERS = {'市场价', '工程价', '单价', '出厂价', '含税价', '
 SPEC_HEADERS = {'厂家原始规格参数', '规格参数', '属性项属性值', '详细描述', '技术参数'}
 
 def format_specs_to_multiline(val_str: str) -> str:
-    """将分号/逗号分隔的键值参数转换为美观的换行结构化展示"""
+    """旧展示层：把分号分隔的参数转成换行。已停用：原文留痕不可改写，交付表保留 键:值; 原样。"""
     if not val_str:
         return ""
     items = re.split(r'[;\n；]', str(val_str))
@@ -52,6 +52,16 @@ def format_specs_to_multiline(val_str: str) -> str:
         else:
             cleaned.append(it)
     return "\n".join(cleaned)
+
+def _get_anchor_row(anchor):
+    if anchor is None:
+        return None
+    if isinstance(anchor, str):
+        m = re.search(r'\d+', anchor)
+        return int(m.group(0)) if m else None
+    if hasattr(anchor, '_from') and hasattr(anchor._from, 'row'):
+        return anchor._from.row + 1
+    return None
 
 def apply_enterprise_style(ws):
     """为 openpyxl 的 Worksheet 应用完整的商业级现代美学样式"""
@@ -107,6 +117,7 @@ def apply_enterprise_style(ws):
     center_align = Alignment(horizontal='center', vertical='center')
     left_align_wrap = Alignment(horizontal='left', vertical='center', wrap_text=True)
     right_align = Alignment(horizontal='right', vertical='center')
+    image_rows = {r_idx for r_idx in (_get_anchor_row(getattr(img, 'anchor', None)) for img in ws._images) if r_idx is not None}
 
     for r in range(2, ws.max_row + 1):
         base_fill = zebra_odd if (r % 2 == 1) else zebra_even
@@ -115,17 +126,22 @@ def apply_enterprise_style(ws):
         for c_idx, h in enumerate(headers, 1):
             cell = ws.cell(row=r, column=c_idx)
             cell.border = thin_border
-            cell.font = body_font
+            if cell.hyperlink or (isinstance(cell.value, str) and (cell.value.startswith('http://') or cell.value.startswith('https://'))):
+                cell.font = Font(name='微软雅黑', size=9.5, color='0563C1', underline='single')
+            else:
+                cell.font = body_font
             cell.fill = base_fill
 
-            # 规格参数多行结构化
-            if h in SPEC_HEADERS:
+            # 厂家报价图片文件名：保留底稿截图文件名与居中对齐
+            if h == '厂家报价图片文件名':
+                cell.alignment = center_align
+            # 规格参数：原文留痕，值一律不改写（README 硬规则：键:值; 原样保留），只按列宽估算显示行高
+            elif h in SPEC_HEADERS:
                 cell.font = spec_font
                 cell.alignment = left_align_wrap
                 if cell.value:
-                    formatted = format_specs_to_multiline(str(cell.value))
-                    cell.value = formatted
-                    lines_cnt = formatted.count('\n') + 1
+                    text = str(cell.value)
+                    lines_cnt = max(text.count('\n') + 1, (len(text) + 33) // 34)
                     if lines_cnt > max_lines: max_lines = lines_cnt
             elif h in PRICE_HEADERS:
                 cell.font = price_font
@@ -150,13 +166,11 @@ def apply_enterprise_style(ws):
                     pass
             elif h in CENTER_HEADERS:
                 cell.alignment = center_align
-            elif h == '图片':
-                cell.value = None
             else:
                 cell.alignment = left_align_wrap
 
         # 自适应行高：根据多行文本行数动态计算；如果有图片则保证足够高度
-        row_has_image = any(getattr(img, 'anchor', None) and str(r) in str(img.anchor) for img in ws._images)
+        row_has_image = (r in image_rows)
         if row_has_image:
             ws.row_dimensions[r].height = 95
         else:

@@ -263,7 +263,47 @@ def _verbatim_specs(raw_cells: dict) -> dict:
 REGION_HEADER_KEYS = ['地区', '区域', '城市', '省份', '省市', '供货范围', '供应范围', '报价城市', '报价地区']
 REGION_HEADER_RE = re.compile(r'(' + '|'.join(REGION_HEADER_KEYS) + r')')
 
-BUSINESS_HEADER_RE = re.compile(r'(单价|合价|总价|金额|小计|价格|市场价|出厂价|含税价|面价|单位|序号|税率|是否含税|品牌|' + '|'.join(REGION_HEADER_KEYS) + r'|图片)')
+# ---- 固定字段值域门禁：这一列的值必须是这一列该有的东西 ----
+# 表头名匹配只能决定“去哪一列找值”，不能决定“找到的值一定属于这一列”。
+# 原表列错位/合并单元格漂移时，价格会被读进品牌/地区列，必须在写入前拦一次。
+VALID_PROVINCES = set(PROVINCE_ABBR_MAP.values())
+_NON_BRAND_RE = re.compile(r'^[\s\d.,，.．\-+±~%¥￥$/元平米台套个只根张袋桶吨米³²kglL]*$')
+
+
+def _looks_like_brand(v) -> bool:
+    """品牌必须是品牌名：含中文或字母，不能是纯价格/数量/规格串"""
+    s = str(v if v is not None else '').strip()
+    if not s or len(s) > 30:
+        return False
+    if _NON_BRAND_RE.match(s):
+        return False
+    return bool(re.search(r'[\u4e00-\u9fa5A-Za-z]', s))
+
+
+def _region_values_ok(v) -> bool:
+    """报价地区省只能是省名或“全国”，多省用顿号连接"""
+    s = str(v if v is not None else '').strip()
+    if not s:
+        return True
+    return all(p in VALID_PROVINCES or p == '全国' for p in s.split('、'))
+
+
+def _field_value_problems(header: list, rows: list) -> list:
+    """落盘后读回体检：品牌列不许是数字，地区列不许是价格/规格串"""
+    col = {str(h): i for i, h in enumerate(header) if h}
+    errs = []
+    for rn, r in enumerate(rows, 2):
+        for name, ok, expect in (('品牌', _looks_like_brand, '品牌名'), ('报价地区省', _region_values_ok, '省市名')):
+            if name not in col or col[name] >= len(r):
+                continue
+            v = r[col[name]]
+            if v not in (None, '') and not ok(v):
+                errs.append(f"第{rn}行 {name}列的值不像{expect}: {v}")
+        if len(errs) > 20:
+            break
+    return errs
+
+BUSINESS_HEADER_RE = re.compile(r'(单价|合价|总价|金额|小计|价格|市场价|出厂价|含税价|面价|单位|序号|税率|是否含税|品牌|编码|代号|条码|产品编码|物料编码|' + '|'.join(REGION_HEADER_KEYS) + r'|图片)')
 
 
 def _genoffice_raw_spec(row_cells: dict, headers_map: dict, price_col, unit_col) -> str:
@@ -732,7 +772,11 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 row_brand = ''
                 for bk, bv in item["raw_cells_dict"].items():
                     if '品牌' in bk and not any(ng in bk for ng in ['档位', '等级', '类别', '系列']):
-                        row_brand = str(bv).strip()
+                        cand = str(bv).strip()
+                        if _looks_like_brand(cand):
+                            row_brand = cand
+                        elif cand:
+                            notes.append(f"原表“{bk}”列的值“{cand}”不像品牌，未采用；品牌改用推断值")
                         break
                 item_brand = row_brand or brand
                 # 若来自表内明确品牌列，清除“由供应商名称推断”的提示
@@ -854,8 +898,8 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
 
         produced = len(canonical_items) - n_before
         err = ''
-        if not produced and (ws.max_row or 0) > 2:
-            err = f"{sname}: 原表 {ws.max_row} 行数据，最终 0 条输出 (物料原始行 {len(raw_rows)} 条)"
+        if len(raw_rows) > 0 and not produced:
+            err = f"{sname}: 识别出物料原始行 {len(raw_rows)} 行，但最终 0 条输出"
             print(f"    ! {err}")
         sheet_stats.append({'sheet': sname, 'rows': ws.max_row, 'raw_rows': len(raw_rows),
                             'items': produced, 'error': err})
@@ -891,7 +935,9 @@ def _region_fields(region_text, city_text=''):
         return '', '', ''
     provs = expand_region(region_text)
     if not provs:
-        return region_text, city_text or '', f"报价地区“{region_text}”无法识别为省级行政区"
+        # 原表“区域/地区”列读到的不是行政区（常见为价格、规格串错位）
+        # → 绝不把原值写进省列，只留痕
+        return '', city_text or '', f"原表地区列的值“{region_text}”不是省市名称，未写入报价地区"
     if provs == ['全国']:
         return '全国', city_text or '全国', ''
     province = '、'.join(provs)
@@ -930,6 +976,22 @@ def process_excel(input_xlsx, template_xlsx, output_dir, terms=None):
     items, source_rows, sheet_stats = standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix,
                                                           normalize_terms(terms), global_notes=_terms_notes(terms) + sup_notes,
                                                           struct_log=struct_log)
+
+    # 截取原件每个 Sheet 的完整高清原图，填入「厂家报价图片文件名」作为佐证留痕
+    try:
+        from sheet_screenshot_service import capture_excel_sheets
+        sheet_imgs = capture_excel_sheets(input_xlsx, img_dir)
+        for it in items:
+            s_name = it.file_page
+            img_fn = sheet_imgs.get(s_name) or sheet_imgs.get(str(s_name).strip()) or (list(sheet_imgs.values())[0] if sheet_imgs else '')
+            it.quote_image_filename = img_fn
+            if not it.image_filenames and img_fn:
+                it.image_filenames = [img_fn]
+        if sheet_imgs:
+            print(f"[*] Excel 原件底稿 Sheet 全景截图完成: 共截取 {len(sheet_imgs)} 张 Sheet 底稿")
+    except Exception as e:
+        print(f"[Warning] Excel Sheet 底稿截图异常: {e}")
+
     return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log,
                    sheet_stats=sheet_stats, source_path=input_xlsx)
 
@@ -983,11 +1045,16 @@ def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_
             source_rows.append(rec)
         print(f"[*] 页面失败隔离清单: {[fp for fp, _ in pdf_ext.failed_pages]}")
     # 每页原件截图作为“厂家报价图片” (quote_img{页码}.png)，便于对照
-    page_imgs = pdf_ext.save_page_images(img_dir)
+    from sheet_screenshot_service import capture_pdf_pages
+    page_imgs = pdf_ext.save_page_images(img_dir) if hasattr(pdf_ext, 'save_page_images') else capture_pdf_pages(input_pdf, img_dir)
     for it in items:
-        m = re.match(r'第(\d+)页', it.file_page)
-        if m and int(m.group(1)) in page_imgs:
-            it.image_filenames = [page_imgs[int(m.group(1))]]
+        p_str = str(it.file_page or '').strip()
+        m = re.search(r'\d+', p_str)
+        p_num = int(m.group(0)) if m else 1
+        img_fn = page_imgs.get(p_num) or page_imgs.get(f"第{p_num}页") or page_imgs.get(str(p_num)) or "quote_img1.png"
+        it.quote_image_filename = img_fn
+        if not it.image_filenames:
+            it.image_filenames = [img_fn]
     return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log,
                    sheet_stats=sheet_stats, source_path=input_pdf)
 
@@ -1055,6 +1122,16 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
             except Exception:
                 pass
         return None, [err_msg]
+
+    # 接入材料配图接口：通过材料名称检索配图，并匹配图片链接
+    try:
+        from material_illustration_service import match_illustrations_for_canonical_items
+        supplier_tag = items[0].supplier if items else os.path.basename(output_xlsx).split('-')[0]
+        n_matched = match_illustrations_for_canonical_items(items, company_name=supplier_tag)
+        if n_matched:
+            print(f"[*] 材料配图服务处理完成，成功命中配图: {n_matched}/{len(items)} 条")
+    except Exception as illust_err:
+        print(f"[Warning] 材料配图服务执行异常: {illust_err}")
 
     builder = StandardizedWorkbookBuilder(template_xlsx)
     builder.build_from_canonical_items(items, output_xlsx, img_dir, reconciliation=None,
@@ -1156,6 +1233,7 @@ def _verify_output(path, items):
     dup = [q for q, n in Counter(ids).items() if n > 1]
     if dup:
         errs.append(f"报价ID 重复: {[str(d) for d in dup[:5]]}")
+    errs.extend(_field_value_problems(header, rows))
     return errs
 
 

@@ -30,8 +30,11 @@ STANDARD_HEADERS = [
 CENTER_HEADERS = {'报价ID', '类别编码', '顺序号', '报价地区省', '报价地区市', '单位', '工程价折扣比例', '折扣下限',
                   '折扣上限', '折扣系列', '是否含运费', '增值税税率', '运费结算方式', '是否含增值税', '价格填报类型'}
 PRICE_HEADERS = {'市场价', '工程价'}
-# 规格参数里不许出现的“参数名”关键词（基价/调价依据属于商务信息，不是物理规格）
-FORBIDDEN_SPEC_KEYS = ('表头', '表标题', '基价', '单价', '总价', '金额', '指导价', '调价')
+# 规格参数里不许出现的“参数名”关键词（基价/调价属于商务信息，产品编码/物料编码属于内部代码，严禁混入物理规格）
+FORBIDDEN_SPEC_KEYS = ('表头', '表标题', '基价', '单价', '总价', '金额', '指导价', '调价',
+                       '产品编码', '物料编码', '商品编码', '内部编码', '条形码', '编码', '条码', '代码',
+                       '税号', '账号', '帐号', '开户行', '一级类别', '二级类别', '三级类别', '材料名称', '属性项属性值',
+                       '物料名称', '类别名称', '分类编码')
 
 def safe_excel_val(val):
     """确保单元格内容不含非法控制字符，统一换行符，杜绝乱码与损坏"""
@@ -81,13 +84,15 @@ class StandardizedWorkbookBuilder:
         112101 (AD=胎基材料) 与 112115 (AD=是否曝露使用) 这类列序不同的模板。
         取不到的列留空，不猜。
         """
+        out = {}
         specs = {k: v for k, v in (item.structured_specs or {}).items() if v not in (None, '')}
         index = {}
         for k, v in specs.items():
             index.setdefault(self._norm_header(k), v)
-        out = {}
         for header in self.headers:
             if not header or header in known_headers:
+                continue
+            if any(k in header for k in FORBIDDEN_SPEC_KEYS):
                 continue
             key = self._norm_header(header)
             val = index.get(key)
@@ -95,6 +100,8 @@ class StandardizedWorkbookBuilder:
                 # 只认两种情况：参数名是表头的一部分，或参数名以表头开头（容量 ↔ 容量kVA）。
                 # 不允许反向前缀（表头“材料”不能命中参数“胎基材料”），否则会静默填错值
                 for sk, sv in index.items():
+                    if any(k in sk for k in FORBIDDEN_SPEC_KEYS):
+                        continue
                     if len(sk) >= 2 and (sk in key or sk.startswith(key)):
                         val = sv
                         break
@@ -109,16 +116,41 @@ class StandardizedWorkbookBuilder:
         tax_val = item.tax_rate if item.tax_rate is not None else ''
 
         # 图片列映射（5列“图片”）
-        # 优先使用提取出的图片物理文件名（如 预制混凝土叠合板.jpg）
-        img1 = ''
-        if hasattr(item, 'image_filenames') and item.image_filenames:
-            img1 = item.image_filenames[0]
-        elif first_img_name and not str(first_img_name).startswith('quote_img'):
-            img1 = first_img_name
+        # 仅使用材料配图接口返回的在线图片链接！未命中的保持为空，绝不多加、不编造任何假内容，绝不把底稿图作为配图写入！
+        pic_urls = getattr(item, 'picture_urls', []) or ([item.picture_url] if getattr(item, 'picture_url', None) else [])
+        img1 = pic_urls[0] if len(pic_urls) > 0 else ''
+        img2 = pic_urls[1] if len(pic_urls) > 1 else ''
+        img3 = pic_urls[2] if len(pic_urls) > 2 else ''
+        img4 = pic_urls[3] if len(pic_urls) > 3 else ''
+        img5 = pic_urls[4] if len(pic_urls) > 4 else ''
 
-        # 只要存在真实产品图片引用或图片资产，就必须准确填入图片文件夹名称
-        has_real_img = bool(img1)
-        folder_val = img_folder_name if (has_real_img and img_folder_name) else ''
+        # 厂家报价图片文件名：记录底稿截图文件名
+        quote_img_file = getattr(item, 'quote_image_filename', '') or ''
+        if not quote_img_file:
+            if hasattr(item, 'image_filenames') and item.image_filenames:
+                for fn in item.image_filenames:
+                    if str(fn).lower().startswith('quote_img'):
+                        quote_img_file = fn
+                        break
+        if not quote_img_file and first_img_name and str(first_img_name).lower().startswith('quote_img'):
+            quote_img_file = first_img_name
+        if not quote_img_file and item.file_page:
+            p_str = str(item.file_page).strip()
+            p_m = re.search(r'\d+', p_str)
+            if p_str.startswith('第') and p_str.endswith('页') and p_m:
+                quote_img_file = f"quote_img{p_m.group(0)}.png"
+            elif p_str.isdigit():
+                quote_img_file = f"quote_img{p_str}.png"
+            else:
+                clean_s = re.sub(r'[\/\\:\*\?\"<>\|]', '_', p_str).strip()
+                quote_img_file = f"quote_img_{clean_s}.png"
+
+        # 图片文件夹：来自配图接口返回的目录名（如 m0000578），未命中则留空
+        folder_val = getattr(item, 'illustration_folder', '') or ''
+
+        # 彻底清洗厂家原始规格参数：剥除混入的产品编码/物料编码等内部代码与非物理参数
+        clean_raw_spec = re.sub(r'(?:^|[;；\s])(?:产品编码|物料编码|商品编码|内部编码|条形码|条码|代码|三级类别编码|二级类别|一级类别|材料名称|属性项属性值)\s*[:：][^;；\n]*', '', item.raw_spec or '')
+        clean_raw_spec = re.sub(r'^[;；\s]+|[;；\s]+$', '', clean_raw_spec).strip()
 
         return {
             '报价ID': str(item.quote_id),
@@ -127,9 +159,10 @@ class StandardizedWorkbookBuilder:
             '类别编码': item.category_code or '',
             '品牌': item.brand or '',
             '规格参数': formatted_specs or '',
-            '厂家原始规格参数': item.raw_spec or '',
+            '厂家原始规格参数': clean_raw_spec,
             '厂家报价文件页码': item.file_page or '',
-            '厂家报价图片文件名': first_img_name or '',
+            '厂家报价图片文件名': quote_img_file,
+            '_quote_img_file': quote_img_file,
             '顺序号': seq,
             '报价地区省': item.province or '',
             '报价地区市': item.city or '',
@@ -150,10 +183,10 @@ class StandardizedWorkbookBuilder:
             '价格填报类型': item.quote_type or '',
             '图片文件夹': folder_val,
             '_img1': img1,
-            '_img2': '',
-            '_img3': '',
-            '_img4': '',
-            '_img5': '',
+            '_img2': img2,
+            '_img3': img3,
+            '_img4': img4,
+            '_img5': img5,
         }
 
     def build_from_canonical_items(self, items: list, output_xlsx_path: str, img_dir: str, reconciliation: list = None,
@@ -211,6 +244,14 @@ class StandardizedWorkbookBuilder:
         total_imgs_embedded = 0
         uncertain_items_for_audit = [] # 记录需在独立sheet中以红色字体展示的疑义与失败项
 
+        quote_img_col_idx = None
+        for c_idx, h in enumerate(self.headers, 1):
+            if h == '厂家报价图片文件名':
+                quote_img_col_idx = c_idx
+                break
+
+        _quote_img_cache = {}
+
         for item in items:
             # 格式化多行结构化技术规格
             formatted_multiline_specs = item.format_multiline_specs()
@@ -222,8 +263,8 @@ class StandardizedWorkbookBuilder:
                 spec_key = l.split(':', 1)[0].strip()
                 if any(k in spec_key for k in FORBIDDEN_SPEC_KEYS): continue
                 clean_lines.append(l)
-            formatted_multiline_specs = '\n'.join(clean_lines) if clean_lines else formatted_multiline_specs
-            line_count = formatted_multiline_specs.count('\n') + 1
+            formatted_multiline_specs = '\n'.join(clean_lines) if clean_lines else ''
+            line_count = max(1, formatted_multiline_specs.count('\n') + 1)
 
             # 落地图片资产 (按需写入)
             saved_images = []
@@ -240,8 +281,8 @@ class StandardizedWorkbookBuilder:
                     saved_images.append((img_fn, img_dst))
 
             first_img_name = saved_images[0][0] if saved_images else (item.image_filenames[0] if (hasattr(item, 'image_filenames') and item.image_filenames) else '')
-            # 只要存在图片引用或图片资产，就必须准确填入图片文件夹名称
-            has_img_ref = bool(saved_images or first_img_name or (hasattr(item, 'image_filenames') and item.image_filenames))
+            # 只要存在图片引用、原件底稿截图或图片资产，就必须准确填入图片文件夹名称
+            has_img_ref = bool(saved_images or first_img_name or (hasattr(item, 'image_filenames') and item.image_filenames) or getattr(item, 'quote_image_filename', ''))
             img_folder_name = os.path.basename(img_dir) if (has_img_ref and img_dir) else ''
 
             # 严格业务准则：只解析客户原单真实提供的内容，未提供的绝不脑补，纯净留空！
@@ -260,6 +301,8 @@ class StandardizedWorkbookBuilder:
                 if header == '图片':
                     val = values.get(f'_img{img_col_counter}', '')
                     img_col_counter += 1
+                elif header == '厂家报价图片文件名':
+                    val = values.get('厂家报价图片文件名', '')
                 else:
                     val = values.get(header, '')
                 val = safe_excel_val(val)  # 安全清洗非法字符，保障无损坏
@@ -269,7 +312,7 @@ class StandardizedWorkbookBuilder:
                 cell.border = thin_border
 
                 # 对齐与格式控制
-                if header in CENTER_HEADERS:
+                if header in CENTER_HEADERS or header == '厂家报价图片文件名':
                     cell.alignment = center_align
                 elif header in PRICE_HEADERS:
                     cell.alignment = right_align
@@ -277,6 +320,10 @@ class StandardizedWorkbookBuilder:
                         cell.number_format = '0.000'
                 else:
                     cell.alignment = multiline_left_align
+                # 图片列若为在线链接，设置超链接与超链接字体
+                if header == '图片' and isinstance(val, str) and (val.startswith('http://') or val.startswith('https://')):
+                    cell.hyperlink = val
+                    cell.font = Font(name='宋体', size=10, color='0563C1', underline='single')
                 # 致命/严重：整行红字 + 黄底（市场价额外写批注）
                 if needs_human:
                     cell.fill = warning_fill
@@ -284,30 +331,69 @@ class StandardizedWorkbookBuilder:
                     if header == '市场价':
                         cell.comment = Comment(f"【{item.worst_severity()}】{item.uncertainty_note}", "造价审计员")
 
-            # 动态计算最适行高:
-            # 基础文本每行约 16pt，有图片时最少 68pt，多行文本时根据行数自适应提升
+            # 动态计算最适行高与原报价单截图内嵌（放图片，不要放文字）
             calc_text_height = max(30, line_count * 18 + 10)
-            img_cols = [i for i, h in enumerate(self.headers, 1) if h == '图片']
-            if saved_images and img_cols:
-                ws_out.row_dimensions[row_num].height = max(68, calc_text_height)
-                for (fn, dst), col_target in zip(saved_images, img_cols):
-                    col_letter = get_column_letter(col_target)
-                    try:
-                        with PILImage.open(dst) as pil_img:
-                            w, h = pil_img.size
-                            target_h = 70
-                            target_w = int(w * (target_h / h))
-                            if target_w > 105:
-                                target_w = 105
-                                target_h = int(h * (target_w / w))
+            has_embedded_quote_img = False
 
-                        op_img = OpenpyxlImage(dst)
-                        op_img.width = target_w
-                        op_img.height = target_h
-                        ws_out.add_image(op_img, f"{col_letter}{row_num}")
-                        total_imgs_embedded += 1
-                    except Exception as e:
-                        print(f"Error embedding {dst}: {e}")
+            target_quote_img_fn = values.get('_quote_img_file') or getattr(item, 'quote_image_filename', '')
+            if quote_img_col_idx and target_quote_img_fn and img_dir:
+                if target_quote_img_fn not in _quote_img_cache:
+                    img_dst = os.path.join(img_dir, target_quote_img_fn)
+                    if not os.path.exists(img_dst) and os.path.exists(img_dir):
+                        for c_fn in os.listdir(img_dir):
+                            if c_fn.lower() == target_quote_img_fn.lower():
+                                img_dst = os.path.join(img_dir, c_fn)
+                                break
+                    if os.path.exists(img_dst) and os.path.getsize(img_dst) > 0:
+                        retina_thumb_fn = f"thumb_retina_{os.path.splitext(os.path.basename(img_dst))[0]}.jpg"
+                        retina_thumb_dst = os.path.join(img_dir, retina_thumb_fn)
+                        if not os.path.exists(retina_thumb_dst) or os.path.getsize(retina_thumb_dst) == 0:
+                            try:
+                                with PILImage.open(img_dst) as pil_orig:
+                                    im_rgb = pil_orig.convert('RGB')
+                                    im_rgb.thumbnail((800, 600), PILImage.Resampling.LANCZOS)
+                                    im_rgb.save(retina_thumb_dst, 'JPEG', quality=95, optimize=True)
+                            except Exception:
+                                pass
+                        w, h = 120, 68
+                        if os.path.exists(retina_thumb_dst):
+                            try:
+                                with PILImage.open(retina_thumb_dst) as pil_img:
+                                    w, h = pil_img.size
+                                    target_h = 68
+                                    target_w = int(w * (target_h / h))
+                                    if target_w > 120:
+                                        target_w = 120
+                                        target_h = int(h * (target_w / w))
+                                    w, h = target_w, target_h
+                            except Exception:
+                                pass
+                        rel_link = f"{img_folder_name}/{os.path.basename(img_dst)}" if img_folder_name else os.path.basename(img_dst)
+                        _quote_img_cache[target_quote_img_fn] = (img_dst, retina_thumb_dst, w, h, rel_link)
+                    else:
+                        _quote_img_cache[target_quote_img_fn] = None
+
+                cached_info = _quote_img_cache.get(target_quote_img_fn)
+                if cached_info:
+                    img_dst, retina_thumb_dst, target_w, target_h, rel_link = cached_info
+                    if total_imgs_embedded < 50 and os.path.exists(retina_thumb_dst):
+                        try:
+                            op_img = OpenpyxlImage(retina_thumb_dst)
+                            op_img.width = target_w
+                            op_img.height = target_h
+                            col_letter = get_column_letter(quote_img_col_idx)
+                            ws_out.add_image(op_img, f"{col_letter}{row_num}")
+                            total_imgs_embedded += 1
+                            has_embedded_quote_img = True
+                        except Exception:
+                            pass
+                    cell_quote = ws_out.cell(row=row_num, column=quote_img_col_idx)
+                    cell_quote.value = target_quote_img_fn
+                    cell_quote.hyperlink = rel_link
+                    cell_quote.font = Font(name='宋体', size=9, color='0563C1', underline='single')
+
+            if has_embedded_quote_img:
+                ws_out.row_dimensions[row_num].height = max(68, calc_text_height)
             else:
                 ws_out.row_dimensions[row_num].height = calc_text_height
 
@@ -329,14 +415,15 @@ class StandardizedWorkbookBuilder:
             row_num += 1
             seq += 10
 
-        # 列宽按表头名称设置
-        for col in ws_out.columns:
-            col_idx = col[0].column
+        # 列宽按表头名称设置 (直接根据 headers 循环，避免 ws_out.columns 转置数万行拖慢性能)
+        for col_idx, header_val in enumerate(self.headers, 1):
             col_letter = get_column_letter(col_idx)
-            header_val = str(ws_out.cell(1, col_idx).value or '')
+            header_val = str(header_val or '')
 
-            if header_val == '图片' or any(k in header_val for k in ['图片1', '图片2', '图片3', '图片4', '图片5', '报价图片']):
+            if header_val == '厂家报价图片文件名':
                 ws_out.column_dimensions[col_letter].width = 18
+            elif header_val == '图片' or any(k in header_val for k in ['图片1', '图片2', '图片3', '图片4', '图片5', '报价图片']):
+                ws_out.column_dimensions[col_letter].width = 24
             elif '厂家原始规格参数' in header_val:
                 ws_out.column_dimensions[col_letter].width = 42
             elif '规格参数' in header_val:
