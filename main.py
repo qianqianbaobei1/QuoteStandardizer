@@ -797,30 +797,30 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
     banner_blob = "\n".join(banner_texts)
 
     if not terms_info.get("supplier"):
-        m_sup = re.search(r'(?:公司名称|报价单位|供方|供应商)[：:\s]*([\u4e00-\u9fffA-Za-z0-9（）()]{4,30}?(?:有限公司|股份有限公司|股份公司|集团|有限责任公司|厂|经营部))', banner_blob)
+        m_sup = re.search(r'(?:公司名称|报价单位|供方|供应商)[ \t]*[：:][ \t]*([\u4e00-\u9fffA-Za-z0-9（）()]{4,30}?(?:有限公司|股份有限公司|股份公司|集团|有限责任公司|厂|经营部))', banner_blob)
         if m_sup:
             terms_info["supplier"] = m_sup.group(1).strip()
             if not supplier:
                 supplier = terms_info["supplier"]
 
     if not terms_info.get("brand"):
-        m_brand = re.search(r'(?:报价单品牌|报价品牌|品牌)[：:\s]*([\u4e00-\u9fffA-Za-z0-9]{2,15})', banner_blob)
+        m_brand = re.search(r'(?:本份报价单品牌|报价单品牌|报价品牌|品牌)[ \t]*[：:][ \t]*([^\s:：,，;；\n]{2,15})', banner_blob)
         if m_brand:
             terms_info["brand"] = m_brand.group(1).strip()
             if not brand:
                 brand = terms_info["brand"]
 
     # 拆分连写的联系人与手机号（如“联系人：洪水土13850009333”）
-    m_contact = re.search(r'(?:联系人|业务员|报价人)[：:\s]*([\u4e00-\u9fff]{2,5})\s*(1[3-9]\d{9})?', banner_blob)
+    m_contact = re.search(r'(?:联系人|业务员|报价人)[ \t]*[：:][ \t]*([\u4e00-\u9fff]{2,5})[ \t\-]*((?:1[3-9]\d{9})?)', banner_blob)
     if m_contact:
         if not terms_info.get("contact_person"):
             terms_info["contact_person"] = m_contact.group(1).strip()
         if m_contact.group(2) and not terms_info.get("contact_phone"):
             terms_info["contact_phone"] = m_contact.group(2).strip()
 
-    # 从横幅或表头补充税率与含税信息
+    # 从横幅补充税率与含税信息（必须紧邻冒号或数字，避免表头跨行误判）
     if not terms_info.get("tax_rate"):
-        m_tax = re.search(r'(?:含|税率)[：:\s]*(\d{1,2}%|\d{1,2}个点)', banner_blob)
+        m_tax = re.search(r'(?:含税|税率)[ \t]*[：:][ \t]*(\d{1,2}%|\d{1,2}个点)', banner_blob)
         if m_tax:
             terms_info["tax_rate"] = m_tax.group(1).replace("个点", "%")
             if not terms_info.get("is_tax_included"):
@@ -845,8 +845,12 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 if "含税" in _v:
                     table_has_terms.add("是否含税")
                     table_has_terms.add("是否含增值税")
-                    if not terms_info.get("is_tax_included"):
-                        terms_info["is_tax_included"] = "是" if ("不含" not in _v and "未含" not in _v) else "否"
+                    # 仅在非单纯列名且有明确声明性语句时才设置全局条款，单纯表头列名不锁死全局条款
+                    if not terms_info.get("is_tax_included") and _v.strip() not in ("是否含税", "是否含增值税", "含税情况", "含税/不含税"):
+                        if any(w in _v for w in ("不含", "未含", "除外")):
+                            terms_info["is_tax_included"] = "否"
+                        elif any(w in _v for w in ("包含", "含税", "均含", "已含")):
+                            terms_info["is_tax_included"] = "是"
                 if "运费" in _v or "含运" in _v:
                     table_has_terms.add("是否含运费")
 
@@ -995,7 +999,8 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 else:
                     cat_src = "llm"
                     notes.append(f"类别编码 {cat_code} 未经标准编码库精确核验")
-                if cat_reason and cat_reason not in notes:
+                # 仅在未通过核验或需要核查时才写入 notes，避免正常命中时污染 notes 导致被误判为待复核
+                if not cat_verified and cat_reason and cat_reason not in notes:
                     notes.append(cat_reason)
 
                 # 【名称兜底】：原件没写物料名称时才用标准三级分类名 l3 顶上
@@ -1027,9 +1032,11 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 # 对照标准材料类别特定参数及要求接口规范，执行参数限定值校验与规范化
                 if l3 or cat_code:
                     try:
-                        structured_specs, attr_notes, _ = validate_and_normalize_specs(l3 or cat_code, structured_specs)
-                        if attr_notes:
-                            notes.extend(attr_notes)
+                        structured_specs, missing_req, enum_warns = validate_and_normalize_specs(l3 or cat_code, structured_specs)
+                        if missing_req:
+                            notes.append(f"缺少类别必填属性: {'、'.join(missing_req)}")
+                        if enum_warns:
+                            notes.extend(enum_warns)
                     except Exception:
                         pass
 
@@ -1039,10 +1046,10 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     notes.append("参数无原文出处: " + "；".join(unproven_params))
 
                 # 系统性行级商务条款抽取 (优先从行单元格中提取税率/含税/运费，无则回退至外部 terms_info)
-                row_tax_rate = terms_info.get("tax_rate")
-                row_tax_inc = terms_info.get("is_tax_included")
-                row_freight_inc = terms_info.get("is_freight_included")
-                row_freight_desc = terms_info.get("freight_desc") or ""
+                row_tax_rate = ""
+                row_tax_inc = ""
+                row_freight_inc = ""
+                row_freight_desc = ""
 
                 for k, v in item["raw_cells_dict"].items():
                     k_str = str(k or "").strip()
@@ -1066,10 +1073,17 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                             row_freight_desc = row_freight_desc or val_str
 
                 # 若价格列本身叫“含税价/含税单价”，且未明确为否，自动标记含税为“是”
-                for k in item["raw_cells_dict"].keys():
-                    if "含税" in str(k) and "不含税" not in str(k) and not row_tax_inc:
-                        row_tax_inc = "是"
-                        break
+                if not row_tax_inc:
+                    for k in item["raw_cells_dict"].keys():
+                        if "含税" in str(k) and "不含税" not in str(k):
+                            row_tax_inc = "是"
+                            break
+
+                # 兜底：行级未声明时继承整表商务条款
+                row_tax_rate = row_tax_rate or terms_info.get("tax_rate")
+                row_tax_inc = row_tax_inc or terms_info.get("is_tax_included")
+                row_freight_inc = row_freight_inc or terms_info.get("is_freight_included")
+                row_freight_desc = row_freight_desc or terms_info.get("freight_desc") or ""
 
                 # 行内自带报价地区时以行为准，否则用商务条款中的地区
                 row_region = next((v for k, v in item["raw_cells_dict"].items() if any(rk in k for rk in REGION_HEADER_KEYS)), '')

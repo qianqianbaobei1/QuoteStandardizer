@@ -338,12 +338,16 @@ class GeminiPDFTableExtractor:
         return wb
 
     def guess_supplier(self) -> str:
-        """从识别出的页面大标题中推断供应商全称"""
+        """从识别出的页面大标题中推断供应商全称，若无则回退至 PDFTableExtractor 公章/原件识别"""
         for title in self.page_titles:
             m = COMPANY_RE.search(title)
             if m:
                 return m.group(1)
-        return ""
+        try:
+            from pdf_extractor import PDFTableExtractor
+            return PDFTableExtractor(self.pdf_path).guess_supplier() or ""
+        except Exception:
+            return ""
 
     def save_page_images(self, out_dir: str) -> Dict[int, str]:
         """
