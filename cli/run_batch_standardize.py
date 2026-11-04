@@ -1,3 +1,6 @@
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 # -*- coding: utf-8 -*-
 """
 run_batch_standardize.py - 批量解析一个批次下的所有供应商原文件

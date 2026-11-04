@@ -1,3 +1,6 @@
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """原表材料名称/原表分类/品牌推断：不许拿标准分类名顶替原件品名，不许把公司名截断当品牌"""

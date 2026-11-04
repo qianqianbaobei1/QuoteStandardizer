@@ -1,3 +1,6 @@
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 # -*- coding: utf-8 -*-
 """
 run_all_dual_sheets_rebuild.py

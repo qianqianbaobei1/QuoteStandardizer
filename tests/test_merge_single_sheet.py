@@ -1,3 +1,6 @@
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """多 Sheet 收口成单张「标准化报价」的单元测试。"""

@@ -11,3 +11,6 @@ category_attrs_cache.json
 标准材料类别与属性接口规范.xlsx
 deliveries_backup_*/
 test_*.xlsx
+material_illustration_cache.json
+*.run.json
+archive/

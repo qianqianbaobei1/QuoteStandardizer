@@ -1,3 +1,6 @@
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 # -*- coding: utf-8 -*-
 """
 fast_audit_deliveries.py - 极速工业级四维交付物深度巡检与缺陷隔离器

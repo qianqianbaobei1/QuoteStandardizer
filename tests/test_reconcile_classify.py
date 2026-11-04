@@ -1,3 +1,6 @@
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """交付件 vs 原表对账的分类判定测试（typo/append/fmt/fill/drop/diff + 致命判定）"""

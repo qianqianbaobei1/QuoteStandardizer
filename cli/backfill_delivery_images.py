@@ -1,3 +1,6 @@
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 # -*- coding: utf-8 -*-
 """
 backfill_delivery_images.py - 给已生成的交付件回填材料配图（不发请求，只吃配图缓存）
