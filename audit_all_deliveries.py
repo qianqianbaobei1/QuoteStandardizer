@@ -15,6 +15,8 @@ import openpyxl
 from pathlib import Path
 from run_all_universe_vendors import scan_all_universe_tasks, clean_vendor_name
 from run_batch_standardize import find_primary_quote_file, extract_zip_if_needed
+from extractor import hidden_content_report
+from config import SKIP_HIDDEN_CONTENT
 
 DELIVERIES_DIR = Path('/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries')
 
@@ -68,8 +70,16 @@ def audit_single_delivery(task_info):
             audit_data["raw_pages"] = 1
     elif raw_ext in ['.xlsx', '.xls']:
         try:
+            # 隐藏口径：隐藏表 / 隐藏行不计入原表物理行
+            report = hidden_content_report(str(primary_file)) if SKIP_HIDDEN_CONTENT else {}
             wb_raw = openpyxl.load_workbook(str(primary_file), read_only=True)
-            audit_data["raw_rows"] = sum(max(0, ws.max_row - 1) for ws in wb_raw.worksheets if ws.max_row)
+            audit_data["raw_rows"] = sum(
+                max(0, ws.max_row - 1 - len([r for r in info['hidden_rows'] if r > 1]))
+                for ws in wb_raw.worksheets
+                if ws.max_row and not (report.get(ws.title) or {}).get('hidden')
+                for info in [report.get(ws.title) or {'hidden_rows': set()}]
+            )
+            audit_data["hidden_sheets"] = [s for s, i in report.items() if i['hidden']]
         except Exception:
             audit_data["raw_rows"] = 0
 

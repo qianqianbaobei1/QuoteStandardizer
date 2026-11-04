@@ -13,7 +13,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 
 from config import (DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, LLM_MAX_RETRIES, LLM_TEMPERATURE,
-                    CATEGORY_CODE_MAP, CODE_LIBRARY_MAX_LINES, JEV_ROW_BATCH,
+                    CATEGORY_CODE_MAP, CATEGORY_TREE, CODE_LIBRARY_MAX_LINES, JEV_ROW_BATCH,
                     TYPESAFE_API_KEY, TYPESAFE_BASE_URL, TYPESAFE_MODEL,
                     GEMINI_API_KEY, GEMINI_MODEL)
 from gemini_client import GeminiClient
@@ -23,10 +23,30 @@ UNIT_PRICE_KEYS = ['单价', '面价', '出厂价', '市场价', '预算价', '�
 TOTAL_PRICE_KEYS = ['合价', '总价', '金额', '小计', '合计']
 UNIT_KEYS = ['计量单位', '单位']
 NAME_KEYS = ['名称', '品名', '产品', '材料', '设备']
-# 只注入前 N 条：整个库逐批重发会成倍放大 token 成本，且模型实际无法逐条比对上千项
+# 整个库逐批重发会成倍放大 token 成本，但只发固定的前 N 条更糟：模型看不到灯具/光源这类节点，
+# 遇到“灯管”“球泡灯”就一律填 000101 其他类别。改为按本批物料文字筛相关条目，并带上 一级/二级 路径
 _code_items = list(CATEGORY_CODE_MAP.items())[:max(0, CODE_LIBRARY_MAX_LINES)]
 CODE_LIBRARY_TEXT = "；".join(f"{name}={code}" for name, code in _code_items)
 CODE_LIBRARY_TRUNCATED = len(CATEGORY_CODE_MAP) > len(_code_items)
+
+
+def _library_text_for(items: list, max_lines: int = CODE_LIBRARY_MAX_LINES) -> str:
+    """按本批物料文字筛选分类库条目（带 一级/二级 路径）；库为空时回退旧的全量前 N 条"""
+    if not CATEGORY_TREE:
+        return CODE_LIBRARY_TEXT
+    blob = "".join(str(it.get(k) or '') for it in items for k in ('raw_text', 'raw_cells', 'raw_unit'))
+    chars = set(blob)
+    scored = []
+    for l1, l2, code, name in CATEGORY_TREE:
+        hit = len(chars & set(name + l2))
+        if not hit:
+            continue
+        path = f"{l1}/{l2}" if l2 and l2 != l1 else l1
+        scored.append((-hit, len(name), code, f"{code} {name}（{path}）"))
+    if not scored:
+        return CODE_LIBRARY_TEXT
+    scored.sort()
+    return "；".join(s[3] for s in scored[:max_lines])
 JUNK_SPEC_KEYS = {'其他关键属性', '供应商', '品牌', '价格', '单价', '单位', '铝锭基价', '基价', '铜基价', '基价/吨', '铝锭基价/吨', '表标题', '指导价'}
 IGNORE_SPEC_KEYS = ['单价', '价格', '序号', '图片', '金额', '合价', '总价', '小计', '数量', '备注', '单位']
 
@@ -210,11 +230,10 @@ class DeepSeekStandardizer:
         if not items:
             return []
 
-        if CODE_LIBRARY_TRUNCATED and CODE_LIBRARY_TEXT:
-            print(f"[*] 编码库 {len(CATEGORY_CODE_MAP)} 条，按 CODE_LIBRARY_MAX_LINES="
-                  f"{CODE_LIBRARY_MAX_LINES} 注入前 {len(_code_items)} 条 (可用 .env 调大)")
+        if CODE_LIBRARY_TRUNCATED:
+            print(f"[*] 编码库 {len(CATEGORY_CODE_MAP)} 条，按本批物料文字筛相关条目注入 (上限 CODE_LIBRARY_MAX_LINES={CODE_LIBRARY_MAX_LINES})")
         user_content = (f"供应商: {supplier_hint or '未知'}，品牌: {brand_hint or '未知'}。\n"
-                        f"标准分类编码库：\n{CODE_LIBRARY_TEXT or '(空)'}\n"
+                        f"标准分类编码库（编码 名称（一级/二级））：\n{_library_text_for(items) or '(空)'}\n"
                         "待清洗物料数据清单：\n" + json.dumps(items, ensure_ascii=False))
 
         results = None

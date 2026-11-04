@@ -12,12 +12,16 @@
 """
 import os
 import re
+import ssl
 import json
 import time
 import threading
 import urllib.request
 import urllib.error
 from typing import List, Dict, Any, Optional
+
+# 创建忽略 SSL 证书校验的全局上下文
+_SSL_CTX = ssl._create_unverified_context()
 
 from config import (
     ILLUSTRATION_API_BASE_URL,
@@ -79,7 +83,7 @@ def _download_image_bytes(url: str, timeout: int = 5) -> Optional[bytes]:
         return None
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "QuoteStandardizer/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CTX) as resp:
             if resp.status == 200:
                 return resp.read()
     except Exception:
@@ -179,7 +183,7 @@ class MaterialIllustrationService:
                     data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                     headers={"Content-Type": "application/json", "User-Agent": "QuoteStandardizer"}
                 )
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CTX) as resp:
                     resp_json = json.loads(resp.read().decode("utf-8"))
 
                 resp_data = resp_json.get("data") or {}
@@ -195,7 +199,7 @@ class MaterialIllustrationService:
                     query_url = f"{self.query_url}?taskId={task_id}"
                     q_req = urllib.request.Request(query_url, headers={"User-Agent": "QuoteStandardizer"})
                     try:
-                        with urllib.request.urlopen(q_req, timeout=timeout) as q_resp:
+                        with urllib.request.urlopen(q_req, timeout=timeout, context=_SSL_CTX) as q_resp:
                             q_json = json.loads(q_resp.read().decode("utf-8"))
                         q_data = q_json.get("data") or {}
                         status = q_data.get("status")

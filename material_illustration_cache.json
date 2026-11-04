@@ -892,10 +892,12 @@
     "matchType": "NAME_SEARCH"
   },
   "风口": {
-    "matched": false,
-    "pictureUrl": "",
-    "pictureName": "",
-    "folderName": ""
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0005911/bd6c4fc4d8f07236.jpg",
+    "pictureName": "风口.jpg",
+    "folderName": "m0005911",
+    "templateName": "19-水暖及通风空调设备-埃瑞德",
+    "matchType": "NAME_SEARCH"
   },
   "铝蜂窝板": {
     "matched": false,
@@ -3032,5 +3034,6503 @@
     "pictureUrl": "",
     "pictureName": "",
     "folderName": ""
+  },
+  "电线、护套线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "其它电线电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "音响线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铜编网": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "花岗岩装饰线条": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铜塑软": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铜塑": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐火铜塑": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "/B-BYJ-辐照线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "/BN-BYJ-耐火辐照线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "辐照线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐火辐照线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "精品阻燃电线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铝塑": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "(7芯)-辐照欧标电线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铝芯架空": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "架空": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "软电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "屏蔽软电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ZCN-RVVP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZB-RYYP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZBN-RYYP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "塑花线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "低烟无卤花线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "低烟无卤耐火花线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐火软电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "低烟无卤软电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "低烟无卤耐火软电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ZCN-RVS": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ZAN-RVS": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZA-RYS": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZAN-RYS": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZBN-RYJS": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZAN-RYJS": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "RVSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ZCN-RVSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ZAN-RVSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZB-RYSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZA-RYSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZBN-RYSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZAN-RYSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZB-RYJSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZA-RYJSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZCN-RYJSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZBN-RYJSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "WDZAN-RYJSP": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非接触式水嘴": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "工程测绘仪器配件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "绝缘电线": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0030586/4b1b70b9f4edc08d.png",
+    "pictureName": "绝缘电线.png",
+    "folderName": "m0030586",
+    "templateName": "晋中市榆新线缆有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "电力电缆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000989/919f1e7e4d3e50c8.jpg",
+    "pictureName": "电力电缆.jpg",
+    "folderName": "m0000989",
+    "templateName": "25-电线电缆及光纤光缆-飞鹰",
+    "matchType": "NAME_SEARCH"
+  },
+  "网络电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "护套绝缘电线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "连接用软线(花线)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "护套电线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电视电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "同轴电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电话线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "网线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "控制电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "绝缘软线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "花线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "连接用软线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "环保电线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电话电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "计算机用电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "裸电线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "特种电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "同轴射频电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铜芯绝缘电线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电缆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双绞线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "CPL覆膜钢质门": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039298/aa059fde58bec5d38d79bfa19f3bd7f5.png",
+    "pictureName": "CPL覆膜钢质门.png",
+    "folderName": "m0039298",
+    "templateName": "核能国建（山东）辐射防护材料有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "无机纤维复合防火卷帘": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0007782/7a3cf08c0cf819d7.jpg",
+    "pictureName": "无机纤维复合防火卷帘.jpg",
+    "folderName": "m0007782",
+    "templateName": "20-消防器材-广安",
+    "matchType": "NAME_SEARCH"
+  },
+  "钢制甲级防火窗": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/128456277377413120da0b5fecdd250b1c.jpg",
+    "pictureName": "钢质防火窗",
+    "folderName": "g20053718",
+    "templateName": "无锡志诚特种门窗有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "活动挡烟垂壁": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/12845627737741312049eb7b6c4fc10593.jpg",
+    "pictureName": "挡烟垂壁",
+    "folderName": "g20053718",
+    "templateName": "无锡志诚特种门窗有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "固定挡烟垂壁": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0033205/b393de170ab70370.jpg",
+    "pictureName": "固定挡烟垂壁.jpg",
+    "folderName": "m0033205",
+    "templateName": "山东龙江门业有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "防水卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/128456642135060480ffebc34fe40f27d1.jpg",
+    "pictureName": "防水卷材",
+    "folderName": "g20082206",
+    "templateName": "杭州常合防水材料有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "灯带 (IP20)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "灯带 (IP65)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "灯盘": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "明装筒灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "导轨射灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "格栅射灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "Mini 格栅灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "吊装线型灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "嵌入线型灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "LED LEDA45J球泡": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "LED LEDA55J球泡": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "LED LEDA48J球泡": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "LED T806P灯管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "灯管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单支空支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "地脚灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "IC卡水表": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000011/0c540ea950ac2b5a.jpg",
+    "pictureName": "非接触式IC卡水表.jpg",
+    "folderName": "m0000011",
+    "templateName": "三川-水表",
+    "matchType": "KEY_TAGS"
+  },
+  "智能水表": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0019506/3e3936baf1e4b4b6.png",
+    "pictureName": "智能水表.png",
+    "folderName": "m0019506",
+    "templateName": "内蒙古泽旺商贸有限公司",
+    "matchType": "KEY_TAGS"
+  },
+  "远传水表": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0017923/99d24aaebcfdd3b1.jpg",
+    "pictureName": "远传水表.jpg",
+    "folderName": "m0017923",
+    "templateName": "21-仪表-陕西搜索词补充图库",
+    "matchType": "KEY_TAGS"
+  },
+  "旋翼式水表": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0035502/1c2a0532155b9da8.png",
+    "pictureName": "水表.png",
+    "folderName": "m0035502",
+    "templateName": "安徽运诚科技集团有限公司",
+    "matchType": "KEY_TAGS"
+  },
+  "镜面": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000244/ef2f4b2e6611b1ac.jpg",
+    "pictureName": "镜面.jpg",
+    "folderName": "m0000244",
+    "templateName": "08-墙面、天棚装饰及屋面材料-德万家",
+    "matchType": "NAME_SEARCH"
+  },
+  "无机磨石": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "损耗": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "切割费": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "运输费": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "人工费": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "辅材费": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "管理费": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "税": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "钢质隔声防火门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "钢质隔声门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "玻璃感应自动门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双开气密平开门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单开气密平开门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双道互锁气密门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双开气密平移门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单开气密平移门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗菌釉面砖": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防滑通体砖": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "通体大理石瓷砖": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "洗衣机龙头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "普通龙头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "不锈钢地漏": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "JS聚合物水泥防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水泥基渗透结晶型防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "沥青防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高弹丙烯酸防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "金属屋面丙烯酸高弹防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "SBS改性沥青卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "APP改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "塑性体APP改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC聚氯乙烯防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "TPO高分子卷材(L型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "TPO织物内增强型高分子卷材(P型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高分子自粘胶膜防水卷材(HDPE预铺反粘)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高分子自粘胶膜预铺防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三元乙丙橡胶耐根穿刺防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗菌腻子": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水乳型沥青防水涂料(氯丁胶乳沥青)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非固化橡胶沥青防防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "特种非固化橡胶沥青防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热熔型高强橡胶沥青防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高强水性橡胶沥青防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高粘抗滑水性橡胶沥青防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "全能型高聚物改性沥青防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水性沥青基层处理剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "道桥专用防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高强型自粘沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高延伸自粘沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "纤维增强型高分子膜基自粘沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "安妥坡屋面专用防滑自愈合防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "预铺自粘沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高耐热自粘沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚酯胎自粘沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非沥青高分子膜基自粘防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非沥青高分子交叉层压膜基自粘防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "太空堡耐候自粘沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "太空堡超耐候自粘沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "超高拉力自粘聚合物改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双面防皱自粘聚合物改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "自粘改性沥青聚乙烯胎防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "TPO高分子卷材(H型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "TPO耐根穿刺防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "TPO热塑性聚烯烃防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "TPO自粘型高分子卷材(SA型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热塑性聚烯烃(TPO)防水卷材(增强型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高分子(TPO)复合防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热塑性聚烯烃(TPO)防水卷材(均质型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "燃烧等级热塑性聚烯烃(TPO)防水卷材(增强型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非外露热塑性聚烯烃(TPO)防水卷材(增强型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "带自粘层的热塑性聚烯烃(TPO)防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高分子自粘胶膜(TPO)预铺防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺热塑性聚烯烃(TPO)防水卷材(增强型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺热塑性聚烯烃(TPO)防水卷材(自粘型)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "正压送风口": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "产": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "白/灰冷热水用聚丙烯(PP-R)管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "等径直接": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "异径直接": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚丙烯(PP-R)管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铝合金单层百叶风口": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "仿木纹": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0009689/bb4b4706e5b4b9e1.jpg",
+    "pictureName": "仿木纹.jpg",
+    "folderName": "m0009689",
+    "templateName": "08-铝单板-鑫泰",
+    "matchType": "NAME_SEARCH"
+  },
+  "石英砖": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "HDPE实壁管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE电力管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卫生间隔断": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0011537/1c98799a3de5839b.jpg",
+    "pictureName": "卫生间隔断.jpg",
+    "folderName": "m0011537",
+    "templateName": "08-卫生间隔断-创时",
+    "matchType": "NAME_SEARCH"
+  },
+  "断桥铝合金窗": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0002973/003e384d811d259c.jpg",
+    "pictureName": "断桥铝合金窗.jpg",
+    "folderName": "m0002973",
+    "templateName": "09-门窗制品及门窗五金-蓝盾",
+    "matchType": "NAME_SEARCH"
+  },
+  "智能远传水表": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0004300/01befd62de0b9edf.jpg",
+    "pictureName": "智能水表.jpg",
+    "folderName": "m0004300",
+    "templateName": "21-水表-聚科",
+    "matchType": "NAME_SEARCH"
+  },
+  "紫外光固化玻璃纤维软管": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0036208/69d3e5e51e24ac3c.jpg",
+    "pictureName": "紫外光固化玻璃纤维软管.jpg",
+    "folderName": "m0036208",
+    "templateName": "开普瑞环保科技有限公司",
+    "matchType": "COMPANY_TEMPLATE"
+  },
+  "硅藻泥": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/128454470118928384012fb0f3bd19cc9e.JPG",
+    "pictureName": "硅藻泥",
+    "folderName": "g178802",
+    "templateName": "兰州惠盛涂料有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "铝蜂窝复合板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铝瓦楞复合板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "钢制瓦楞复合板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "A级防火复合板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铝板及金属复合材料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "SBS弹性体改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗辐照SBS弹性体改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "SBS弹性体改性沥青防水卷材（细砂）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "SBS弹性体改性沥青防水卷材（岩片）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "SBS道桥防水卷材（细砂）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "APP塑性体改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "APP塑性体改性沥青防水卷材（细砂）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "APP塑性体改性沥青防水卷材（岩片）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "湿铺自粘防水卷材（双面）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "预铺自粘防水卷材（砂面）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "自粘聚合物改性沥青防水卷材（单面）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "自粘聚合物改性沥青防水卷材（双面）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗辐照自粘聚合物改性沥青防水卷材（单面）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "自粘聚合物改性沥青防水卷材（细砂）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PET自粘聚合物改性沥青防水卷材（单面）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PET预复合双层自粘防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PET自粘聚合物改性沥青防水卷材（单面湿铺）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PET自粘聚合物改性沥青防水卷材（双面湿铺）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PET非沥青基双面自粘防水卷材（双面湿铺）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "CLF非沥青基交叉层压膜自粘防水卷材（单面湿铺）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "CLF非沥青基双面自粘防水卷材（双面湿铺）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PET自粘防水卷材（砂面定制品）（单面湿铺）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "纤维增强型高分子膜基自粘防水卷材（单面湿铺）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "CLF交叉层压膜高分子自粘防水卷材（单面）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "CLF交叉层压膜高分子自粘防水卷材（双面）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "CLF交叉层压膜高分子膜基自粘防水卷材（单面湿铺）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "CLF自粘聚合物改性沥青防水卷材（双面湿铺）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非沥青基高分子（HDPE）自粘胶膜防水卷材（预铺型）（砂面）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非沥青基高分子（HDPE）自粘胶膜（热熔胶）防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热塑性聚烯烃（TPO）防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热塑性聚烯烃（TPO）复合防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热塑性聚烯烃（TPO）自粘防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非沥青基高分子（TPO）自粘胶膜防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "预铺式橡胶（TPR）自粘胶膜防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚氯乙烯（PVC）防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺双面自粘防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺单面自粘防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺铜胎基自粘防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺SBS弹性体改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺铜胎基弹性体改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺热塑性聚烯烃（TPO）防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺热塑性聚烯烃（TPO）自粘防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺聚氯乙烯（PVC）防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺高分子（HDPE）防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺高分子（HDPE）抗滑移防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺高分子自粘胶膜防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "CLF耐根穿刺高分子膜基防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单组分聚氨酯防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水性聚氨酯防水涂料（通用黑色）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水性聚氨酯防水涂料（蓝色）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无溶剂A类单组分聚氨酯防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗流挂型单组分聚氨酯防涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双组分聚氨酯防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "丙烯酸防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚脲防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单组份聚合物防水砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水泥基渗透结晶防水材料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非固化橡胶沥青防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非沥青非固化高粘橡胶防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "环保型水性基层处理剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "道桥用防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高聚物改性沥青防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防雨百叶风口": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双层百叶风口": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单层百叶风口": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "等径直通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "异径直通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "异径三通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "绕曲管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "金属管卡": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "塑料管卡": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "内牙直通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双联内牙直通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外牙直通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热水器内弯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热水器内直": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "内牙三通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双联内牙三通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外牙三通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "内牙弯头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双联内牙弯头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外牙弯头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双承口活接（铜）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "内螺纹活接": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外螺纹活接": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "法兰头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "法兰盘": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "截止阀": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铜球阀": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "风机侧纵向抗震支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "风机侧向抗震支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "桥架侧纵向抗震支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "桥架侧向抗震支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "风管侧纵向抗震支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "风管侧向抗震支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水管侧纵向抗震支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水管侧向抗震支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防爆吸顶灯": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0014730/e4693c3ade6c8ba5.jpg",
+    "pictureName": "防爆吸顶灯.jpg",
+    "folderName": "m0014730",
+    "templateName": "22-灯具、光源-大旗",
+    "matchType": "NAME_SEARCH"
+  },
+  "旋流防止器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "纳米银离子抗菌铝单板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双开防辐射气密门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单开防辐射气密门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防爆地漏": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001966/e6f63611e7bd2cb4.jpg",
+    "pictureName": "防爆地漏.jpg",
+    "folderName": "m0001966",
+    "templateName": "15-管材及管道用器具-滨诚水暖",
+    "matchType": "KEY_TAGS"
+  },
+  "铜地漏": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0008243/62ce9f38aff86885.jpg",
+    "pictureName": "全铜地漏.jpg",
+    "folderName": "m0008243",
+    "templateName": "18-洁具-天津",
+    "matchType": "KEY_TAGS"
+  },
+  "EPS聚苯乙烯泡沫板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "石墨改性模塑聚苯乙烯泡沫塑料板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水包砂": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0021831/657481fa945136e0.jpg",
+    "pictureName": "水包砂.jpg",
+    "folderName": "m0021831",
+    "templateName": "深圳石洋科技材料有限公司贵州办事处",
+    "matchType": "NAME_SEARCH"
+  },
+  "丙烯酸地坪": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高粘抗滑移防水涂料": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039366/c82c7f21bbc6e72a3f51386ffa09404e.png",
+    "pictureName": "高粘抗滑移防水涂料.png",
+    "folderName": "m0039366",
+    "templateName": "北京万宝力防水防腐技术开发有限公司1",
+    "matchType": "COMPANY_TEMPLATE"
+  },
+  "EPDM三元乙丙橡胶防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高分子水性喷涂防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "金线米黄大理石": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000026/13f0cbd82868298a.jpg",
+    "pictureName": "金线米黄大理石.jpg",
+    "folderName": "m0000026",
+    "templateName": "07-石材-环球石材",
+    "matchType": "NAME_SEARCH"
+  },
+  "深咖网大理石": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0017528/dce40a15954da451.jpg",
+    "pictureName": "深咖网大理石.jpg",
+    "folderName": "m0017528",
+    "templateName": "07-大理石-兴隆",
+    "matchType": "NAME_SEARCH"
+  },
+  "黑白根大理石": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/189441072378888192e6806ad58db920aa.jpg",
+    "pictureName": "黑白根大理石",
+    "folderName": "g20276057",
+    "templateName": "武汉旭昇伟业建材科技有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "中国黑花岗岩": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001517/f2cfbccef4074848.jpg",
+    "pictureName": "中国黑花岗岩.jpg",
+    "folderName": "m0001517",
+    "templateName": "07-装饰石材及地板-欣正和",
+    "matchType": "NAME_SEARCH"
+  },
+  "芝麻黑花岗岩": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001517/40a6de8807e86af5.jpg",
+    "pictureName": "芝麻黑花岗岩.jpg",
+    "folderName": "m0001517",
+    "templateName": "07-装饰石材及地板-欣正和",
+    "matchType": "NAME_SEARCH"
+  },
+  "芝麻灰花岗岩": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000772/8eb3f15f7a362d27.jpg",
+    "pictureName": "芝麻灰花岗岩.jpg",
+    "folderName": "m0000772",
+    "templateName": "07-装饰石材及地板-金腾",
+    "matchType": "NAME_SEARCH"
+  },
+  "黄金麻花岗岩": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001517/8ac358ad12ac44e9.jpg",
+    "pictureName": "黄金麻花岗岩.jpg",
+    "folderName": "m0001517",
+    "templateName": "07-装饰石材及地板-欣正和",
+    "matchType": "NAME_SEARCH"
+  },
+  "芝麻白花岗岩": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000772/4bb828aef0cfe483.jpg",
+    "pictureName": "芝麻白花岗岩.jpg",
+    "folderName": "m0000772",
+    "templateName": "07-装饰石材及地板-金腾",
+    "matchType": "NAME_SEARCH"
+  },
+  "白麻花岗岩": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0003845/c3699fe1e52ef2d2.jpg",
+    "pictureName": "白麻花岗岩.jpg",
+    "folderName": "m0003845",
+    "templateName": "07-花岗岩、大理石-豪顺",
+    "matchType": "NAME_SEARCH"
+  },
+  "奥特曼大理石": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001517/5f084d02d3e7506c.jpg",
+    "pictureName": "奥特曼大理石.jpg",
+    "folderName": "m0001517",
+    "templateName": "07-装饰石材及地板-欣正和",
+    "matchType": "NAME_SEARCH"
+  },
+  "云朵拉灰大理石": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001280/b53a2e362745cad9.jpg",
+    "pictureName": "云朵拉灰大理石.jpg",
+    "folderName": "m0001280",
+    "templateName": "07-石材-首度宝纯",
+    "matchType": "NAME_SEARCH"
+  },
+  "古堡灰大理石": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000026/456bc876a458c2c8.jpg",
+    "pictureName": "古堡灰大理石.jpg",
+    "folderName": "m0000026",
+    "templateName": "07-石材-环球石材",
+    "matchType": "NAME_SEARCH"
+  },
+  "雅士白大理石": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/189441072378888192ce134c28245cf219.jpg",
+    "pictureName": "雅士白大理石",
+    "folderName": "g20276057",
+    "templateName": "武汉旭昇伟业建材科技有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "爵士白大理石": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/1894410723788881923292fdd4e941db68.jpg",
+    "pictureName": "爵士白大理石",
+    "folderName": "g20276057",
+    "templateName": "武汉旭昇伟业建材科技有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "爱马仕灰大理石": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐水腻子": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0033779/2c5f8f209b473906.jpg",
+    "pictureName": "耐水腻子.jpg",
+    "folderName": "m0033779",
+    "templateName": "广州市豪耐斯建筑工程有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "太阳能路灯": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001376/030a1fcab27afb21.jpg",
+    "pictureName": "太阳能路灯.jpg",
+    "folderName": "m0001376",
+    "templateName": "22-灯具光源-阿波罗",
+    "matchType": "NAME_SEARCH"
+  },
+  "双臂路灯": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0007053/e4cc493ca6483d29.jpg",
+    "pictureName": "双臂路灯.jpg",
+    "folderName": "m0007053",
+    "templateName": "22-户外灯-九鼎",
+    "matchType": "NAME_SEARCH"
+  },
+  "高低杆路灯": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0015316/13089198bd2705cd.jpg",
+    "pictureName": "高低杆路灯.jpg",
+    "folderName": "m0015316",
+    "templateName": "22-灯具、光源",
+    "matchType": "NAME_SEARCH"
+  },
+  "单臂路灯": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0007053/83ffe8e5c1405fd4.jpg",
+    "pictureName": "单臂路灯.jpg",
+    "folderName": "m0007053",
+    "templateName": "22-户外灯-九鼎",
+    "matchType": "NAME_SEARCH"
+  },
+  "LED道路灯": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0027079/8a9b541e43f25cac.jpg",
+    "pictureName": "LED道路灯.jpg",
+    "folderName": "m0027079",
+    "templateName": "长沙源道建材贸易有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "铝板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0003313/a15191b636c6bd78.jpg",
+    "pictureName": "铝板.jpg",
+    "folderName": "m0003313",
+    "templateName": "01-黑色及有色金属-同盛",
+    "matchType": "NAME_SEARCH"
+  },
+  "防辐射气密门": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0039298/471927b78347402d.png",
+    "pictureName": "单开防辐射气密门.png",
+    "folderName": "m0039298",
+    "templateName": "核能国建（山东）辐射防护材料有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "气密平移门": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039294/9bd45e9aaa7c947be0ac428903fea798.jpg",
+    "pictureName": "双开气密平移门.jpg",
+    "folderName": "m0039294",
+    "templateName": "西安天将门业有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "硫氧镁芯净化彩钢板": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039218/74caf6fc12a1cd7423a7e21609604854.png",
+    "pictureName": "硫氧镁芯净化彩钢板.png",
+    "folderName": "m0039218",
+    "templateName": "重庆巨久钢结构有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "岩棉芯净化彩钢板": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039218/c7ab111f4727100e840d6324bff103d8.png",
+    "pictureName": "岩棉芯净化彩钢板.png",
+    "folderName": "m0039218",
+    "templateName": "重庆巨久钢结构有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "玻璃镁芯中空净化彩钢板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "潜水排污泵": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防泵": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "UPVC清扫口": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0024955/fa4555141b7a2723.png",
+    "pictureName": "清扫口.png",
+    "folderName": "m0024955",
+    "templateName": "河南省精装房科技发展有限公司",
+    "matchType": "KEY_TAGS"
+  },
+  "UPVC地漏": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0029731/5245e0dfa923151f.png",
+    "pictureName": "UPVC地漏.png",
+    "folderName": "m0029731",
+    "templateName": "绵阳邻德科技有限公司",
+    "matchType": "KEY_TAGS"
+  },
+  "聚乙烯丙纶复合防水卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001341/118c7ff4e455912f.jpg",
+    "pictureName": "聚乙烯丙纶复合防水卷材.jpg",
+    "folderName": "m0001341",
+    "templateName": "11-涂料及防腐防水材料-筑龙",
+    "matchType": "NAME_SEARCH"
+  },
+  "EPDM 三元乙丙橡胶防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "健康内墙腻子/优易施内墙抗碱腻子": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "健康内墙耐水腻子": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "工程轻质抹灰石膏": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "超轻隔音抹灰石膏": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗碱封闭内墙底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "优质抗碱封闭内墙底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无机内墙底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "优易涂内墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐擦洗内墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "清优内墙面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "内墙工程防霉型": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "优净防霉内墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "优净内墙工程漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净味360抗菌防霉精装墙面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净味除醛全效精装墙面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净味无机内墙涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "精装无机防霉内墙涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无机矿物内墙涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗裂型耐水填充砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外墙仿石配套砂浆型腻子": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外墙耐水抗裂粗底腻子": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外墙柔性耐水粗底腻子": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外墙柔性耐水光面腻子": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外墙耐水抗裂光面腻子": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "锚固件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐碱网格布": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "质感真石漆专用底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外墙通用Ⅱ型底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外墙抗碱封闭底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外墙调色底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "恒彩石底中合一": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "天彩石砂彩漆底中合一": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "天彩石专配中涂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "墙清臻彩罩面涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "天彩石专用哑光罩面清漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "天彩石专用罩面清漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "墙清臻彩氟碳罩面清漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "弹性哑光外墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "外墙臻选乳胶漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三棵树恒彩真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三棵树恒彩麻石": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "甄选真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "流彩砂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "甄选质感涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "柔性拉毛外墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "恒彩石": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三棵树天彩石砂彩石": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三棵树甄选荔彩石": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高耐候耐水天彩石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水性氟碳金属外墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水性氟碳哑光涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三棵树保温装饰板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "保温装饰板专用粘结砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "保温装饰板专用锚固件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "保温装饰板专用耐候密封胶": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非金属骨料耐磨地坪": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "金属骨料耐磨地坪": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "合金骨料耐磨地坪": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防静电不发火耐磨骨料地坪": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "砂彩骨料地坪": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "砂彩地坪收光增效剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "端勾联排胶粘钢纤维": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "锂基渗透硬化剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "密封固化剂（锂）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "密封硬化剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无溶剂环氧底中合一+无溶剂环氧面漆套装": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无溶剂环氧底中合一": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无溶剂聚氨酯超耐磨面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无溶剂环氧浮动彩砂自流平面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无溶剂环氧面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无溶剂环氧纹理防滑漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无溶剂聚氨酯底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无溶剂聚氨酯面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "强力型瓷砖粘结剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "玻化砖普通型粘结剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "玻化砖高强型粘结剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "优易施三棵树单组份背胶": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "优易施多功能界面剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "固墙宝（界面剂）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "强力型双组分界面剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三棵树彩色防霉填缝剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "乐居宝美缝剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "优易施防水界面剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单组份防水浆料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单组分聚合物水泥防水砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "球泡": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无机复合天花（藻钙板）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无机复合天花（高晶板）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无机复合天花": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无机复合吸音板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GRG平板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GRG吸音板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GRG装饰板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "病房配套龙骨": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "医疗轨道转角器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛防潮防霉原生态内墙腻子 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛内墙耐水防霉超易施腻子 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛抗裂防渗宝/灰色 25Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛通用外墙腻子/白色 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛通用外墙腻子/灰色 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛外墙粗砂找平腻子/白色 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛外墙粗砂找平腻子/灰色 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛外墙柔性抗裂腻子/白色 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛外墙柔性抗裂腻子/灰色 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛粉刷石膏底层（重质找平） 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛轻质底层抹灰石膏 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛拉法基嵌缝石膏 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛特级粘粉 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛特级石膏粉 20Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛水性罩光面油 12Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛多功能强效斯那那 15Kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净醛抗粉化腻子18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "守护1号净醛抗裂防碱腻子18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净醛耐水防潮腻子18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "植本净味耐水防霉腻子18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净醛耐水粗底找平腻子20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净醛柔性批墙膏18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净醛耐水批墙骨浆15kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高强轻质抹灰石膏12kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高强抗裂嵌缝石膏18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高强重质抹灰石膏20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净味单组份水性接缝宝5kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净醛墙面加固剂18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单组份拉毛界面剂（黄色）18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "净醛全能界面剂18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "增强型乳液界面剂15kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗污儿童漆（面漆）6.8kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗污儿童漆（底漆）6kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "儿童安全级内墙（面漆）15L（20kg）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "儿童安全级内墙（底漆）15L（20kg）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "植萃净味全效内墙面漆22kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "植本净味抗碱防霉底漆20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耀晶砂批刮型艺术涂料20kg干粉（原色）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耀晶砂批刮型艺术涂料20kg（马拉彩石）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "魔方砂批刮型艺术涂料20kg膏状": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛Z902净味水性抗污罩面漆（哑光）15kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GB+Ⅰ高强型瓷砖胶20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GB+Ⅰ高强型瓷砖胶20kg（红包款）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GB+Ⅱ大板瓷砖胶20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GB+Ⅲ抗滑移大板瓷砖胶20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗下坠大板瓷砖胶20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "柔性抗震大板瓷砖胶20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双组份拉毛专用瓷砖背胶20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗渗防霉填缝剂超细型（白色）20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗渗防霉填缝剂标准型（黑色）20kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "彩色通用抗渗型防水涂料（蓝色）17kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "彩色高柔抗裂型防水涂料（绿色）17kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卓玛堵漏宝（速凝型）2kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "可外露屋面外墙专用防水18kg": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "硅酸锂无机涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水包砂真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水包水真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "硅丙真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "纯丙真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "钢质防火卷帘门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "粉尘探测器": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0013027/29a710f87ca3dba4.png",
+    "pictureName": "粉尘探测器.png",
+    "folderName": "m0013027",
+    "templateName": "21-仪表及自动化控制-威蓝",
+    "matchType": "NAME_SEARCH"
+  },
+  "壁挂一体式小便器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "一体壁挂式小便器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "落地一体式小便器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "小便器感应冲洗阀（后进水）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "蹲便器感应阀预埋盒": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "蹲便器感应冲洗阀面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "蹲便器冲洗阀": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ABS 直排下水器 (有溢水孔)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ABS 翻板下水器 (有溢水孔)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ABS 弹跳下水器 (有溢水孔)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ABS排水管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "冷热面盆龙头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "感应龙头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "感应龙头电源(AC)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "感应龙头冷热混水阀": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "后进前排蹲便器 (含S弯管)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "连体坐便器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "柱盆立柱": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "方形台下盆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单功能浴缸龙头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双功能浴缸龙头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三功能大花洒": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "拖把池龙头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "蓝标铜角阀": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "红标铜角阀": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "不锈钢双接软管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "釉面砖踢脚线": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "壁纸": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0010740/2163a8ec0d31621e.jpg",
+    "pictureName": "壁纸.jpg",
+    "folderName": "m0010740",
+    "templateName": "10-装饰线条、装饰件、栏杆、扶手及其他-雅琪诺",
+    "matchType": "NAME_SEARCH"
+  },
+  "壁布": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0004814/ec396c36cd549681.jpg",
+    "pictureName": "壁布.jpg",
+    "folderName": "m0004814",
+    "templateName": "10-装饰线条、装饰件、栏杆扶手及其它-锡布鲁克",
+    "matchType": "NAME_SEARCH"
+  },
+  "火灾报警/消防联动控制器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "火灾报警控制器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "新标控制器回路板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "回路扩展版": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防控制室图形显示装置": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "CRT壁挂支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "编码器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "标志灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双门双向网络型控制器（含机箱电源）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "门禁挥手感应开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "寸门口机": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "寸分机": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "宿舍控水控电终端": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "考勤打卡终端": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "硅酸钙穿孔吸音板": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039218/63066408741e9c1ffdd06c65083e3d1e.png",
+    "pictureName": "硅酸钙穿孔吸音板.png",
+    "folderName": "m0039218",
+    "templateName": "重庆巨久钢结构有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "陶铝吸音板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0033365/ee0d7c0e6ed8e43b.jpg",
+    "pictureName": "陶铝吸音板.jpg",
+    "folderName": "m0033365",
+    "templateName": "广东丽音声学科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "玻纤吸音板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0006917/fc1ab034a5642d9c.jpg",
+    "pictureName": "玻纤吸音板.jpg",
+    "folderName": "m0006917",
+    "templateName": "13-保温材料-沃能",
+    "matchType": "NAME_SEARCH"
+  },
+  "聚酯纤维吸音板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0032479/fc3a298c8130c9a4.png",
+    "pictureName": "聚酯纤维吸音板.png",
+    "folderName": "m0032479",
+    "templateName": "上海星汉环境保护有限公司",
+    "matchType": "COMPANY_TEMPLATE"
+  },
+  "槽木吸音板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001286/a97ce7d86e8c388a.jpg",
+    "pictureName": "槽木吸音板.jpg",
+    "folderName": "m0001286",
+    "templateName": "13-绝热、耐火材料-坤耐",
+    "matchType": "NAME_SEARCH"
+  },
+  "孔木吸音板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001286/7e3d6073fb44af90.jpg",
+    "pictureName": "孔木吸音板.jpg",
+    "folderName": "m0001286",
+    "templateName": "13-绝热、耐火材料-坤耐",
+    "matchType": "NAME_SEARCH"
+  },
+  "东鹏品种：洗涤池；材质：不锈钢；长(mm):1500;宽(mm):500": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "650.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：洗涤池；材质：不锈钢；长(mm):1000;宽(mm):500": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "480.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：洗涤池；材质：不锈钢；长(mm):500;宽(mm):500": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "360.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：脚踏式冲洗阀；公称直径DN(mm):25;阀体材质：不锈钢": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "110.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "品种：脚踏式冲洗阀；公称直径DN(mm):20;阀体材质：不锈钢": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "90.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：一体化感应大便冲洗阀；公称直径DN(mm):20;阀体材质：不锈钢": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "130.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：一体化感应小便冲洗阀；公称直径DN(mm):15;阀体材质：不锈钢": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：清扫口；材质：黄铜+塑料；规格(mm):De160": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：清扫口；材质：黄铜+塑料；规格(mm):De110": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "55.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：清扫口；材质：黄铜+塑料；规格(mm):De75": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "42.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：清扫口；材质：黄铜+塑料；规格(mm):De50": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "30.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：清扫口；材质：UPVC;规格(mm):De160": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "24.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：清扫口；材质：UPVC;规格(mm):De110": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "20.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：清扫口；材质：UPVC;规格(mm):De75": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "15.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：清扫口；材质：UPVC;规格(mm):De50": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "10.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：普通地漏；材质：UPVC;接口口径(mm):110": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：普通地漏；材质：UPVC;接口口径(mm):75": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "12.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：普通地漏；材质：UPVC;接口口径(mm):50": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：防爆地漏；材质：铸铁；接口口径(mm):150": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "80.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：防爆地漏；材质：铸铁；接口口径(mm):100": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "50.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：防爆地漏；材质：铸铁；接口口径(mm):80": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "40.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：防爆地漏；材质：铸铁；接口口径(mm):50": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：普通地漏；材质：铜；接口口径(mm):110": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：普通地漏；材质：铜；接口口径(mm):75": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：普通地漏；材质：铜；接口口径(mm):50": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "东鹏品种：普通地漏；材质：不锈钢；接口口径(mm);110": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "25.00": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "钢质防盗门": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000400/892b2b35f50f6923.jpg",
+    "pictureName": "钢质防盗门.jpg",
+    "folderName": "m0000400",
+    "templateName": "09-门窗制品及门窗五金-王力",
+    "matchType": "NAME_SEARCH"
+  },
+  "防盗子母门": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0007154/655821014d007348.jpg",
+    "pictureName": "防盗子母门.jpg",
+    "folderName": "m0007154",
+    "templateName": "9-防盗门-福日",
+    "matchType": "NAME_SEARCH"
+  },
+  "钢木复合门": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038225/3ffbb0bbe0ee0683.jpg",
+    "pictureName": "钢木复合门.jpg",
+    "folderName": "m0038225",
+    "templateName": "兰州三佳门业有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "不锈钢门": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0024348/c1558173721ef0ab.png",
+    "pictureName": "1.png",
+    "folderName": "m0024348",
+    "templateName": "广东龙树实业集团有限公司",
+    "matchType": "KEY_TAGS"
+  },
+  "超白玻璃": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000729/7aeba5345cd93c45.jpg",
+    "pictureName": "超白玻璃.jpg",
+    "folderName": "m0000729",
+    "templateName": "06-玻璃、陶瓷及面砖-实德",
+    "matchType": "NAME_SEARCH"
+  },
+  "高硼硅防火玻璃": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0034180/1d22560901217e8c9258c91434896cef.png",
+    "pictureName": "高硼硅防火玻璃.png",
+    "folderName": "m0034180",
+    "templateName": "江苏福坤新材料科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "中空钢化玻璃": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0002068/a8a8ef281368e688.jpg",
+    "pictureName": "中空钢化玻璃.jpg",
+    "folderName": "m0002068",
+    "templateName": "06-玻璃、陶瓷及面砖-三湘",
+    "matchType": "NAME_SEARCH"
+  },
+  "钢化镀膜玻璃": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001348/6591779519ff0265.jpg",
+    "pictureName": "钢化镀膜玻璃.jpg",
+    "folderName": "m0001348",
+    "templateName": "06-玻璃、陶瓷及面砖-贝斯特",
+    "matchType": "NAME_SEARCH"
+  },
+  "Low-E中空钢化玻璃": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "岩棉板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗菌铝扣板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "参考低价 (元)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "参考高价(元)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "总线制消防电话总机": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "总线制消防电话分机": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消火栓按钮": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "手动火灾报警按钮(带电话插孔)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防联动广播模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "输入输出模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "输入模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "输出模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "短路隔离器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "感烟火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "感温火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "普通镀膜玻璃": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0006085/109518136118854d.jpg",
+    "pictureName": "普通镀膜玻璃.jpg",
+    "folderName": "m0006085",
+    "templateName": "06-玻璃-鑫伟乐",
+    "matchType": "NAME_SEARCH"
+  },
+  "平面钢化玻璃": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000755/ef99e25f619dcf3b.jpg",
+    "pictureName": "平面钢化玻璃.jpg",
+    "folderName": "m0000755",
+    "templateName": "06-玻璃、陶瓷及面砖-金晶",
+    "matchType": "NAME_SEARCH"
+  },
+  "钢化中空玻璃": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000755/ffc9b5b84216fb7f.jpg",
+    "pictureName": "钢化中空玻璃.jpg",
+    "folderName": "m0000755",
+    "templateName": "06-玻璃、陶瓷及面砖-金晶",
+    "matchType": "NAME_SEARCH"
+  },
+  "防潮纸面石膏板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "穿孔吸声石膏板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "石膏基阻燃石膏板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "固定柔性挡烟垂壁": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0033122/883fa10f8914b460.png",
+    "pictureName": "固定柔性挡烟垂壁.png",
+    "folderName": "m0033122",
+    "templateName": "江西汉丰科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "固定玻璃挡烟垂壁": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/44517919895783014419a4a1e2aeb34d72.jpg",
+    "pictureName": "固定玻璃挡烟垂壁",
+    "folderName": "g20635357",
+    "templateName": "任丘市京盾门业有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "固定防火板挡烟垂壁": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/8261259428787077122a5f2977492d01b2.jpg",
+    "pictureName": "固定防火板挡烟垂壁.jpg",
+    "folderName": "g21149760",
+    "templateName": "湖北捷坤消防科技有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "电动挡烟垂壁": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0033205/b98769e6eb5203d6.jpg",
+    "pictureName": "电动挡烟垂壁.jpg",
+    "folderName": "m0033205",
+    "templateName": "山东龙江门业有限公司",
+    "matchType": "COMPANY_TEMPLATE"
+  },
+  "活动式柔性挡烟垂壁": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0025065/9a372a7739d87ba1.jpg",
+    "pictureName": "活动式柔性挡烟垂壁.jpg",
+    "folderName": "m0025065",
+    "templateName": "衢州瑞泰门控科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "固定镀锌钢板挡烟垂壁": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "智能坐便器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "进水软管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "卷纸器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "坐便器水箱": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "扶手": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "自动感应皂液器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "储水式电热水器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "混合水阀": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "二连置物卷纸架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "升降式洗面器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "升降装置": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "挂壁式洗面器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "排水器具": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "升降式坐便辅助器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水嘴": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "浴缸水嘴": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "浴用吐水口": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水嘴面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "网络+电话组合面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双口网络面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电视面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单口网络面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单口电话面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "斜五孔插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "五孔插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双USB插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "16A三孔插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "带开关五孔插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "带开关16A三孔插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "USB五孔插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "风扇调速开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "四开单控开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双开双控开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双开单控开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三开双控开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三开单控开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单开双控开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单开单控开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防静电玻化砖": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防静电地板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防静电架空地板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "n型单晶硅光伏组件": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038587/b3208ae7683b9ece.png",
+    "pictureName": "n型单晶硅光伏组件.png",
+    "folderName": "m0038587",
+    "templateName": "州瑞天光伏科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "TOPCON单晶双玻": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "应急灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双头应急灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "中式庭院灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "中式路灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "景观灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "庭院灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "球场高杆照明灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高杆灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "广场泛光灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "仿古庭院灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "挑臂庭院灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "LED草坪灯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山牌普通纸面石膏板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山牌耐火纸面石膏板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山牌耐水纸面石膏板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山牌防潮纸面石膏板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山GF石膏基植物纤维板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GFP泰山高强石膏基阻燃板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山牌分解甲醛石膏板（T20）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山牌分解甲醛石膏板(T30)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GFG泰山牌高强玻纤布石膏板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "GFG泰山牌高强玻纤布石膏板（耐水）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "A级饰面低碳板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山牌速装饰面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山牌轻钢龙骨": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "泰山牌轻质抹灰石膏(T130)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "不锈钢栏杆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038224/fd4dab77d6f54053.png",
+    "pictureName": "圆管式不锈钢栏杆.png",
+    "folderName": "m0038224",
+    "templateName": "广州格拉瑞斯金属制品有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "十字布基壁布": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "普通砌筑砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "普通抹灰砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "干混地面砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "薄层砌筑砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "薄层抹灰砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "干混防水砂浆:P6": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "干混防水砂浆:P8": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "干混防水砂浆:P10": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚合物防水砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚合物修补砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚合物抗裂砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高强无收缩灌浆料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "玻化微珠保温砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "矿山充填胶结料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "软土固化剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "土壤固化剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "通用型固化剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "工业固废处置专用固化剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "医用改性丙烯酸防霉乳胶漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无机硅酸盐抗菌防霉涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无机富锌底漆(防腐)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "丙烯酸聚氨酯面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "环氧云铁中间漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "环氧富锌底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水性醇酸防锈漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "环氧自流平地坪漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防静电环氧自流平漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "环氧砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高强修补砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "真石漆专用底漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "超级雨刷外墙工程面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗污弹性平涂外墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高耐候高弹平涂外墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗污弹性拉毛外墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "质感（非通体）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "质感（40 目通体）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "A 类普通真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "B 类彩砂真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "B 类 J35 彩砂真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "C 类 J35 岩片（1-3%）真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "D 类 J35 岩片（3-5%）真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "E 类 J35 岩片（5%以上）真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "仿石漆专用中涂乳胶漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "仿石漆专用中涂真石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水包水仿花岗石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水包水(含砂)仿花岗石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水包砂仿花岗石漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "氟碳面漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "金属氟碳漆（闪银/金黄色）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "ZM 金属防尘罩面清漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "饰面砂浆底层": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "饰面砂浆面层": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "反射隔热外墙质感涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "矿物棉装饰吸声板 天瑞 Bliss": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "矿物棉装饰吸声板 新星空® NewStar-Z": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "矿物棉装饰吸声板 Star满天星S Galaxy's Tears": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "矿物棉装饰吸声板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "感烟探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "吸气式感烟探 测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "火焰探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "可燃气体探测 器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "总线制消防电 话总机": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防广播模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "输入/输出模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "隔离模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "感烟感温火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "蒸压加气混凝土砌块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "密集型母线槽": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "连接器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐火母线槽": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐火连接器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "合金母线槽": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "合金连接器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铝母线槽": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铝连接器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "浇注母线槽": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "浇注连接器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高压共箱母线 槽": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "空气型母线槽": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "点型光电感烟火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "点型感温火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "点型复合式感烟感温火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "点型紫外火焰探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "缆式线型感温火灾探测器(线型温度传感器)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "缆式线型感温火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "线型光束感烟火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "线型光束感烟火灾探测器反射器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "线型光束感烟火灾探测器支架": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "吸气式感烟火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "手动火灾报警按钮底座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消火栓按钮底座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "火灾声光警报器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "总线隔离器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "环形总线隔离器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "环形总线切换模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "总线中继器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "火灾报警控制器/消防联动控制器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "总线制操作盘": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "直接控制盘": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "控制器机箱": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "控制器机柜": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "IMT-MPI局域联网卡": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "光纤转换器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "串口服务器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "火灾报警控制器/气体灭火控制器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "气体灭火控制器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "气体释放警报器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急广播设备": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "智能广播功率放大器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防广播音箱": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防电话分机": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防电话插孔": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防电话模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防电话终端器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防电话中继器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电气火灾监控设备": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "剩余电流式电气火灾监控探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "组合式电气火灾监控探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "剩余电流互感器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "温度传感器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防设备电源状态监控器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "交流单相电压电流传感器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三相四线电压电流传感器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三相四线双电源电压传感器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三相四线双电源电压电流传感器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "多路式单相电压传感器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电流互感器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防火门监控器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防火门总线制操作盘": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防火门电动闭门器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防火门监控模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防火门门磁开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防火门监控模块（单）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防火门监控模块（双）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "可燃气体报警控制器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "测量范围为0～100%LEL的点型可燃气体探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "家用火灾报警控制器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "点型家用感烟火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "点型家用感温火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "手动报警开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "独立式光电感烟火灾探测报警器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "测量范围为0～100%LEL的独立式可燃气体探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "集中电源集中控制型消防应急标志灯具": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "集中电源集中控制型消防应急照明灯具": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急灯具专用应急电源": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "集中电源集中控制型消防应急标志灯具(-1F)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "集中电源集中控制型消防应急标志灯具(1F)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "应急照明分配电装置": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "自带电源集中控制型消防应急标志灯具": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "自带电源集中控制型消防应急照明灯具": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "应急照明配电箱": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "应急照明控制器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "集中电源集中控制型消防应急标志灯具地埋预埋盒": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "集中电源集中控制型消防应急标志灯具嵌装预埋盒": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电子编码器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防水系统监控器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "压力监测模块": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "压力变送器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "液位变送器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水温变送器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "余压监控器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "余压控制器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "余压探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "余压探测器导气管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "网络电源箱": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "蓄电池": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "接线箱": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "点型光电感烟火灾探测器（隔爆）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "报警综合盘": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "红外火焰探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "红外火焰探测器/紫外火焰探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "无线遥控器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "图像型火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "图像型火灾探测系统管理主机": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "分布式光纤线型感温火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "感温光纤": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "工业及商业用途点型可燃气体探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "常规消火栓箱": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "常规消火栓箱箱门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "常规消火栓箱箱体": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急照明灯具（新标准）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急照明灯具（DC 母插电源线-新标准）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （安全出口）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （安全出口/DC 母插电源线）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （疏散出口）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （疏散出口/DC 母插电源线）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （疏散方向向右）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （疏散方向向右/DC 母插电源线）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （疏散方向向左）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （疏散方向向左/DC 母插电源线）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （双安-新标准）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （双安/DC 母插电源线-新标准）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （双疏-新标准）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （双疏/DC 母插电源线-新标准）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （嵌安-新标准）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （嵌安/DC 母插电源线-新标准）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "消防应急疏散标志灯具 （嵌疏-新标准）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "三孔插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "光纤面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "新风控制面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "声光控延时开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "人体感应延时开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "触摸延时开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "硫氧镁芯净化彩钢板（手工板）": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039218/74caf6fc12a1cd7423a7e21609604854.png",
+    "pictureName": "硫氧镁芯净化彩钢板.png",
+    "folderName": "m0039218",
+    "templateName": "重庆巨久钢结构有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "玻镁芯中空净化彩钢板（手工板）": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039374/36e8e3a031a8a633117cd069c01bb084.png",
+    "pictureName": "玻镁芯中空净化彩钢板.png",
+    "folderName": "m0039374",
+    "templateName": "河北瑞逵建筑工程有限公司-2026",
+    "matchType": "NAME_SEARCH"
+  },
+  "岩棉芯净化彩钢板（手工板）": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039218/c7ab111f4727100e840d6324bff103d8.png",
+    "pictureName": "岩棉芯净化彩钢板.png",
+    "folderName": "m0039218",
+    "templateName": "重庆巨久钢结构有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "人造石": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "玻镁芯中空净化彩钢板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "玻璃钢化粪池": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "一体化泵站": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "玻璃钢管道": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗菌夹胶钢化玻璃": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "抗菌钢化中空玻璃": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "LOW-E中空钢化玻璃": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "LOW-E钢化中空玻璃": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "反射式感烟火灾探测器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "弹性体SBS改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "SBS改性沥青化学阻根防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "湿铺沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "预铺沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非外露型": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "砂面": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚合物乳液建筑防水涂料(丙烯酸)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚合物水泥JS防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单组份聚氨酯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "非固化橡胶沥青": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "单组分砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高粘抗滑": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "基层处理剂": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "高聚物改性沥青防水涂料水乳型": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "不锈钢 紫外线消毒 传递窗": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0031959/6a8842317c399bdc.png",
+    "pictureName": "304不锈钢紫外线消毒传递窗.png",
+    "folderName": "m0031959",
+    "templateName": "东莞雅宁净化科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "覆塑不锈钢管": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0003559/83d168e9c3a3323e.jpg",
+    "pictureName": "覆塑不锈钢管.jpg",
+    "folderName": "m0003559",
+    "templateName": "14-管材-正康",
+    "matchType": "NAME_SEARCH"
+  },
+  "单控开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "双控开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "空白面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电视插座": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "中途开关": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "防水盒": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "弹性体(SBS)改性沥青防水卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0003248/05698145167bf11c.jpg",
+    "pictureName": "弹性体(SBS)改性沥青防水卷材.jpg",
+    "folderName": "m0003248",
+    "templateName": "11-涂料及防腐防水材料-永阳",
+    "matchType": "NAME_SEARCH"
+  },
+  "塑性体(APP)改性沥青防水卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001875/5cb41bfe6412729f.JPG",
+    "pictureName": "塑性体(APP)改性沥青防水卷材.JPG",
+    "folderName": "m0001875",
+    "templateName": "11-防水卷材-银珠",
+    "matchType": "NAME_SEARCH"
+  },
+  "改性沥青聚乙烯胎防水卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0019083/a2384dd799566998.jpg",
+    "pictureName": "改性沥青聚乙烯胎防水卷材.jpg",
+    "folderName": "m0019083",
+    "templateName": "远大洪雨（唐山）防水材料有限公司",
+    "matchType": "COMPANY_TEMPLATE"
+  },
+  "聚酯胎自粘聚合物改性沥青防水卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/mc_file/product_pic_file/1284548348639928320dd5c77168be2be8.png",
+    "pictureName": "聚酯胎自粘聚合物改性沥青防水卷材.png",
+    "folderName": "g20920850",
+    "templateName": "陕西鲁泰防水保温工程有限公司-自维护",
+    "matchType": "NAME_SEARCH"
+  },
+  "无胎自粘聚合物改性沥青防水卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001813/cca7453795085899.jpg",
+    "pictureName": "无胎自粘聚合物改性沥青防水卷材.jpg",
+    "folderName": "m0001813",
+    "templateName": "11-涂料及防腐防水材料-京喜",
+    "matchType": "NAME_SEARCH"
+  },
+  "改性沥青耐根穿刺防水卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001766/0cd5e7018145f0c2.jpg",
+    "pictureName": "改性沥青耐根穿刺防水卷材.jpg",
+    "folderName": "m0001766",
+    "templateName": "11-涂料及防腐防水材料-新晨",
+    "matchType": "NAME_SEARCH"
+  },
+  "高分子（HDPE）自粘胶膜防水卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0026614/dea1b84e23e15c23.png",
+    "pictureName": "高分子（HDPE）自粘胶膜防水卷材.png",
+    "folderName": "m0026614",
+    "templateName": "远大洪雨（唐山）防水材料有限公司北京远大洪雨防水工程有限公司",
+    "matchType": "COMPANY_TEMPLATE"
+  },
+  "高强型双组分聚氨酯防水涂料": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0021348/5970c0d19ae12790.png",
+    "pictureName": "高强型双组分聚氨酯防水涂料.png",
+    "folderName": "m0021348",
+    "templateName": "深圳蓝盾控股有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "丙烯酸聚合物乳液防水涂料": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0021987/79e221263dd5278a.jpg",
+    "pictureName": "丙烯酸聚合物乳液防水涂料.jpg",
+    "folderName": "m0021987",
+    "templateName": "北京远大洪雨防水工程有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "金属屋面专用丙烯酸防水涂料": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0021987/a8917cce95ff106e.jpg",
+    "pictureName": "金属屋面专用丙烯酸防水涂料.jpg",
+    "folderName": "m0021987",
+    "templateName": "北京远大洪雨防水工程有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "聚合物水泥防水砂浆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0026614/75ec1fd43cb6f8b3.jpg",
+    "pictureName": "聚合物水泥防水砂浆.jpg",
+    "folderName": "m0026614",
+    "templateName": "远大洪雨（唐山）防水材料有限公司北京远大洪雨防水工程有限公司",
+    "matchType": "COMPANY_TEMPLATE"
+  },
+  "喷涂速凝橡胶沥青防水涂料": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0021987/4c7738e2918dcee1.jpg",
+    "pictureName": "喷涂速凝橡胶沥青防水涂料.jpg",
+    "folderName": "m0021987",
+    "templateName": "北京远大洪雨防水工程有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "水性沥青防水涂料": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0020767/c7b628df452cc07d.png",
+    "pictureName": "水性沥青防水涂料.png",
+    "folderName": "m0020767",
+    "templateName": "杭州森乐士科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "水乳型沥青防水涂料": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000836/5d3da59b155f8a9c.jpg",
+    "pictureName": "水乳型沥青防水涂料.jpg",
+    "folderName": "m0000836",
+    "templateName": "11-涂料及防腐防水材料-首云",
+    "matchType": "NAME_SEARCH"
+  },
+  "化学阻根耐穿刺改性沥青防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "快速反应粘接型高分子自粘防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐根穿刺性聚氯乙烯（PVC）防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "乙烯醋酸乙烯共聚物（EVA）防水板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热熔橡胶沥青防水涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "热塑性聚烯烃TPO防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "HDPE预铺防水卷材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "MPP开挖型电力管": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0019040/84a7920c2c4b5c1b.jpg",
+    "pictureName": "MPP开挖型电力管.jpg",
+    "folderName": "m0019040",
+    "templateName": "2606-电缆套管配图",
+    "matchType": "NAME_SEARCH"
+  },
+  "MPP非开挖型电力管": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0012957/6da1d6d22a1e0a75.jpg",
+    "pictureName": "MPP非开挖型电力管.jpg",
+    "folderName": "m0012957",
+    "templateName": "26-电气线路敷设材料-耀龙",
+    "matchType": "NAME_SEARCH"
+  },
+  "超六类双屏蔽网络跳线": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0035433/59c35b6ce06f2a85.png",
+    "pictureName": "超六类双屏蔽网络跳线.png",
+    "folderName": "m0035433",
+    "templateName": "凯诚线缆（广东）有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "六类双屏蔽网络跳线": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0035433/0f8ae9f0bed4bb9b.png",
+    "pictureName": "六类双屏蔽网络跳线.png",
+    "folderName": "m0035433",
+    "templateName": "凯诚线缆（广东）有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "超六类非屏蔽网络跳线": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0035433/151797bc63423f44.png",
+    "pictureName": "超六类非屏蔽网络跳线.png",
+    "folderName": "m0035433",
+    "templateName": "凯诚线缆（广东）有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "六类非屏蔽网络跳线": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0035433/d9f4381dc4a3ac7c.png",
+    "pictureName": "六类非屏蔽网络跳线.png",
+    "folderName": "m0035433",
+    "templateName": "凯诚线缆（广东）有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "超五类非屏蔽网络跳线": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0035433/6e4ef3a721c88c02.png",
+    "pictureName": "超五类非屏蔽网络跳线.png",
+    "folderName": "m0035433",
+    "templateName": "凯诚线缆（广东）有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "不锈钢无缝钢管": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0010506/aab2c825d02ba775.jpg",
+    "pictureName": "不锈钢无缝钢管.jpg",
+    "folderName": "m0010506",
+    "templateName": "14-不锈钢钢管-豪光",
+    "matchType": "NAME_SEARCH"
+  },
+  "PVC防水卷材(L型带背衬)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "耐火型⺟线槽": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0026026/3c6349ba8d1295ba.jpg",
+    "pictureName": "耐火型母线槽.jpg",
+    "folderName": "m0026026",
+    "templateName": "江苏华鹏电力设备股份有限公司福建办事处",
+    "matchType": "NAME_SEARCH"
+  },
+  "密集型⺟线槽": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0021718/ab140413153c2c56.jpg",
+    "pictureName": "插接箱.jpg",
+    "folderName": "m0021718",
+    "templateName": "广州市万洲电气设备有限公司",
+    "matchType": "KEY_TAGS"
+  },
+  "封闭式⺟线槽": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000223/242672917603f212.jpg",
+    "pictureName": "密集绝缘插接母线槽.jpg",
+    "folderName": "m0000223",
+    "templateName": "26-电气线路敷设材料-驰能",
+    "matchType": "NAME_SEARCH"
+  },
+  "TPO织物内增强型高分子卷材": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038649/c30e53d905b38fa6.png",
+    "pictureName": "TPO织物内增强型高分子卷材.png",
+    "folderName": "m0038649",
+    "templateName": "重庆鑫鲁润管业有限责任公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "TPO自粘型高分子卷材(SA)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "硅晶板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0025522/102db8ee4148477f.jpg",
+    "pictureName": "硅晶板.jpg",
+    "folderName": "m0025522",
+    "templateName": "图库",
+    "matchType": "NAME_SEARCH"
+  },
+  "碳晶板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0002287/6a29604ca81cc7ed.jpg",
+    "pictureName": "碳晶板.jpg",
+    "folderName": "m0002287",
+    "templateName": "00-其他类别-豪暖",
+    "matchType": "NAME_SEARCH"
+  },
+  "碳晶板饰面门": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038225/0c3dfcb83cd047a9.jpg",
+    "pictureName": "碳晶板饰面门.jpg",
+    "folderName": "m0038225",
+    "templateName": "兰州三佳门业有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "绿晶板饰面门": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038045/16b6a04288f5a975.png",
+    "pictureName": "绿晶板饰面门.png",
+    "folderName": "m0038045",
+    "templateName": "山东聊城天创门业有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "防火木饰面板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "固定式柔性挡烟垂壁": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0025065/24426f4e80e30df4.jpg",
+    "pictureName": "固定式柔性挡烟垂壁.jpg",
+    "folderName": "m0025065",
+    "templateName": "衢州瑞泰门控科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "固定式刚性挡烟垂壁": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0026343/731fcad25be7a229.jpg",
+    "pictureName": "固定式刚性挡烟垂壁.jpg",
+    "folderName": "m0026343",
+    "templateName": "任丘市洪印门窗厂",
+    "matchType": "NAME_SEARCH"
+  },
+  "硬质憎水岩棉板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "纳米银离子抗 菌铝单板": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039218/a128b05de279dbf7ffed6a10a3c72bf3.png",
+    "pictureName": "纳米银离子抗菌铝单板.png",
+    "folderName": "m0039218",
+    "templateName": "重庆巨久钢结构有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "保温隔声砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "保温隔声减震垫层": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "mm隔声减振垫层+40mm保温隔声砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "FC保温隔声减振垫层": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "FC 保温隔声砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "FC 保温隔声混凝土": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "mm保温隔声减振垫层+40mm隔声砂浆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铝方通": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0002206/a661b2edba5a2a70.jpg",
+    "pictureName": "铝方通.jpg",
+    "folderName": "m0002206",
+    "templateName": "08-墙面、天棚装饰及屋面材料-上海吉祥",
+    "matchType": "NAME_SEARCH"
+  },
+  "白色冲孔铝单板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038292/1b27561c4cd71c3d.png",
+    "pictureName": "白色冲孔铝单板.png",
+    "folderName": "m0038292",
+    "templateName": "广州市军霸建材科技有有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "SPC地板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0025480/b3917e3a8f306593.png",
+    "pictureName": "SPC地板.png",
+    "folderName": "m0025480",
+    "templateName": "天津实德新型建材科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "不锈钢水箱": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000681/9b1ce3410d22cb75.jpg",
+    "pictureName": "不锈钢水箱.jpg",
+    "folderName": "m0000681",
+    "templateName": "30-成型构件及加工件-天合",
+    "matchType": "NAME_SEARCH"
+  },
+  "硅酸钾无机涂料": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039315/a94be69b278392778458439282c8fbaa.png",
+    "pictureName": "硅酸钾无机涂料.png",
+    "folderName": "m0039315",
+    "templateName": "南京长江涂料有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "醇酸防锈底漆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0029379/4166c83fe94d2701.jpg",
+    "pictureName": "醇酸防锈底漆.jpg",
+    "folderName": "m0029379",
+    "templateName": "哈尔滨瀛隽商贸有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "氟碳漆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0037931/0da2e42d71ebc0e8.png",
+    "pictureName": "溶剂型氟碳漆.png",
+    "folderName": "m0037931",
+    "templateName": "无机外墙漆",
+    "matchType": "NAME_SEARCH"
+  },
+  "水性氟碳底漆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0005507/d1562f2aff7fd0ae.jpg",
+    "pictureName": "水性氟碳底漆.jpg",
+    "folderName": "m0005507",
+    "templateName": "11-涂料及防腐防水材料-HKK水漆",
+    "matchType": "NAME_SEARCH"
+  },
+  "水性氟碳金属漆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0019344/934d5619df815884.png",
+    "pictureName": "水性氟碳金属漆.png",
+    "folderName": "m0019344",
+    "templateName": "三棵树涂料股份有限公司北京办事处",
+    "matchType": "NAME_SEARCH"
+  },
+  "水性氟碳面漆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0019176/a390a17e69828278.png",
+    "pictureName": "水性氟碳面漆.png",
+    "folderName": "m0019176",
+    "templateName": "昆明丽彩涂料厂",
+    "matchType": "NAME_SEARCH"
+  },
+  "水性氟碳罩面清漆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0035501/118db37d98acc8a4.png",
+    "pictureName": "水性氟碳罩面清漆.png",
+    "folderName": "m0035501",
+    "templateName": "深圳市广田环保涂料有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "水性氟碳中涂漆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000318/5aa3035d4c54b00a.png",
+    "pictureName": "水性氟碳中涂漆.png",
+    "folderName": "m0000318",
+    "templateName": "33-道路桥梁专用材料-金顺通",
+    "matchType": "NAME_SEARCH"
+  },
+  "水性氟碳珠光漆": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039338/86b93de49fdca16afd9c0f3f60a2b5e6.png",
+    "pictureName": "水性氟碳珠光漆.png",
+    "folderName": "m0039338",
+    "templateName": "吉林省硕鼎新型建材有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "水性环氧防霉抗菌釉面漆": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039211/0521b74a02cc7dd980d530833e6b2115.png",
+    "pictureName": "水性环氧防霉抗菌釉面漆.png",
+    "folderName": "m0039211",
+    "templateName": "重庆盘辰建材有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "锌灰油性防锈漆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0037931/6a07ce17d17c17a2.png",
+    "pictureName": "锌灰油性防锈漆.png",
+    "folderName": "m0037931",
+    "templateName": "无机外墙漆",
+    "matchType": "NAME_SEARCH"
+  },
+  "水性氟碳反射隔热涂料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "水性氟碳外墙漆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC 免漆木质复合门": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039307/72460a7a295f1771b736186e27fe8b51.png",
+    "pictureName": "PVC免漆木质复合门.png",
+    "folderName": "m0039307",
+    "templateName": "闼闼家居科技（安徽）有限公司",
+    "matchType": "COMPANY_TEMPLATE"
+  },
+  "科技木皮油漆实木复合门": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039307/f7f957aa86f558c1c2c2496d90e30a30.png",
+    "pictureName": "科技木皮油漆实木复合门.png",
+    "folderName": "m0039307",
+    "templateName": "闼闼家居科技（安徽）有限公司",
+    "matchType": "COMPANY_TEMPLATE"
+  },
+  "PVC 免漆木质防火门（乙级）": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE塑料管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "UPVC空调冷凝水管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE管件-直接头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE管件-等径三通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE管件-90°弯头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "HDPE钢带增强螺旋波纹管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PP管材料": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "螺旋波纹管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PPR直接头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "UPVC存水弯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "UPVC45°斜三通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PPR直通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PPR90°弯头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PPR45°弯头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "伸缩节": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "S型存水弯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "P型存水弯": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "斜三通": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "小便器感应式冲洗阀": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "排水栓": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "洗脸盆龙头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "柱式洗脸盆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "台下式洗脸盆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "台上式洗脸盆": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "成套淋浴器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE给水管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U排水管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PPR给水管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U给水管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "洗脸盆": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0005451/4e23630ce7a48595.jpg",
+    "pictureName": "洗脸盆.jpg",
+    "folderName": "m0005451",
+    "templateName": "18-洁具及燃气器具-惠达",
+    "matchType": "NAME_SEARCH"
   }
 }

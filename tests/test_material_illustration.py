@@ -91,7 +91,7 @@ class TestMaterialIllustrationService(unittest.TestCase):
         )
 
         mock_result = {
-            "TEST0001": {
+            "uniq_0": {
                 "matched": True,
                 "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000578/1cd97a16dbbdc896.jpg",
                 "pictureName": "镀锌钢管.jpg",

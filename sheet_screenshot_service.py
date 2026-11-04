@@ -16,6 +16,8 @@ from typing import Dict, Any, List
 import openpyxl
 from PIL import Image, ImageDraw, ImageFont
 
+from config import SKIP_HIDDEN_CONTENT
+
 def safe_filename(name: str) -> str:
     """清理文件名中的非法字符"""
     s = re.sub(r'[\/\\:\*\?\"<>\|]', '_', str(name or '')).strip()
@@ -109,6 +111,8 @@ def capture_excel_sheets(excel_path: str, output_dir: str) -> Dict[str, str]:
 
     for idx, sname in enumerate(wb.sheetnames, 1):
         ws = wb[sname]
+        if SKIP_HIDDEN_CONTENT and ws.sheet_state != 'visible':
+            continue    # 隐藏口径: 隐藏工作表不产出底稿图, 也不进映射
         safe_s = safe_filename(sname)
         target_fn = f"quote_img_{safe_s}.png"
         target_path = os.path.join(output_dir, target_fn)
