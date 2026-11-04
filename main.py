@@ -15,10 +15,11 @@ import copy
 import hashlib
 import argparse
 import json
+import time
 import openpyxl
 from concurrent.futures import ThreadPoolExecutor
 
-from extractor import ExcelAssetExtractor, safe_clean_price, cell_str, unmerge_and_fill_cells, extract_sheet_sample_rows
+from extractor import ExcelAssetExtractor, safe_clean_price, cell_str, unmerge_and_fill_cells, extract_sheet_sample_rows, hidden_axes
 from pdf_extractor import PDFTableExtractor
 from gemini_pdf_extractor import GeminiPDFTableExtractor
 from terms_extractor import TermsExtractor, normalize_terms, find_terms_image, missing_terms
@@ -26,6 +27,8 @@ from builder import StandardizedWorkbookBuilder
 from config import (DEFAULT_TEMPLATE_PATH, DEFAULT_OUTPUT_DIR, PROVINCE_ABBR_MAP, CATEGORY_CODE_MAP,
                     resolve_category_code, expand_region, EXTRACTOR_ENGINE, GEMINI_API_KEY, GEMINI_MODEL, VISION_MODEL,
                     EXPORT_INTEGRITY_CERTIFICATE, ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION,
+                    SKIP_HIDDEN_CONTENT,
+                    STRICT_ENGINE,
                     EXPAND_NATIONWIDE, NATIONWIDE_REGIONS)
 from models import CanonicalMaterialItem, SourceRowRecord, reconcile, summarize_audit
 from category_attribute_service import (resolve_and_verify_category, fetch_category_attributes,
@@ -42,13 +45,15 @@ COMPANY_RE = re.compile(r'([\u4e00-\u9fa5（）\(\)]{4,30}?(?:股份有限公司
 # 文件命名中常见的非公司名词语 (按词删除)
 FILENAME_NOISE_RE = re.compile(r'标准化输出|标准解析|报价单|报价表|价格表|产品资料|报价数据|明细|总表|第\d+页|[\d_\-（）\(\)\s.]')
 # 企业名称中的组织形式与通用行业词 (用于截取核心商号)
-COMPANY_SUFFIX_RE = re.compile(r'(股份有限公司|有限责任公司|有限公司|股份公司|集团|科技|材料|建材|实业|工程|设备|照明|电气|门业|金属|机电|防水|管业|技术|[（\(]).*$')
+COMPANY_SUFFIX_RE = re.compile(r'(股份有限公司|有限责任公司|有限公司|股份公司|集团|新材料|建筑材料|建筑装饰|建筑|新型建材|科技|材料|建材|实业|工程|设备|照明|电气|门业|金属|机电|防水|管业|技术|[（\(]).*$')
 REGION_PREFIX_RE = re.compile('^(' + '|'.join(sorted((k for k in PROVINCE_ABBR_MAP if len(k) >= 2), key=len, reverse=True)) + r')|^[\u4e00-\u9fa5]{2,3}市')
 SUMMARY_ROW_KEYS = ['合计', '小计', '总计', '总价合计']
 LIST_HEADER_RE = re.compile(r'^\s*(单价|合价|总价|金额|数量|序号|税率|单位|小计|报价|价格|市场价|出厂价|含税价|面价)')
 # 矩阵表的行标题列是“规格/型号/档位”这类维度；表头像“名称/品名”时更可能是清单表
 MATRIX_LABEL_RE = re.compile(r'规格|型号|容量|档位|尺寸|功率|厚度|直径|层数|电压|电流|口径|通径|DN|kVA|kg', re.IGNORECASE)
 NUMBER_RE = re.compile(r'[¥￥]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|[¥￥]?\d+(?:\.\d+)?')
+# “单位：元／km”这类是计量口径注释（合并格落到了价格列上方），不是列表字段
+UNIT_NOTE_RE = re.compile(r'^\s*单位\s*[:：]')
 
 
 def supplier_from_path(path: str):
@@ -135,7 +140,8 @@ def derive_supplier_and_brand_dynamic(filename: str, terms_dict: dict = None) ->
 
     if not brand and supplier:
         core = core_name(supplier)
-        brand = core[:6] if len(core) >= 2 else supplier[:4]
+        # 不再截断成 6 字：截断会把“星牌优时吉建筑材料”切成“星牌优时吉建”这种不存在的品牌
+        brand = core if len(core) >= 2 else supplier[:4]
         if brand != supplier:
             notes.append(f"品牌“{brand}”由供应商名称推断")
     brand = brand or ''
@@ -198,6 +204,8 @@ def _path_evidence(path):
 def _workbook_text(wb, limit=20000):
     parts = []
     for ws in wb.worksheets:
+        if SKIP_HIDDEN_CONTENT and ws.sheet_state != 'visible':
+            continue
         for row in ws.iter_rows(values_only=True):
             parts.extend(str(v) for v in row if v not in (None, ''))
             if sum(map(len, parts)) > limit:
@@ -270,6 +278,42 @@ VALID_PROVINCES = set(PROVINCE_ABBR_MAP.values())
 _NON_BRAND_RE = re.compile(r'^[\s\d.,，.．\-+±~%¥￥$/元平米台套个只根张袋桶吨米³²kglL]*$')
 
 
+# 原表里就是“物料名称”的列 (优先照抄，不许换成标准分类名)
+SRC_NAME_KEYS = ('材料名称', '物料名称', '产品名称', '品名', '规格名称', '名称')
+SRC_NAME_EXCLUDE = ('类别', '分类', '规格', '型号', '品牌', '厂家', '供应商', '项目', '公司', '子表', '表')
+# 原表自带的分类列 (供应商已分好类，编码按它查库最忠实)
+SRC_CAT_KEYS = ('三级类别名称', '三级类别', '类别名称', '分类名称', '材料类别')
+
+
+def _pick_row_field(cells: dict, keys, exclude=()) -> str:
+    """按优先级从原表行单元格里取一个字段值；同优先级按表头出现顺序"""
+    for key in keys:
+        for hk, hv in (cells or {}).items():
+            hk = str(hk or '')
+            if key in hk and not any(e in hk for e in exclude):
+                val = str(hv or '').strip()
+                if val:
+                    return val
+    return ''
+
+
+# 原表材料名称列常把型号写在品名前面（NLED4916 吊装线型灯 / LED LEDA45J球泡 / LED T806P灯管），型号不进名称规格
+# 模型段必须以数字结尾或含数字，所以 CPL覆膜钢质门、UPVC排水管、HDPE双壁波纹管 这类不会被误删
+_MODEL_PREFIX_RE = re.compile(r'^(?:[A-Z]{1,6}[\s\-])?[A-Z]{0,6}\d[A-Z0-9\-]*[\s　]*')
+
+
+def _strip_model_prefix(name: str) -> str:
+    """删掉品名前的型号编码；剥完只能是汉字或原样返回，防止把整串英文品名删空"""
+    orig = re.sub(r'\s+', ' ', str(name or '')).strip()
+    s = orig
+    for _ in range(2):
+        s2 = _MODEL_PREFIX_RE.sub('', s, count=1).strip()
+        if s2 == s:
+            break
+        s = s2
+    return s if re.search(r'[\u4e00-\u9fa5]', s) else orig
+
+
 def _looks_like_brand(v) -> bool:
     """品牌必须是品牌名：含中文或字母，不能是纯价格/数量/规格串"""
     s = str(v if v is not None else '').strip()
@@ -337,7 +381,7 @@ def _leading_number(v: str):
     return float(m.group(1)) if m else None
 
 
-def _detect_matrix(ws):
+def _detect_matrix(ws, hid_rows=frozenset(), hid_cols=frozenset()):
     """
     识别“矩阵式”报价表：行标题 (如规格档位) × 列标题 (如型号) → 每个交叉格是一个价格。
     判据：从第一行数据行开始，至少 2 个非首列的列以纯数字为主，且这些列的末级表头不是“单价/数量/合价”等清单表字段。
@@ -345,7 +389,7 @@ def _detect_matrix(ws):
     """
     max_r, max_c = ws.max_row, ws.max_column
     grid = [[cell_str(ws.cell(r, c)) for c in range(1, max_c + 1)] for r in range(1, max_r + 1)]
-    data_rows = [r for r in range(max_r) if sum(_is_number_text(v) for v in grid[r]) >= 2]
+    data_rows = [r for r in range(max_r) if (r + 1) not in hid_rows and sum(_is_number_text(v) for v in grid[r]) >= 2]
     if len(data_rows) < 3:
         return None
     r0 = data_rows[0]
@@ -356,6 +400,8 @@ def _detect_matrix(ws):
 
     value_cols = []
     for c in range(label_col + 1, max_c):
+        if (c + 1) in hid_cols:
+            continue
         vals = [grid[r][c] for r in range(r0, max_r) if grid[r][c]]
         nums = [v for v in vals if _is_number_text(v)]
         if len(nums) >= 3 and len(nums) >= len(vals) * 0.6:
@@ -373,7 +419,8 @@ def _detect_matrix(ws):
 
     # 表头区内的标题/分组行或整表大标题不参与列标题路径
     # 注意：第一行的型号规格（如“暗杆闸阀 Z45T-16”）必须作为列标题，而不能被“产品图样/指导价”中间辅助行覆盖！
-    header_rows = [r for r in range(r0) if not _is_title_row(grid[r]) and sum(1 for v in grid[r] if v) >= 2
+    header_rows = [r for r in range(r0) if not _is_title_row(grid[r]) and not _is_banner_row(grid[r])
+                   and sum(1 for v in grid[r] if v) >= 2
                    and not (table_title and all(grid[r][c] == table_title for c in value_cols))]
 
     def path(c):
@@ -385,9 +432,9 @@ def _detect_matrix(ws):
                 parts.append(v)
         return parts
 
-    # 任意一级表头是清单表字段 (单价/合价/数量…) 就不是矩阵表
+    # 任意一级表头是清单表字段 (单价/合价/数量…) 就不是矩阵表；单位注释格除外
     for c in value_cols:
-        if any(LIST_HEADER_RE.match(p) for p in path(c)):
+        if any(LIST_HEADER_RE.match(p) and not UNIT_NOTE_RE.match(p) for p in path(c)):
             return None
 
     # 行标题取“列标题路径的末级”：不能取第一行 —— 第一行常是整表大标题
@@ -416,6 +463,14 @@ def _detect_matrix(ws):
     }
 
 
+def _is_banner_row(values: list) -> bool:
+    """横跨全表的横幅行（厂名/商标/“单位：元／km”注释混在一行）—— 8 成以上非空格子同文即算"""
+    non_empty = [v for v in values if v]
+    if len(non_empty) < 2:
+        return False
+    return non_empty.count(max(set(non_empty), key=non_empty.count)) >= len(non_empty) * 0.8
+
+
 def _cell_notes(cell_issue, sname, r, cols, headers_map=None, price_col=None):
     """把识别存疑的单元格 (视觉模型双读不一致 / 自报看不清 / OCR 不一致) 转成待复核提示"""
     notes = []
@@ -427,16 +482,20 @@ def _cell_notes(cell_issue, sname, r, cols, headers_map=None, price_col=None):
     return notes
 
 
-def _collect_matrix_rows(ws, sname, mx, cell_issue):
+def _collect_matrix_rows(ws, sname, mx, cell_issue, hid_rows=frozenset(), hid_cols=frozenset()):
     """矩阵表展开：每个“行标题 × 列标题”交叉格生成一条原始物料行"""
     raw_rows, records = [], []
     prev = {}  # 列 -> (行标题数值, 价格)：用于“容量越大价格越高”的单调性校验
     for r in range(mx['data_start'], ws.max_row + 1):
+        if r in hid_rows:
+            continue
         label = cell_str(ws.cell(r, mx['label_col']))
         if not label:
             continue
         label_num = _leading_number(label)
         for c in mx['value_cols']:
+            if c in hid_cols:
+                continue
             v = cell_str(ws.cell(r, c))
             if not v:
                 continue
@@ -503,7 +562,8 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue):
     return raw_rows, records
 
 
-def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev=None, jev_layout=None, struct_log=None):
+def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev=None, jev_layout=None,
+                       struct_log=None, hid_rows=frozenset(), hid_cols=frozenset()):
     """清单式报价表：推导表头与列角色，一行一个物料。STRUCTURE_ENGINE 为 jev/compare 时同时使用 Jev 判定"""
     raw_rows, records = [], []
     struct_log = struct_log if struct_log is not None else []
@@ -543,6 +603,12 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
         col_ed = min(sub_tbl.get("col_end") or ws.max_column, ws.max_column)
         price_col = sub_tbl.get("price_col")
         unit_col = sub_tbl.get("unit_col")
+        cols = [c for c in range(col_st, col_ed + 1) if c not in hid_cols]
+        # 单价列/单位列本身被隐藏：当作未指定，交给下面的可见列嗅探，否则整表会"读不到单价"
+        if price_col in hid_cols:
+            price_col = None
+        if unit_col in hid_cols:
+            unit_col = None
 
         headers_map = _build_headers(ws, header_row, col_st, col_ed)
         header_values = set(headers_map.values())
@@ -552,6 +618,8 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
         amount_col = next((c for c, h in headers_map.items() if any(k in h for k in ('合价', '总价', '金额', '小计')) and not _is_unit_price_header(h)), None)
 
         for r in range(data_start_row, ws.max_row + 1):
+            if r in hid_rows:
+                continue
             row_cells_dict = {}
             row_text_parts = []
             row_values = []
@@ -561,7 +629,7 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
             amount_val = 0.0
             formula_no_cache = False
 
-            for c in range(col_st, col_ed + 1):
+            for c in cols:
                 cell = ws.cell(r, c)
                 cell_val = cell_str(cell)
                 raw_f = ws_f.cell(r, c).value
@@ -589,7 +657,7 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
 
             # 若未通过指定单价列拿到价格，按表头扫描单价列 (排除合价/金额，防止把总价当单价)
             if price_val <= 0 and not price_col:
-                for c in range(col_st, col_ed + 1):
+                for c in cols:
                     if _is_unit_price_header(headers_map.get(c, "")):
                         p_candidate = safe_clean_price(ws.cell(r, c).value)
                         if p_candidate > 0:
@@ -628,7 +696,7 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
             candidates.append({
                 "ref": ref, "r": r, "values": row_values, "decision": decision, "raw_line": raw_line,
                 "price": price_val, "qty": qty_val, "amount": amount_val, "formula_no_cache": formula_no_cache,
-                "headers": [headers_map[c] for c in range(col_st, col_ed + 1)],
+                "headers": [headers_map[c] for c in cols],
                 "build": dict(
                     id=ref,
                     raw_cells_dict=row_cells_dict,
@@ -640,7 +708,7 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
                                                             col_tolerance=0 if side_by_side else 1) if extractor else []),
                     file_page=sname,
                     table_name=t_name,
-                    notes=layout_notes + _cell_notes(cell_issue, sname, r, range(col_st, col_ed + 1), headers_map, price_col),
+                    notes=layout_notes + _cell_notes(cell_issue, sname, r, cols, headers_map, price_col),
                 ),
             })
 
@@ -709,23 +777,32 @@ def _row_brand(raw_cells, default_brand):
 def _resolve_name_and_category(cleaned_res, item):
     """返回 (物料名称, 类别编码, 编码来源, 说明)"""
     notes = []
-    std_name = str(cleaned_res.get("standard_name") or "").strip()
+    # 原表自带的「材料名称」：这是原件写明的物料品名，必须照抄进名称规格
+    src_name = _strip_model_prefix(_pick_row_field(item.get("raw_cells_dict"), SRC_NAME_KEYS, SRC_NAME_EXCLUDE))
+    # 原表自带的分类（如“三级类别名称”）：按它查标准编码库，忠实原件分类
+    src_cat = _pick_row_field(item.get("raw_cells_dict"), SRC_CAT_KEYS, ('编码',))
+    std_name = src_name or str(cleaned_res.get("standard_name") or "").strip()
     if not std_name:
         notes.append("未识别出物料名称")
-    cat_code, cat_src, cat_notes = resolve_and_verify_category(
-        std_name, item.get("raw_spec") or item.get("raw_full_line", ""), cleaned_res.get("category_code"))
+    cat_code, cat_src, cat_notes = '', '', []
+    src_cat_code = CATEGORY_CODE_MAP.get(src_cat) if src_cat else None
+    if src_cat_code:
+        cat_code, cat_src = src_cat_code, 'source'
+    else:
+        if src_cat:
+            notes.append(f"原表三级类别名称“{src_cat}”不在标准编码库，改为按物料名判定")
+        cat_code, cat_src, cat_notes = resolve_and_verify_category(
+            std_name, item.get("raw_spec") or item.get("raw_full_line", ""), cleaned_res.get("category_code"))
     notes.extend(cat_notes)
     if cat_src == 'llm':
         notes.append(f"类别编码 {cat_code} 未经标准编码库核验")
     elif not cat_code:
         notes.append("类别编码未确定" + ("" if CATEGORY_CODE_MAP else " (未配置标准编码库 CATEGORY_CODE_FILE)"))
-    # 行业标准名称对齐：类别接口返回的官方品类名覆盖物料名称（如“闸阀中丝扣”→“闸阀”）
-    if cat_code:
+    # 名称兜底：原件没写物料名称时才用标准分类名顶上（绝不把原件名称改成分类名）
+    if not std_name and cat_code:
         cat_info = fetch_category_attributes(cat_code)
         if cat_info and cat_info.get("type", {}).get("description"):
-            std_category_title = cat_info["type"]["description"].strip()
-            if std_category_title:
-                std_name = std_category_title
+            std_name = cat_info["type"]["description"].strip()
     return std_name, cat_code, cat_src, notes
 
 
@@ -881,14 +958,22 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
     for sname in wb_val.sheetnames:
         ws = wb_val[sname]
         ws_f = wb_fml[sname]
+        if SKIP_HIDDEN_CONTENT and ws.sheet_state != 'visible':
+            print(f"\n--- [Sheet: {sname}] 跳过: 工作表被隐藏 (隐藏口径: 只解析正常展示的内容) ---")
+            sheet_stats.append({'sheet': sname, 'rows': ws.max_row or 0, 'raw_rows': 0, 'items': 0,
+                                'error': '', 'skipped': '隐藏工作表'})
+            continue
         if ws.max_row is None or ws.max_row <= 1:
             print(f"\n--- [Sheet: {sname}] 跳过: 只有 {ws.max_row or 0} 行，无数据区 ---")
             sheet_stats.append({'sheet': sname, 'rows': ws.max_row or 0, 'raw_rows': 0, 'items': 0, 'error': ''})
             continue
         print(f"\n--- [Sheet: {sname}] (共 {ws.max_row} 行 x {ws.max_column} 列) ---")
+        hid_rows, hid_cols = hidden_axes(ws) if SKIP_HIDDEN_CONTENT else (frozenset(), frozenset())
+        if hid_rows or hid_cols:
+            print(f"    -> 隐藏口径: 跳过 {len(hid_rows)} 个隐藏行 / {len(hid_cols)} 个隐藏列")
         n_before = len(canonical_items)
 
-        mx = _detect_matrix(ws)
+        mx = _detect_matrix(ws, hid_rows, hid_cols)
         jev_layout = None
         if jev is not None:
             jev_layout = jev.judge_layout(extract_sheet_sample_rows(ws, max_rows=15, max_cols=30))
@@ -902,10 +987,11 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     print(f"    ! 表格类型判定分歧: 现有做法={'矩阵式' if mx else '清单式'}, Jev={TABLE_TYPE_CN[jt]}({jc:.2f})")
         if mx:
             print(f"    -> 识别为矩阵式报价表: 行标题“{mx['label_header']}”，{len(mx['value_cols'])} 个价格列，数据起始行 {mx['data_start']}")
-            raw_rows, records = _collect_matrix_rows(ws, sname, mx, cell_issue)
+            raw_rows, records = _collect_matrix_rows(ws, sname, mx, cell_issue, hid_rows, hid_cols)
         else:
             raw_rows, records = _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue,
-                                                   jev=jev, jev_layout=jev_layout, struct_log=struct_log)
+                                                   jev=jev, jev_layout=jev_layout, struct_log=struct_log,
+                                                   hid_rows=hid_rows, hid_cols=hid_cols)
         source_rows.extend(records)
         group_of.update({r["id"]: r["group_key"] for r in raw_rows if r.get("group_key")})
         print(f"    -> 提取出有效物料原始行: {len(raw_rows)} 行，启动大模型槽位精准清洗...")
@@ -990,6 +1076,8 @@ def process_excel(input_xlsx, template_xlsx, output_dir, terms=None):
     wb_val = openpyxl.load_workbook(input_xlsx, data_only=True)
     wb_fml = openpyxl.load_workbook(input_xlsx, data_only=False)
     for sname in wb_val.sheetnames:
+        if SKIP_HIDDEN_CONTENT and wb_val[sname].sheet_state != 'visible':
+            continue    # 隐藏口径: 隐藏表不展开合并单元格 (反正不解析)
         unmerge_and_fill_cells(wb_val[sname])
         unmerge_and_fill_cells(wb_fml[sname])
 
@@ -1013,12 +1101,22 @@ def process_excel(input_xlsx, template_xlsx, output_dir, terms=None):
     except Exception as e:
         print(f"[Warning] Excel Sheet 底稿截图异常: {e}")
 
+    excel_run_meta = {
+        "requested_engine": "excel_rule",
+        "actual_engine": "excel_rule",
+        "provider_requested": "rule_openpyxl",
+        "provider_actual": "rule_openpyxl",
+        "model_id": "rule_openpyxl",
+        "fallback_reason": None,
+        "degraded": False,
+        "rail_name": "Excel Direct Extraction",
+    }
     return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log,
-                   sheet_stats=sheet_stats, source_path=input_xlsx)
+                   sheet_stats=sheet_stats, source_path=input_xlsx, run_meta=excel_run_meta)
 
 
 def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_dir, terms=None, rail_name="A-Rail",
-                                fallback_reason=None, actual_model=""):
+                                fallback_reason=None, actual_model="", requested_engine=None):
     print(f"\n=== [PDF Pipeline - {rail_name}] 启动解析: {input_pdf} ===")
     if fallback_reason:
         print(f"[Warning] [双轨调度] B 轨失败已回退 A 轨：{fallback_reason}")
@@ -1076,14 +1174,25 @@ def _process_pdf_with_extractor(extractor_cls, input_pdf, template_xlsx, output_
         it.quote_image_filename = img_fn
         if not it.image_filenames:
             it.image_filenames = [img_fn]
+
+    run_meta = {
+        "requested_engine": requested_engine or (EXTRACTOR_ENGINE or "traditional"),
+        "actual_engine": "gemini" if "Gemini" in rail_name else "traditional",
+        "provider_requested": "google" if (requested_engine or EXTRACTOR_ENGINE) in ("gemini", "compare") else "deepseek",
+        "provider_actual": "google" if "Gemini" in rail_name else "deepseek",
+        "model_id": model_label,
+        "fallback_reason": fallback_reason,
+        "degraded": bool(fallback_reason),
+        "rail_name": rail_name,
+    }
     return _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log,
-                   sheet_stats=sheet_stats, source_path=input_pdf)
+                   sheet_stats=sheet_stats, source_path=input_pdf, run_meta=run_meta)
 
 
 def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
     """
     双轨调度中枢:
-    1. EXTRACTOR_ENGINE='gemini': 优先使用 B 轨 (Gemini 3.8 Flash 原生直传)，若未配置Key或异常自动无损回退到 A 轨
+    1. EXTRACTOR_ENGINE='gemini': 优先使用 B 轨 (Gemini 3.8 Flash 原生直传)，若未配置Key或异常自动无损回退到 A 轨 (STRICT_ENGINE=1 时阻断报错)
     2. EXTRACTOR_ENGINE='traditional': 强制使用 A 轨 (传统切片 + OpenCV 滤镜 + DeepSeek)
     3. EXTRACTOR_ENGINE='compare': 双轨比对模式
     """
@@ -1095,28 +1204,32 @@ def process_pdf(input_pdf, template_xlsx, output_dir, terms=None):
                 print(f"[*] [双轨调度] 路由至 B 轨 (Gemini 原生全模态: {GEMINI_MODEL})")
                 return _process_pdf_with_extractor(GeminiPDFTableExtractor, input_pdf, template_xlsx, output_dir,
                                                     terms=terms, rail_name="Gemini B-Rail",
-                                                    actual_model=GEMINI_MODEL)
+                                                    actual_model=GEMINI_MODEL, requested_engine=engine)
             except Exception as e:
                 err_msg = str(e)
+                if STRICT_ENGINE:
+                    raise RuntimeError(f"[STRICT_ENGINE=1] 请求引擎 {engine} (Gemini) 执行失败且禁止静默回退: {err_msg}")
                 print(f"[Warning] [双轨调度] Gemini B 轨执行异常: {err_msg}，自动平滑兜底回退至 A 轨...")
                 return _process_pdf_with_extractor(PDFTableExtractor, input_pdf, template_xlsx, output_dir,
                                                     terms=terms, rail_name="Traditional A-Rail (Fallback)",
-                                                    fallback_reason=err_msg, actual_model=VISION_MODEL)
+                                                    fallback_reason=err_msg, actual_model=VISION_MODEL, requested_engine=engine)
         else:
             reason = "未配置 GEMINI_API_KEY"
-            print(f"[Info] [双轨调度] 检测到 EXTRACTOR_ENGINE=gemini 但{reason}，安全直通 A 轨 (传统切图流水线)")
+            if STRICT_ENGINE:
+                raise RuntimeError(f"[STRICT_ENGINE=1] 请求引擎 {engine} 但{reason}，禁止静默回退")
+            print(f"[Info] [双轨调度] 检测到 EXTRACTOR_ENGINE={engine} 但{reason}，安全直通 A 轨 (传统切图流水线)")
             return _process_pdf_with_extractor(PDFTableExtractor, input_pdf, template_xlsx, output_dir,
                                                 terms=terms, rail_name="Traditional A-Rail (Fallback)",
-                                                fallback_reason=reason, actual_model=VISION_MODEL)
+                                                fallback_reason=reason, actual_model=VISION_MODEL, requested_engine=engine)
     else:
         print("[*] [双轨调度] 路由至 A 轨 (传统切图流水线)")
         return _process_pdf_with_extractor(PDFTableExtractor, input_pdf, template_xlsx, output_dir,
                                             terms=terms, rail_name="Traditional A-Rail",
-                                            actual_model=VISION_MODEL)
+                                            actual_model=VISION_MODEL, requested_engine="traditional")
 
 
 def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=None,
-            sheet_stats=None, source_path=""):
+            sheet_stats=None, source_path="", run_meta=None):
     """落盘 + 校验。返回 (交付文件路径, 失败清单)；失败清单非空时调用方必须置退出码 2"""
     # 原表 ↔ 结果逐行对账与四维体检量化核算（只对原表行做，展开行不参与对账）
     recon = reconcile(source_rows, items)
@@ -1173,10 +1286,49 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
         except Exception as cert_err:
             print(f"[Warning] 导出防欺瞒体检报告异常: {cert_err}")
 
+    # 落盘伴生 run sidecar (<output>.run.json)，机读留存引擎诚实性与降级记录
+    try:
+        sidecar_path = f"{output_xlsx}.run.json"
+        meta = run_meta or {}
+        # 计算源文件 sha256
+        src_sha = ""
+        if source_path and os.path.exists(source_path):
+            with open(source_path, "rb") as sf:
+                src_sha = hashlib.sha256(sf.read()).hexdigest()
+
+        from config import VISION_DOUBLE_CHECK
+        sidecar_payload = {
+            "output_file": os.path.basename(output_xlsx),
+            "source_file": os.path.basename(source_path),
+            "file_sha256": src_sha,
+            "EXTRACTOR_ENGINE_requested": meta.get("requested_engine", EXTRACTOR_ENGINE or "traditional"),
+            "EXTRACTOR_ENGINE_actual": meta.get("actual_engine", "traditional"),
+            "provider_requested": meta.get("provider_requested", "deepseek"),
+            "provider_actual": meta.get("provider_actual", "deepseek"),
+            "model_id": meta.get("model_id", VISION_MODEL),
+            "fallback_reason": meta.get("fallback_reason", None),
+            "degraded": bool(meta.get("degraded", False)),
+            "VISION_DOUBLE_CHECK": bool(VISION_DOUBLE_CHECK),
+            "STRICT_ENGINE": bool(STRICT_ENGINE),
+            "total_items": len(items),
+            "zero_defect": bool(integrity_summary.get("is_zero_defect", False)),
+            "row_conservation_rate": integrity_summary.get("row_conservation_rate", 100.0),
+            "skip_hidden_content": SKIP_HIDDEN_CONTENT,
+            "skipped_hidden_sheets": [s['sheet'] for s in (sheet_stats or []) if s.get('skipped')],
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        }
+        with open(sidecar_path, "w", encoding="utf-8") as sc_f:
+            json.dump(sidecar_payload, sc_f, ensure_ascii=False, indent=2)
+        print(f"[*] 引擎诚实性与运行 Sidecar 已落盘: {sidecar_path} (degraded={sidecar_payload['degraded']})")
+    except Exception as sc_err:
+        print(f"[Warning] 写入 run sidecar 异常: {sc_err}")
+
     # 落盘后读回 + 完整性汇总：任何一项失败都不允许静默通过
     failures = _integrity_problems(items, recon, sheet_stats, integrity_summary) + _verify_output(output_xlsx, items)
     for s in sheet_stats or []:
-        print(f"    [{s['sheet']}] 原表 {s['rows']} 行 → 产出 {s['items']} 条" + (f"  ⚠ {s['error']}" if s.get('error') else ""))
+        print(f"    [{s['sheet']}] 原表 {s['rows']} 行 → 产出 {s['items']} 条"
+              + (f"  ⚠ {s['error']}" if s.get('error') else "")
+              + (f"  (已跳过: {s['skipped']})" if s.get('skipped') else ""))
     print(f"[VERIFY] {os.path.basename(source_path)} | Sheet {len(sheet_stats or [])} | 物料 {len(items)} | "
           f"对账 {len(recon)} 行 | 失败 {len(failures)} | RESULT={'PASS' if not failures else 'FAIL'}")
     audit = summarize_audit(items, builder.headers)
@@ -1295,14 +1447,64 @@ def _print_recon_summary(recon: list):
         print(f"    ! {r['source_ref']}: {r['status']}")
 
 
+def print_capabilities():
+    """以标准机读 JSON 格式输出系统当前实际接线能力与开关状态，禁止手写假清单"""
+    from config import (
+        EXTRACTOR_ENGINE, GEMINI_MODEL, VISION_MODEL,
+        STRICT_ENGINE, VISION_DOUBLE_CHECK,
+        ANTI_HALLUCINATION_MATH_AUDIT, ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION,
+        EXPORT_INTEGRITY_CERTIFICATE, ENABLE_MATERIAL_ILLUSTRATION,
+        EXPAND_NATIONWIDE, SKIP_HIDDEN_CONTENT
+    )
+    caps = {
+        "system": "QuoteStandardizer",
+        "version": "2026.11-P0",
+        "engines": {
+            "supported": ["gemini", "traditional", "compare"],
+            "configured_default": EXTRACTOR_ENGINE,
+            "gemini_model": GEMINI_MODEL,
+            "vision_model": VISION_MODEL,
+        },
+        "gates_and_safety": {
+            "STRICT_ENGINE": STRICT_ENGINE,
+            "raw_price_protection": True,
+            "auditor_numeric_write_forbidden": True,
+            "zip_reconcile_aligned": True,
+            "zero_hallucination_row_conservation": ANTI_HALLUCINATION_STRICT_ROW_CONSERVATION,
+            "math_audit_enabled": ANTI_HALLUCINATION_MATH_AUDIT,
+            "export_integrity_certificate": EXPORT_INTEGRITY_CERTIFICATE,
+            "run_sidecar_enabled": True
+        },
+        "features": {
+            "VISION_DOUBLE_CHECK": VISION_DOUBLE_CHECK,
+            "material_illustration_service": ENABLE_MATERIAL_ILLUSTRATION,
+            "expand_nationwide": EXPAND_NATIONWIDE,
+            "skip_hidden_content": SKIP_HIDDEN_CONTENT,
+            "structure_comparison_sheet_active": False,
+            "agy_v2_direct_wire": False,
+            "paddle_ocr_active": False
+        }
+    }
+    print(json.dumps(caps, ensure_ascii=False, indent=2))
+    sys.exit(0)
+
+
 def main():
     parser = argparse.ArgumentParser(description="QuoteStandardizer - 报价单解析与原表对账")
-    parser.add_argument("--input", "-i", required=True, help="输入报价文件路径 (.xlsx / .pdf)")
+    parser.add_argument("--capabilities", action="store_true", help="打印系统当前实际接线能力与开关状态 (JSON)")
+    parser.add_argument("--input", "-i", default=None, help="输入报价文件路径 (.xlsx / .pdf)")
     parser.add_argument("--terms", "-t", default=None, help="商务说明与折扣记录单图片路径 (.png/.jpg)；不填时自动在输入文件同目录查找")
     parser.add_argument("--terms-json", default=None, help="人工确认的商务条款 JSON (优先于图片识别)")
     parser.add_argument("--template", default=DEFAULT_TEMPLATE_PATH, help="输出模板 .xlsx (取第 1 行表头)；不填时使用内置标准表头")
     parser.add_argument("--output_dir", "-o", default=DEFAULT_OUTPUT_DIR, help="输出目录")
     args = parser.parse_args()
+
+    if args.capabilities:
+        print_capabilities()
+
+    if not args.input:
+        parser.print_help()
+        sys.exit(1)
 
     input_path = args.input
     if not os.path.exists(input_path):

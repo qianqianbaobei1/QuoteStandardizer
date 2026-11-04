@@ -13,9 +13,12 @@ import os
 import re
 import fitz
 import openpyxl
+import zipfile
 from pathlib import Path
 from run_all_universe_vendors import scan_all_universe_tasks, clean_vendor_name
 from run_batch_standardize import find_primary_quote_file, extract_zip_if_needed
+from extractor import hidden_content_report
+from config import SKIP_HIDDEN_CONTENT
 
 DELIVERIES_DIR = Path(DELIVERIES_DIR)
 
@@ -37,13 +40,26 @@ def get_raw_file_real_stats(primary_file: Path):
             pages = 1
     elif ext in ['.xlsx', '.xls']:
         try:
+            # 隐藏口径：隐藏表 / 隐藏行一律不计入原表真实行数
+            report = hidden_content_report(str(primary_file)) if SKIP_HIDDEN_CONTENT else {}
             wb = openpyxl.load_workbook(str(primary_file), read_only=True, data_only=True)
             for ws in wb.worksheets:
-                # 仅统计前 5000 行中的有效行
+                if (report.get(ws.title) or {}).get('hidden'):
+                    continue
+                hid = (report.get(ws.title) or {}).get('hidden_rows') or set()
+                # 严格限制 max_col=40，防范 16384 列超大空白 XML 拖垮 CPU
                 r_cnt = 0
-                for row in ws.iter_rows(values_only=True):
+                consecutive_empty = 0
+                for r_idx, row in enumerate(ws.iter_rows(max_col=40, values_only=True), start=1):
+                    if r_idx in hid:
+                        continue
                     if any(v not in (None, '') for v in row):
                         r_cnt += 1
+                        consecutive_empty = 0
+                    else:
+                        consecutive_empty += 1
+                        if consecutive_empty > 30 and r_cnt > 0:
+                            break
                     if r_cnt > 10000:
                         break
                 real_rows += max(0, r_cnt - 1)
@@ -115,12 +131,19 @@ def audit_delivery_fast(task_info):
     available_imgs = set(os.listdir(img_dir)) if img_dir.exists() else set()
     available_imgs_lower = {fn.lower(): fn for fn in available_imgs}
 
+    has_embedded_drawings = False
+    try:
+        with zipfile.ZipFile(str(xlsx_path), 'r') as z:
+            has_embedded_drawings = any('drawings/drawing' in n for n in z.namelist())
+    except Exception:
+        pass
+
     header_row = None
     col_map = {}
     row_idx = 0
     consecutive_empty = 0
 
-    for row in ws.iter_rows(values_only=True):
+    for row in ws.iter_rows(max_col=40, values_only=True):
         row_idx += 1
         if row_idx == 1:
             header_row = [str(c).strip() if c is not None else '' for c in row]
@@ -176,10 +199,11 @@ def audit_delivery_fast(task_info):
                 res["code_residual_rows"] += 1
                 break
 
-        # (c) 底稿图片与物理文件
+        # (c) 底稿图片与物理文件 (支持方案 A 直接内嵌图片无文本模式)
         img_str = str(img_val or '').strip()
         if not img_str or img_str.lower() in ('none', ''):
-            res["missing_img_name_rows"] += 1
+            if not (has_embedded_drawings and len(available_imgs) > 0):
+                res["missing_img_name_rows"] += 1
         else:
             if img_str.lower() not in available_imgs_lower:
                 res["missing_disk_img_files"].append(img_str)

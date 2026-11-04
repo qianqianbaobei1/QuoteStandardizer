@@ -15,6 +15,75 @@ import zipfile
 from decimal import Decimal
 import xml.etree.ElementTree as ET
 import openpyxl
+from openpyxl.utils import column_index_from_string
+
+
+def hidden_axes(ws):
+    """返回 (隐藏行号集合, 隐藏列号集合)。
+
+    隐藏口径：被"隐藏"的行/列多是后台数据或已停用档位（如厂商把整张「系统结算价」设为 hidden），
+    解析时一律不取。row/column_dimensions 是稀疏字典，只收录 XML 里真实出现过的行/列，
+    所以这里读的是已有的维度对象，不会把整表扫一遍。
+    read_only 模式不提供 row_dimensions（也读不到隐藏标记），此时返回空集。
+    """
+    if getattr(ws, 'row_dimensions', None) is None:
+        return set(), set()
+    rows = {r for r, dim in ws.row_dimensions.items() if dim.hidden}
+    cols = set()
+    for key, dim in ws.column_dimensions.items():
+        if not dim.hidden:
+            continue
+        try:
+            cols.add(column_index_from_string(key))
+        except (ValueError, TypeError):
+            continue
+    return rows, cols
+
+
+def hidden_content_report(xlsx_path):
+    """不解包整本工作簿，直接从 zip 里读隐藏信息：
+    {sheet名: {'hidden': 是否隐藏表, 'hidden_rows': set(行号), 'hidden_cols': set(列号)}}
+    供只读流式审计脚本用（read_only 模式拿不到 row_dimensions）。
+    """
+    out = {}
+    try:
+        with zipfile.ZipFile(xlsx_path) as z:
+            names = set(z.namelist())
+            if 'xl/workbook.xml' not in names or 'xl/_rels/workbook.xml.rels' not in names:
+                return out
+            rels = {e.attrib.get('Id'): e.attrib.get('Target')
+                    for e in ET.fromstring(z.read('xl/_rels/workbook.xml.rels'))}
+            for sheet in ET.fromstring(z.read('xl/workbook.xml')).iter():
+                if not sheet.tag.endswith('sheet'):
+                    continue
+                sname = sheet.attrib.get('name')
+                r_id = next((v for k, v in sheet.attrib.items() if k.endswith('id')), None)
+                target = rels.get(r_id)
+                if not sname or not target:
+                    continue
+                part = _resolve_part('xl/workbook.xml', target)
+                rows, cols = set(), set()
+                if part in names:
+                    xml = z.read(part)
+                    for tag in re.finditer(rb'<row\b[^>]*>', xml):
+                        t = tag.group(0)
+                        if b'hidden="1"' in t:
+                            m = re.search(rb'\br="(\d+)"', t)
+                            if m:
+                                rows.add(int(m.group(1)))
+                    for tag in re.finditer(rb'<col\b[^>]*>', xml):
+                        t = tag.group(0)
+                        if b'hidden="1"' not in t:
+                            continue
+                        lo = re.search(rb'\bmin="(\d+)"', t)
+                        hi = re.search(rb'\bmax="(\d+)"', t)
+                        if lo:
+                            cols.update(range(int(lo.group(1)), int(hi.group(1) if hi else lo.group(1)) + 1))
+                out[sname] = {'hidden': sheet.attrib.get('state', 'visible') != 'visible',
+                              'hidden_rows': rows, 'hidden_cols': cols}
+    except Exception as e:
+        print(f"[hidden_content_report] 读取隐藏信息异常 {xlsx_path}: {e}")
+    return out
 
 def unmerge_and_fill_cells(ws):
     """
@@ -224,9 +293,12 @@ class ExcelAssetExtractor:
 
 
 def extract_sheet_sample_rows(ws, max_rows=10, max_cols=25):
-    """提取 Sheet 前几行样本用于 LLM 结构推导 (已做安全精度转换)"""
+    """提取 Sheet 前几行样本用于 LLM 结构推导 (已做安全精度转换；隐藏行不参与)"""
     samples = []
+    hid_rows, _ = hidden_axes(ws)
     for r in range(1, min(ws.max_row + 1, max_rows + 1)):
+        if r in hid_rows:
+            continue
         row_data = []
         for c in range(1, min(ws.max_column + 1, max_cols + 1)):
             row_data.append(cell_str(ws.cell(r, c)))
