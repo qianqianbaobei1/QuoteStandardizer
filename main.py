@@ -679,6 +679,183 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
     return raw_rows, records
 
 
+def _clean_rows(raw_rows, standardizer, supplier, brand, batch_size=30, max_workers=5):
+    """分批并发调用大模型清洗，返回 [(batch_slice, {id: 清洗结果})]，顺序与 raw_rows 一致"""
+    batches = [raw_rows[i:i + batch_size] for i in range(0, len(raw_rows), batch_size)]
+
+    def _worker(b_slice):
+        inp = [{"id": it["id"], "raw_cells": it["raw_cells_dict"], "raw_text": it["raw_full_line"],
+                "raw_price": it["raw_price"], "raw_unit": it["raw_unit"]} for it in b_slice]
+        res_list = standardizer.standardize_batch(inp, supplier_hint=supplier, brand_hint=brand)
+        return b_slice, {str(res.get("id")): res for res in res_list if isinstance(res, dict)}
+
+    with ThreadPoolExecutor(max_workers=min(len(batches), max_workers) if batches else 1) as pool:
+        return list(pool.map(_worker, batches))
+
+
+def _row_brand(raw_cells, default_brand):
+    """表内行级品牌 (F4)。返回 (品牌, 说明, 是否取自表内品牌列)"""
+    for bk, bv in raw_cells.items():
+        if '品牌' in bk and not any(ng in bk for ng in ['档位', '等级', '类别', '系列']):
+            cand = str(bv).strip()
+            if cand and _looks_like_brand(cand):
+                return cand, [], True
+            if cand:
+                return default_brand, [f"原表“{bk}”列的值“{cand}”不像品牌，未采用；品牌改用推断值"], False
+            break
+    return default_brand, [], False
+
+
+def _resolve_name_and_category(cleaned_res, item):
+    """返回 (物料名称, 类别编码, 编码来源, 说明)"""
+    notes = []
+    std_name = str(cleaned_res.get("standard_name") or "").strip()
+    if not std_name:
+        notes.append("未识别出物料名称")
+    cat_code, cat_src, cat_notes = resolve_and_verify_category(
+        std_name, item.get("raw_spec") or item.get("raw_full_line", ""), cleaned_res.get("category_code"))
+    notes.extend(cat_notes)
+    if cat_src == 'llm':
+        notes.append(f"类别编码 {cat_code} 未经标准编码库核验")
+    elif not cat_code:
+        notes.append("类别编码未确定" + ("" if CATEGORY_CODE_MAP else " (未配置标准编码库 CATEGORY_CODE_FILE)"))
+    # 行业标准名称对齐：类别接口返回的官方品类名覆盖物料名称（如“闸阀中丝扣”→“闸阀”）
+    if cat_code:
+        cat_info = fetch_category_attributes(cat_code)
+        if cat_info and cat_info.get("type", {}).get("description"):
+            std_category_title = cat_info["type"]["description"].strip()
+            if std_category_title:
+                std_name = std_category_title
+    return std_name, cat_code, cat_src, notes
+
+
+def _resolve_specs(item, cleaned_res, std_name):
+    """返回 (物料名称, 结构化参数, 原始规格串, 说明)"""
+    r_dict = item["raw_cells_dict"]
+    if "型号/系列" in r_dict:
+        std_name = r_dict.get("品名") or std_name
+        structured_specs = {
+            "规格型号": r_dict.get("规格型号", ""),
+            "型号/系列": r_dict.get("型号/系列", "")
+        }
+        raw_spec_str = f"规格型号:{r_dict.get('规格型号', '')};型号/系列:{r_dict.get('型号/系列', '')}"
+    else:
+        structured_specs = cleaned_res.get("structured_specs")
+        if not isinstance(structured_specs, dict) or not structured_specs:
+            structured_specs = {k: v for k, v in r_dict.items()}
+        structured_specs = {str(k): str(v) for k, v in structured_specs.items() if v not in (None, "")}
+        raw_spec_str = cleaned_res.get("raw_spec") or item.get("raw_spec") or item["raw_full_line"]
+    # 原文已是规范 “键:值;” 参数时原样采用 (不让模型改参数名/值，如 “厚度(mm):1.5”“是否曝露使用”)，模型结果只补充原文没有的键
+    verbatim = _verbatim_specs(r_dict)
+    if verbatim:
+        covered = {_spec_key_norm(k) for k in verbatim}
+        extra = {k: v for k, v in structured_specs.items()
+                 if _spec_key_norm(k) not in covered and v not in verbatim.values()}
+        structured_specs = {**verbatim, **extra}
+
+    # F7 结构化参数逐项核对原文出处
+    notes = []
+    unproven_params = _check_param_provenance(structured_specs, item.get("raw_full_line", ""))
+    if unproven_params:
+        notes.append("参数无原文出处: " + "；".join(unproven_params))
+    return std_name, structured_specs, raw_spec_str, notes
+
+
+def _resolve_region(raw_cells, terms_info):
+    """行内自带报价地区时以行为准，否则用商务条款中的地区。返回 (省, 市, 说明)"""
+    row_region = next((v for k, v in raw_cells.items() if any(rk in k for rk in REGION_HEADER_KEYS)), '')
+    province, city, region_note = _region_fields(row_region or terms_info["province"], terms_info["city"])
+    return province, city, [region_note] if region_note else []
+
+
+def _resolve_unit(llm_unit, raw_unit):
+    """返回 (单位, 说明)"""
+    unit = normalize_unit(str(llm_unit or "").strip() or raw_unit)
+    if not unit:
+        return unit, ["原表无计量单位"]
+    if raw_unit and unit != normalize_unit(raw_unit):
+        return unit, [f"单位由原表“{raw_unit}”改为“{unit}”"]
+    return unit, []
+
+
+def _resolve_price(raw_price, llm_price_value):
+    """价格只信原表；模型给的价格仅作对比，绝不覆盖。返回 (价格, 说明)"""
+    llm_price = safe_clean_price(llm_price_value)
+    if raw_price <= 0:
+        return raw_price, ["原表未读到有效单价" + (f"，模型推测 {llm_price}，未采用" if llm_price > 0 else "")]
+    if llm_price > 0 and abs(llm_price - raw_price) > 1e-6:
+        return raw_price, [f"模型返回价格 {llm_price} 与原表 {raw_price} 不一致，已保留原表价"]
+    return raw_price, []
+
+
+def _canonical_item_from_row(item, cleaned_res, quote_id, supplier, default_brand, terms_info, extractor, global_notes):
+    """一条原表行 + 大模型清洗结果 → CanonicalMaterialItem；各字段的取值与说明见 _resolve_* / _row_brand"""
+    notes = list(global_notes) + list(item.get("notes", []))
+
+    item_brand, brand_notes, brand_from_table = _row_brand(item["raw_cells_dict"], default_brand)
+    notes.extend(brand_notes)
+    if brand_from_table:  # 表内有明确品牌列时，清除“由供应商名称推断”的提示
+        notes = [n for n in notes if not (n.startswith("品牌“") and "由供应商名称推断" in n)]
+
+    clean_source = cleaned_res.get("_source", "fallback")
+    if clean_source != "llm":
+        notes.append("未经大模型清洗(规则降级)，名称与参数需复核")
+
+    std_name, cat_code, cat_src, n = _resolve_name_and_category(cleaned_res, item)
+    notes.extend(n)
+    std_name, structured_specs, raw_spec_str, n = _resolve_specs(item, cleaned_res, std_name)
+    notes.extend(n)
+    province, city, n = _resolve_region(item["raw_cells_dict"], terms_info)
+    notes.extend(n)
+    unit, n = _resolve_unit(cleaned_res.get("unit"), item["raw_unit"])
+    notes.extend(n)
+    final_price, n = _resolve_price(item["raw_price"], cleaned_res.get("price"))
+    notes.extend(n)
+
+    img_bytes_list = []
+    for mp in item["mpaths"]:
+        b = extractor.extract_image_bytes(mp) if extractor else None
+        if b:
+            img_bytes_list.append(b)
+
+    disc_ratio = terms_info["discount_ratio"]
+    ci = CanonicalMaterialItem(
+        quote_id=quote_id,
+        supplier=supplier,
+        brand=item_brand,
+        category_name=std_name,
+        category_code=cat_code,
+        structured_specs=structured_specs,
+        raw_spec=raw_spec_str,
+        file_page=item["file_page"],
+        unit=unit,
+        market_price=final_price,
+        discount_ratio=disc_ratio,
+        project_price=round(final_price * disc_ratio, 2) if disc_ratio is not None and final_price > 0 else None,
+        discount_series=terms_info["discount_series"],
+        is_freight_included=terms_info["is_freight_included"],
+        freight_desc=terms_info["freight_desc"],
+        is_tax_included=terms_info["is_tax_included"],
+        tax_desc=terms_info["tax_desc"],
+        tax_rate=terms_info["tax_rate"],
+        freight_settle=terms_info["freight_settle"],
+        quote_desc=f"{terms_info['quote_desc']}；{cleaned_res['quote_desc_extra']}".strip('；') if cleaned_res.get('quote_desc_extra') else terms_info['quote_desc'],
+        quote_type=terms_info["quote_type"],
+        province=province,
+        city=city,
+        discount_min=terms_info["discount_min"],
+        discount_max=terms_info["discount_max"],
+        image_bytes_list=img_bytes_list,
+        source_ref=item["id"],
+        raw_price=item["raw_price"],
+        clean_source=clean_source,
+        category_source=cat_src,
+    )
+    for n in notes:
+        ci.add_note(n)
+    return ci
+
+
 def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, terms_info,
                          cell_issue=None, global_notes=None, struct_log=None):
     """Excel 与 PDF(还原后的表格) 共用的解析主流程，返回 (canonical_items, source_rows, sheet_stats)"""
@@ -694,11 +871,10 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
     canonical_items, source_rows = [], []
     group_of = {}  # source_ref -> 同系列分组 (矩阵表按列)
     seq = 10
-    disc_ratio = terms_info["discount_ratio"]
     missing = missing_terms(terms_info)
     if missing:
         global_notes = global_notes + [f"商务条款缺失: {'、'.join(missing)}"]
-    if disc_ratio is None:
+    if terms_info["discount_ratio"] is None:
         global_notes = global_notes + ["未提供工程折扣，工程价留空"]
     sheet_stats = []   # 每个 Sheet 的“原表行数 → 产出条数”记账，空产出不能静默
 
@@ -734,166 +910,11 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         group_of.update({r["id"]: r["group_key"] for r in raw_rows if r.get("group_key")})
         print(f"    -> 提取出有效物料原始行: {len(raw_rows)} 行，启动大模型槽位精准清洗...")
 
-        # 分批调用 DeepSeek 提炼标准物料模型（并发线程池加速）
-        batch_size = 30
-        batches = []
-        for b_idx in range(0, len(raw_rows), batch_size):
-            batch_slice = raw_rows[b_idx:b_idx + batch_size]
-            llm_input = [
-                {
-                    "id": item["id"],
-                    "raw_cells": item["raw_cells_dict"],
-                    "raw_text": item["raw_full_line"],
-                    "raw_price": item["raw_price"],
-                    "raw_unit": item["raw_unit"]
-                }
-                for item in batch_slice
-            ]
-            batches.append((batch_slice, llm_input))
-
-        def _clean_worker(args):
-            b_slice, inp = args
-            res_list = standardizer.standardize_batch(inp, supplier_hint=supplier, brand_hint=brand)
-            res_map = {str(res.get("id")): res for res in res_list if isinstance(res, dict)}
-            return b_slice, res_map
-
-        # 并发执行各批次标准化清洗
-        max_workers = min(len(batches), 5) if batches else 1
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            cleaned_batch_results = list(pool.map(_clean_worker, batches))
-
-        for batch_slice, cleaned_dict in cleaned_batch_results:
+        for batch_slice, cleaned_dict in _clean_rows(raw_rows, standardizer, supplier, brand):
             for item in batch_slice:
-                it_id = item["id"]
-                cleaned_res = cleaned_dict.get(it_id, {})
-                notes = list(global_notes) + list(item.get("notes", []))
-
-                # 表内行级品牌推导 (F4)
-                row_brand = ''
-                for bk, bv in item["raw_cells_dict"].items():
-                    if '品牌' in bk and not any(ng in bk for ng in ['档位', '等级', '类别', '系列']):
-                        cand = str(bv).strip()
-                        if _looks_like_brand(cand):
-                            row_brand = cand
-                        elif cand:
-                            notes.append(f"原表“{bk}”列的值“{cand}”不像品牌，未采用；品牌改用推断值")
-                        break
-                item_brand = row_brand or brand
-                # 若来自表内明确品牌列，清除“由供应商名称推断”的提示
-                if row_brand:
-                    notes = [n for n in notes if not (n.startswith("品牌“") and "由供应商名称推断" in n)]
-
-                clean_source = cleaned_res.get("_source", "fallback")
-                if clean_source != "llm":
-                    notes.append("未经大模型清洗(规则降级)，名称与参数需复核")
-
-                std_name = str(cleaned_res.get("standard_name") or "").strip()
-                if not std_name:
-                    notes.append("未识别出物料名称")
-                # (模块级 import，见文件顶部)
-                cat_code, cat_src, cat_notes = resolve_and_verify_category(std_name, item.get("raw_spec") or item.get("raw_full_line", ""), cleaned_res.get("category_code"))
-                notes.extend(cat_notes)
-                if cat_src == 'llm':
-                    notes.append(f"类别编码 {cat_code} 未经标准编码库核验")
-                elif not cat_code:
-                    notes.append("类别编码未确定" + ("" if CATEGORY_CODE_MAP else " (未配置标准编码库 CATEGORY_CODE_FILE)"))
-                
-                # 【行业标准名称对齐】：使用标准分类与属性接口返回的官方品类名称规范化物料名称
-                if cat_code:
-                    cat_info = fetch_category_attributes(cat_code)
-                    if cat_info and cat_info.get("type", {}).get("description"):
-                        std_category_title = cat_info["type"]["description"].strip()
-                        # 若原提取名称是简写（如“闸阀中丝扣”、“暗杆闸阀”对应类别“闸阀”；“铝板”对应类别“铝板(带)材”），采用标准分类名或前缀保留
-                        if std_category_title:
-                            std_name = std_category_title
-
-                if "型号/系列" in item["raw_cells_dict"]:
-                    r_dict = item["raw_cells_dict"]
-                    std_name = r_dict.get("品名") or std_name
-                    structured_specs = {
-                        "规格型号": r_dict.get("规格型号", ""),
-                        "型号/系列": r_dict.get("型号/系列", "")
-                    }
-                    raw_spec_str = f"规格型号:{r_dict.get('规格型号', '')};型号/系列:{r_dict.get('型号/系列', '')}"
-                else:
-                    structured_specs = cleaned_res.get("structured_specs")
-                    if not isinstance(structured_specs, dict) or not structured_specs:
-                        structured_specs = {k: v for k, v in item["raw_cells_dict"].items()}
-                    structured_specs = {str(k): str(v) for k, v in structured_specs.items() if v not in (None, "")}
-                    raw_spec_str = cleaned_res.get("raw_spec") or item.get("raw_spec") or item["raw_full_line"]
-                # 原文已是规范 “键:值;” 参数时原样采用 (不让模型改参数名/值，如 “厚度(mm):1.5”“是否曝露使用”)，模型结果只补充原文没有的键
-                verbatim = _verbatim_specs(item["raw_cells_dict"])
-                if verbatim:
-                    covered = {_spec_key_norm(k) for k in verbatim}
-                    extra = {k: v for k, v in structured_specs.items()
-                             if _spec_key_norm(k) not in covered and v not in verbatim.values()}
-                    structured_specs = {**verbatim, **extra}
-
-                # F7 结构化参数逐项核对原文出处
-                unproven_params = _check_param_provenance(structured_specs, item.get("raw_full_line", ""))
-                if unproven_params:
-                    notes.append("参数无原文出处: " + "；".join(unproven_params))
-
-                # 行内自带报价地区时以行为准，否则用商务条款中的地区
-                row_region = next((v for k, v in item["raw_cells_dict"].items() if any(rk in k for rk in REGION_HEADER_KEYS)), '')
-                province, city, region_note = _region_fields(row_region or terms_info["province"], terms_info["city"])
-                if region_note:
-                    notes.append(region_note)
-
-                unit = normalize_unit(str(cleaned_res.get("unit") or "").strip() or item["raw_unit"])
-                if not unit:
-                    notes.append("原表无计量单位")
-                elif item["raw_unit"] and unit != normalize_unit(item["raw_unit"]):
-                    notes.append(f"单位由原表“{item['raw_unit']}”改为“{unit}”")
-
-                # 价格只信原表；模型给的价格仅作对比，绝不覆盖
-                final_price = item["raw_price"]
-                llm_price = safe_clean_price(cleaned_res.get("price"))
-                if final_price <= 0:
-                    notes.append("原表未读到有效单价" + (f"，模型推测 {llm_price}，未采用" if llm_price > 0 else ""))
-                elif llm_price > 0 and abs(llm_price - final_price) > 1e-6:
-                    notes.append(f"模型返回价格 {llm_price} 与原表 {final_price} 不一致，已保留原表价")
-
-                img_bytes_list = []
-                for mp in item["mpaths"]:
-                    b = extractor.extract_image_bytes(mp) if extractor else None
-                    if b: img_bytes_list.append(b)
-
-                ci = CanonicalMaterialItem(
-                    quote_id=f"{id_prefix}{seq:05d}",
-                    supplier=supplier,
-                    brand=item_brand,
-                    category_name=std_name,
-                    category_code=cat_code,
-                    structured_specs=structured_specs,
-                    raw_spec=raw_spec_str,
-                    file_page=item["file_page"],
-                    unit=unit,
-                    market_price=final_price,
-                    discount_ratio=disc_ratio,
-                    project_price=round(final_price * disc_ratio, 2) if disc_ratio is not None and final_price > 0 else None,
-                    discount_series=terms_info["discount_series"],
-                    is_freight_included=terms_info["is_freight_included"],
-                    freight_desc=terms_info["freight_desc"],
-                    is_tax_included=terms_info["is_tax_included"],
-                    tax_desc=terms_info["tax_desc"],
-                    tax_rate=terms_info["tax_rate"],
-                    freight_settle=terms_info["freight_settle"],
-                    quote_desc=f"{terms_info['quote_desc']}；{cleaned_res['quote_desc_extra']}".strip('；') if cleaned_res.get('quote_desc_extra') else terms_info['quote_desc'],
-                    quote_type=terms_info["quote_type"],
-                    province=province,
-                    city=city,
-                    discount_min=terms_info["discount_min"],
-                    discount_max=terms_info["discount_max"],
-                    image_bytes_list=img_bytes_list,
-                    source_ref=it_id,
-                    raw_price=item["raw_price"],
-                    clean_source=clean_source,
-                    category_source=cat_src,
-                )
-                for n in notes:
-                    ci.add_note(n)
-                canonical_items.append(ci)
+                canonical_items.append(_canonical_item_from_row(
+                    item, cleaned_dict.get(item["id"], {}), f"{id_prefix}{seq:05d}",
+                    supplier, brand, terms_info, extractor, global_notes))
                 seq += 10
 
         produced = len(canonical_items) - n_before
