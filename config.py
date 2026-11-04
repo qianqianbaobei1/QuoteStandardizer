@@ -46,7 +46,7 @@ JEV_ROW_BATCH = int(os.getenv("JEV_ROW_BATCH", "40"))
 CODE_LIBRARY_MAX_LINES = int(os.getenv("CODE_LIBRARY_MAX_LINES", "50"))
 
 # 线路引擎选择: 'gemini' (Gemini原生全模态端到端直传，首选) / 'traditional' (原切图流水线) / 'compare' (双轨对比)
-EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "gemini").strip().lower()
+EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "traditional").strip().lower()
 
 # Gemini 原生引擎配置
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -77,7 +77,7 @@ CATEGORY_ATTRS_API_URL = os.getenv("CATEGORY_ATTRS_API_URL", "")
 ILLUSTRATION_API_BASE_URL = os.getenv("ILLUSTRATION_API_BASE_URL", "https://ugw.m2.com.cn/agents-toolkit")
 ILLUSTRATION_TASK_CREATE_URL = os.getenv("ILLUSTRATION_TASK_CREATE_URL") or f"{ILLUSTRATION_API_BASE_URL.rstrip('/')}/api/material/illustrations"
 ILLUSTRATION_TASK_QUERY_URL = os.getenv("ILLUSTRATION_TASK_QUERY_URL") or f"{ILLUSTRATION_API_BASE_URL.rstrip('/')}/api/material/illustration-tasks"
-ENABLE_MATERIAL_ILLUSTRATION = os.getenv("ENABLE_MATERIAL_ILLUSTRATION", "1").strip().lower() in ("1", "true")
+ENABLE_MATERIAL_ILLUSTRATION = os.getenv("ENABLE_MATERIAL_ILLUSTRATION", "0").strip().lower() in ("1", "true")
 DOWNLOAD_ILLUSTRATION_IMAGES = os.getenv("DOWNLOAD_ILLUSTRATION_IMAGES", "0").strip().lower() in ("1", "true")
 
 # 省级行政区全称、简称与常用别名

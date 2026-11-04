@@ -99,6 +99,8 @@ class MaterialIllustrationService:
         self.query_url = query_url
         self.enable = enable
         self.download_images = download_images
+        # 最近一次 fetch_illustrations_batch 的接口异常；调用方据此给物料写待复核说明 (I7)
+        self.last_errors: List[str] = []
 
     def fetch_illustrations_batch(self,
                                   materials: List[Dict[str, Any]],
@@ -109,7 +111,9 @@ class MaterialIllustrationService:
         """
         批量为材料检索配图并返回字典映射：
         返回结果格式: {uid: {"pictureUrl": str, "pictureName": str, "folderName": str, "image_bytes": bytes or None}}
+        接口异常不抛出，记录在 self.last_errors 里
         """
+        self.last_errors = []
         if not self.enable or not materials or not self.create_url:
             return {}
 
@@ -245,8 +249,9 @@ class MaterialIllustrationService:
 
                 save_cache()
             except Exception as e:
-                # 异常隔离：接口网络超时或故障时不阻断主处理流程
+                # 异常隔离：接口网络超时或故障时不阻断主处理流程，但要记下来交给调用方留痕
                 print(f"[Warning] 材料配图接口调用异常: {e}")
+                self.last_errors.append(f"{type(e).__name__}: {e}")
 
         save_cache(force=True)
         return results
@@ -306,6 +311,8 @@ def match_illustrations_for_canonical_items(items: list,
         download_bytes=download_bytes
     )
 
+    errors = list(getattr(default_illustration_service, "last_errors", None) or [])
+
     # 映射回 key -> hit
     key_hit_map = {}
     for key, udata in unique_materials.items():
@@ -335,6 +342,8 @@ def match_illustrations_for_canonical_items(items: list,
                 it.image_bytes_list.append(hit["image_bytes"])
 
             matched_count += 1
+        elif errors:
+            it.add_note(f"材料配图接口调用失败，图片未填: {errors[0][:80]}")
 
     return matched_count
 

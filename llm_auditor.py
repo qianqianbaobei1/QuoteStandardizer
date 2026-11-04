@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-llm_auditor.py - Google Gemini 驱动的深度业务逻辑终审与强制闭环自愈核验中枢
-核心使命：
+llm_auditor.py - Google Gemini 驱动的终审检视：只提建议，不改单元格
+模型给出的修正一律以「[模型建议]」批注挂在对应单元格上，由人工复核后决定是否采纳；
+单元格的值保持原样（I1 价格只取原表 / I3 推断须标明 / I6 单位不替换）。
+检视重点：
 专治建材报价单标准化提取中的三大痛点顽疾：
 1. 【留空 (Blanks)】：必填列（名称规格、单位、类别编码、说明）遗漏补齐与合法留痕
 2. 【错行与错位 (Misalignment)】：表头行残留剔除、参数与品名混淆分离、价格/基价从规格中彻底剥离至报价说明
@@ -22,7 +24,7 @@ from config import (
 from gemini_client import GeminiClient
 
 AUDIT_FIX_PROMPT = """你是一个国家级建设工程招投标与建材物料领域的终审专家。
-现在需要对即将交付给甲方的标准化建材报价单数据行进行【终审深度检视与自动自愈修复】。
+现在需要对即将交付给甲方的标准化建材报价单数据行进行【终审深度检视】，给出修正建议（由人工复核后决定是否采纳）。
 
 【必须严格检视并修复的三大核心问题】：
 
@@ -67,7 +69,7 @@ AUDIT_FIX_PROMPT = """你是一个国家级建设工程招投标与建材物料�
 
 
 class LLMAuditor:
-    """终审自愈核验引擎 (Gemini 3.8 / 3.6 Flash 原生驱动)"""
+    """终审检视引擎：只产出批注建议，不写回单元格值"""
 
     # 价格列与原表绝对留痕列：模型无权擅自修改数值（守恒性保证）
     IMMUTABLE_FIELDS = {
@@ -75,15 +77,15 @@ class LLMAuditor:
         '顺序号', '供应商名称', '厂家报价图片文件名', '图片'
     }
 
-    # 允许自愈修复的业务字段
+    # 允许给出修正建议的业务字段
     HEALABLE_FIELDS = ('名称规格', '规格参数', '单位', '报价说明', '类别编码')
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         self.client = GeminiClient(api_key=api_key or GEMINI_API_KEY, model=model or GEMINI_MODEL)
 
-    def verify_and_auto_heal(self, ws, headers: List[str]):
+    def review_and_suggest(self, ws, headers: List[str]) -> int:
         """
-        对已生成的 openpyxl Worksheet 执行 Gemini 终审深度业务检视与就地自愈
+        对 openpyxl Worksheet 做终审检视；建议写成批注，不改单元格值。返回建议条数
         """
         rows_data = []
         for r in range(2, ws.max_row + 1):
@@ -96,7 +98,7 @@ class LLMAuditor:
             rows_data.append(row_dict)
 
         if not rows_data:
-            return
+            return 0
 
         print(f"[*] [AI 自我核对中枢] 启动 Gemini 终审检视 (Sheet: {ws.title} | 共 {len(rows_data)} 行物料)...")
         print(f"[*] [检视重点] 1. 留空补齐 (名称/单位/说明) | 2. 错行错位纠偏 (表头/参数/基价剥离) | 3. 丢失指标追回 (壁厚/材质/通径)")
@@ -177,14 +179,15 @@ class LLMAuditor:
 
             for corr in corrections:
                 seq = corr.get('seq') or corr.get('row_id')
-                reason = corr.get('reason', '模型终审自愈')
+                reason = corr.get('reason', '模型终审建议')
                 fixes = corr.get('fixes', {})
 
                 # 定位对应的 Excel 行号
                 target_row = None
-                for item in chunk:
-                    if str(item.get('seq')) == str(seq) or str(item.get('_row_idx')) == str(seq):
-                        target_row = item['_row_idx']
+                # 先按 seq 精确匹配；seq 与 Excel 行号差 1，混在一个条件里会把建议挂到上一行
+                for key in ('seq', '_row_idx'):
+                    target_row = next((it['_row_idx'] for it in chunk if str(it.get(key)) == str(seq)), None)
+                    if target_row:
                         break
                 if not target_row:
                     try:
@@ -214,10 +217,9 @@ class LLMAuditor:
                         if orig_str != new_str and new_str:
                             cell = ws.cell(target_row, col_idx)
                             prev_comment = f'{cell.comment.text}；' if cell.comment and cell.comment.text else ''
-                            cell.value = f_val
 
                             # 分类打标与统计
-                            cat_tag = "自愈修复"
+                            cat_tag = "修正建议"
                             if not orig_str:
                                 cat_tag = "留空补齐"
                                 healed_blanks += 1
@@ -228,11 +230,16 @@ class LLMAuditor:
                                 cat_tag = "丢失追回"
                                 healed_loss += 1
 
-                            # 单元格留痕挂批注，数值只留干净正文
-                            comment_text = f"{prev_comment}[模型自愈] {cat_tag}: {orig_str[:25]} → {new_str[:25]} ({reason})"
+                            # 建议只挂批注，单元格值保持原样，由人工决定是否采纳
+                            comment_text = f"{prev_comment}[模型建议] {cat_tag}: {orig_str[:25]} → {new_str[:200]} ({reason})"
                             cell.comment = Comment(comment_text, 'QuoteStandardizer-Gemini')
                             healed_count += 1
 
                             print(f"      [{cat_tag}] 行 {target_row} 列 [{f_name}]: '{orig_str[:20]}' -> '{new_str[:20]}' | 原因: {reason}")
 
-        print(f"[*] [AI 自我核对中枢] 终审完成！累计执行就地自愈修复: {healed_count} 处 (留空补齐: {healed_blanks} | 错位纠偏: {healed_misalignment} | 丢失追回: {healed_loss})")
+        print(f"[*] [AI 自我核对中枢] 终审完成：共 {healed_count} 条修正建议已写入批注，单元格未改动 "
+              f"(留空补齐: {healed_blanks} | 错位纠偏: {healed_misalignment} | 丢失追回: {healed_loss})")
+        return healed_count
+
+    # 旧名保留给 scripts/adhoc 下的历史脚本；行为同 review_and_suggest（不再改写单元格）
+    verify_and_auto_heal = review_and_suggest

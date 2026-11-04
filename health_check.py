@@ -427,7 +427,7 @@ class TestPipelineVerification(unittest.TestCase):
         self.assertEqual(missing, [], f'_row_values 漏了标准列: {missing}')
 
     def test_16_llm_auditor_cannot_touch_price_or_verbatim(self):
-        """自愈审计铁律：模型不得改价格/原文留痕/标识列，且改写必须留痕（痕到批注，不污染业务字段）"""
+        """终审只提建议：模型不得改任何单元格值，建议以「[模型建议]」批注留痕供人工复核"""
         import openpyxl
         from unittest import mock
         from llm_auditor import LLMAuditor
@@ -446,14 +446,18 @@ class TestPipelineVerification(unittest.TestCase):
             }]})}}]}
         with mock.patch('llm_auditor.requests.post') as post:
             post.return_value = mock.Mock(status_code=200, json=lambda: fake)
-            LLMAuditor().verify_and_auto_heal(ws, headers)
+            n = LLMAuditor().review_and_suggest(ws, headers)
 
         vals = {h: ws.cell(2, i + 1).value for i, h in enumerate(headers)}
         self.assertEqual(vals['市场价'], 128.5, '价格只能取原表，模型无权改写')
         self.assertEqual(vals['厂家原始规格参数'], '原文:厚度1.5;基价18000', '原文留痕不可改写')
-        self.assertEqual(vals['名称规格'], '成品名', '允许字段应当被自愈')
-        self.assertEqual(vals['报价说明'], '基价另计', '报价说明里的业务修正照常写入')
-        self.assertIn('[模型自愈]', str(ws.cell(2, 2).comment.text), '自愈痕迹必须留痕到被改单元格的批注')
+        self.assertEqual(vals['名称规格'], '旧品名', '品名以原表为准，模型建议不得直接写回')
+        self.assertEqual(vals['单位'], '㎡', '单位不替换 (I6)')
+        self.assertEqual(vals['报价说明'], '', '模型建议不得直接写回')
+        self.assertEqual(n, 3, '名称/单位/报价说明三条建议，价格与原文列的建议被丢弃')
+        self.assertIn('[模型建议]', str(ws.cell(2, 2).comment.text), '建议必须以批注留痕')
+        self.assertIn('成品名', str(ws.cell(2, 2).comment.text))
+        self.assertIsNone(ws.cell(2, 6).comment, '价格列不接受任何建议')
 
     def test_18_fixed_fields_reject_foreign_values(self):
         """固定字段值域门禁：品牌/地区列读到价格时必须拦下，不能当成品牌/省名落盘"""

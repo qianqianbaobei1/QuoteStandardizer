@@ -1132,6 +1132,8 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
             print(f"[*] 材料配图服务处理完成，成功命中配图: {n_matched}/{len(items)} 条")
     except Exception as illust_err:
         print(f"[Warning] 材料配图服务执行异常: {illust_err}")
+        for it in items:
+            it.add_note(f"材料配图失败，图片未填: {str(illust_err)[:80]}")
 
     builder = StandardizedWorkbookBuilder(template_xlsx)
     builder.build_from_canonical_items(items, output_xlsx, img_dir, reconciliation=None,

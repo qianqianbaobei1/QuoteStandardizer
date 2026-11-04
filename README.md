@@ -44,6 +44,8 @@ STRUCTURE_ENGINE=llm                  # llm (默认) / jev / compare
 TYPESAFE_API_KEY=                     # jev、compare 模式需要
 JEV_MIN_CONFIDENCE=0.5                # Jev 置信度低于此值时写入待复核说明
 LLM_TEMPERATURE=0.1                   # 清洗/审计温度；0 最确定但可能牺牲归纳能力
+EXTRACTOR_ENGINE=traditional          # PDF 链路：traditional (默认，DeepSeek 逐页) / gemini / compare
+ENABLE_MATERIAL_ILLUSTRATION=0        # 材料配图接口，默认关闭；开启后接口失败的行写入待复核说明
 ```
 
 ## 试点：用 TypeSafe Jev 判定表格结构
@@ -92,7 +94,8 @@ builder.py          输出工作簿
 config.py           环境配置、省份映射、编码库加载
 evaluate.py         评差引擎（与线上系统逐格比对、错误归纳、回归）
 run_batch_standardize.py  整批供应商批量解析
-zip_standardizer_pipeline.py  线上导出压缩包 → 单 Sheet 交付（多类别 Sheet 收口、列序对齐 33 列标准）
+zip_standardizer_pipeline.py  线上导出压缩包 → 单 Sheet 交付（多类别 Sheet 收口、列序对齐 33 列标准）；
+                    Gemini 终审只把修正建议写成「[模型建议]」批注，不改单元格；落盘后与原表逐格对账，失败退出码 2
 reconcile_vs_source.py       交付件 vs 压缩包内原表逐格对账（保真度 / 补全量 / 致命项）
 health_check.py     模块自检（含评差引擎自检）
 ERROR_CODES.md      错误码字典 + 每日流程 + 修复账本

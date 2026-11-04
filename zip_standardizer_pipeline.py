@@ -18,7 +18,6 @@ import json
 import copy
 import base64
 import zipfile
-from difflib import SequenceMatcher
 import openpyxl
 from openpyxl.drawing.image import Image as OpenpyxlImage
 from openpyxl.comments import Comment
@@ -30,6 +29,17 @@ from config import (
     DEFAULT_OUTPUT_DIR
 )
 from builder import STANDARD_HEADERS
+
+# 线上导出里用户明确不需要的冗余审计表，交付与对账都不计入
+UNWANTED_SHEETS = ('疑义与失败审计说明', '原表对账')
+
+
+def _mark_review(cell, note: str):
+    """待复核说明挂到单元格批注（与规格回填留痕同一做法），不污染业务字段"""
+    prev = f'{cell.comment.text}；' if cell.comment and cell.comment.text else ''
+    if note not in prev:
+        cell.comment = Comment(f'{prev}[待复核] {note}', 'QuoteStandardizer')
+
 
 # 线上导出与 GenOffice 33 列标准只差个大小写/百分号，统一按标准列名交付
 HEADER_ALIAS = {'报价id': '报价ID', '增值税税率%': '增值税税率'}
@@ -119,6 +129,7 @@ class ZipQuoteStandardizerPipeline:
         os.makedirs(self.output_dir, exist_ok=True)
         self.transcription_cache = {}
         self.auditor = LLMAuditor()
+        self.last_failures = []
 
     def extract_image_tables(self, img_bytes: bytes, img_name: str) -> list:
         """调用 Vision 视觉大模型，系统级转录报价单图片中的所有物料及属性规格"""
@@ -280,9 +291,10 @@ class ZipQuoteStandardizerPipeline:
         wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes))
 
         # 剔除用户明确不需要的冗余审计表
-        for unwanted in ['疑义与失败审计说明', '原表对账']:
+        for unwanted in UNWANTED_SHEETS:
             if unwanted in wb.sheetnames:
                 wb.remove(wb[unwanted])
+        src_grid = self._source_grid(xlsx_bytes)
 
         # 缓存图片到本地临时目录以便 openpyxl 嵌入
         temp_img_dir = os.path.join(self.output_dir, f".cache_{supplier_name}")
@@ -470,6 +482,9 @@ class ZipQuoteStandardizerPipeline:
                                     company_name=supplier_name,
                                     specification=str(cur_spec or "")
                                 )
+                                illust_errors = getattr(default_illustration_service, "last_errors", None) or []
+                                if illust_errors and img_col:
+                                    _mark_review(ws.cell(r, img_col), f"材料配图接口调用失败，图片未填: {illust_errors[0][:80]}")
                                 if illust and illust.get("pictureUrl"):
                                     pic_url = illust["pictureUrl"]
                                     pic_name = illust.get("pictureName") or ""
@@ -483,8 +498,10 @@ class ZipQuoteStandardizerPipeline:
                                     folder_col = headers.index('图片文件夹') + 1 if '图片文件夹' in headers else None
                                     if folder_col and folder_name and not ws.cell(r, folder_col).value:
                                         ws.cell(r, folder_col).value = folder_name
-                        except Exception:
-                            pass
+                        except Exception as illust_err:
+                            print(f"[Warning] 行 {r} 材料配图失败: {illust_err}")
+                            if img_col:
+                                _mark_review(ws.cell(r, img_col), f"材料配图失败，图片未填: {str(illust_err)[:80]}")
 
         # 4. 保存为交付标准文件（多 Sheet 收口成单张「标准化报价」，列序对齐 GenOffice 33 列）
         collapse_to_single_sheet(wb, column_order=STANDARD_HEADERS)
@@ -498,32 +515,49 @@ class ZipQuoteStandardizerPipeline:
                 if not cell.value:
                     cell.value = supplier_name
                     cell.comment = Comment('来源:压缩包文件名推断', 'QuoteStandardizer')
-        name_col = main_hdr.index('名称规格') + 1
-        orig_names = {r: ws_main.cell(r, name_col).value for r in range(2, ws_main.max_row + 1)}
         for ws in wb.worksheets:
             apply_enterprise_style(ws)
         for ws in wb.worksheets:
             sheet_headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
             try:
-                self.auditor.verify_and_auto_heal(ws, sheet_headers)
+                self.auditor.review_and_suggest(ws, sheet_headers)
             except Exception as e:
                 print(f"[Warning] 自我核对执行提示: {e}")
             apply_enterprise_style(ws)
 
-        # 5. 品名以原表为准：模型自愈可以查错别字，但不能整行换成另一个物料的名字
-        #    （实测：「广播劝放」→「广播功放」该留；「班级信息发布终端」→「光模块」必须回退）
-        for r, v in orig_names.items():
-            cur = ws_main.cell(r, name_col).value
-            if cur != v:
-                if SequenceMatcher(None, str(v or ''), str(cur or '')).ratio() >= 0.6:
-                    print(f"[名称纠错] 行{r}: {v!r} -> {cur!r}")
-                else:
-                    print(f"[名称保护] 行{r} 模型自愈改名 {cur!r} -> 回退原表 {v!r}")
-                    ws_main.cell(r, name_col).value = v
         wb.save(out_path)
-        print(f"[✓] 标准化成功: {out_path}")
-        print(f"    - 处理总行数: {total_rows_processed} | 补齐规格行: {total_specs_filled} | 内嵌图片: {total_images_embedded}\n")
+        print(f"[✓] 标准化完成: {out_path}")
+        print(f"    - 处理总行数: {total_rows_processed} | 补齐规格行: {total_specs_filled} | 内嵌图片: {total_images_embedded}")
+
+        # 5. 交付件 vs 压缩包原表逐格对账：锁定字段（价格/单位/品牌/地区/税率…）与名称不得被改写或丢失，行数必须守恒
+        self.last_failures = self._verify_against_source(src_grid, out_path)
         return out_path
+
+    @staticmethod
+    def _source_grid(xlsx_bytes: bytes):
+        """原表快照（与交付件同口径：剔除冗余审计表后收口成单表），供落盘后对账"""
+        from reconcile_vs_source import to_grid
+        src_wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes))
+        for unwanted in UNWANTED_SHEETS:
+            if unwanted in src_wb.sheetnames:
+                src_wb.remove(src_wb[unwanted])
+        for ws in src_wb.worksheets:
+            normalize_headers(ws)
+        return to_grid(collapse_to_single_sheet(src_wb))
+
+    @staticmethod
+    def _verify_against_source(src_grid, out_path: str) -> list:
+        """返回失败清单；非空时调用方必须置退出码 2"""
+        from reconcile_vs_source import load_delivery, reconcile, verdict
+        rep = reconcile(os.path.basename(out_path), src_grid, load_delivery(out_path))
+        failures = verdict(rep)
+        if rep['rowsA'] != rep['rowsB']:
+            failures.insert(0, f"行数不守恒: 原表 {rep['rowsA']} 行 → 交付 {rep['rowsB']} 行")
+        print(f"[VERIFY] {os.path.basename(out_path)} | 原表 {rep['rowsA']} 行 → 交付 {rep['rowsB']} 行 | "
+              f"失败 {len(failures)} | RESULT={'PASS' if not failures else 'FAIL'}")
+        for f in failures[:20]:
+            print(f"    ✗ {f}")
+        return failures
 
 if __name__ == '__main__':
     # 用法: python3 zip_standardizer_pipeline.py <报价单.zip> [供应商名称]
@@ -531,6 +565,8 @@ if __name__ == '__main__':
         print(__doc__)
         print('用法: python3 zip_standardizer_pipeline.py <报价单.zip> [供应商名称]')
         raise SystemExit(1)
-    return_path = ZipQuoteStandardizerPipeline().process_zip(
-        sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)
+    pipeline = ZipQuoteStandardizerPipeline()
+    return_path = pipeline.process_zip(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)
     print(return_path)
+    if pipeline.last_failures:
+        raise SystemExit(2)
