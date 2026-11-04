@@ -31,8 +31,13 @@ from config import (DEFAULT_TEMPLATE_PATH, DEFAULT_OUTPUT_DIR, PROVINCE_ABBR_MAP
                     STRICT_ENGINE,
                     EXPAND_NATIONWIDE, NATIONWIDE_REGIONS)
 from models import CanonicalMaterialItem, SourceRowRecord, reconcile, summarize_audit
-from category_attribute_service import (resolve_and_verify_category, fetch_category_attributes,
-                                        validate_and_normalize_specs)
+from category_attribute_service import (
+    compute_sheet_category_prior,
+    retrieve_category_candidates,
+    resolve_and_verify_category,
+    fetch_category_attributes,
+    validate_and_normalize_specs,
+)
 from llm_agent import DeepSeekStandardizer, JevJudge, UNIT_PRICE_KEYS, TOTAL_PRICE_KEYS
 from config import STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE
 
@@ -109,10 +114,8 @@ def verify_terms_supplier(terms: dict, evidence_texts: list) -> dict:
     core = core_name(sup)
     evidence = re.sub(r'\s', '', ''.join(evidence_texts))
     if len(core) >= 2 and evidence and not _core_consistent(sup, core, evidence):
-        print(f"[Warning] 商务单识别出的供应商“{sup}”与文件名/报价表内容不符，不予采信")
-        terms['_supplier_note'] = f"商务单公章识别为“{sup}”，与文件名/报价表不符，未采用"
-        terms.pop('supplier', None)
-        terms.pop('brand', None)
+        print(f"[Info] 商务单公章供应商“{sup}”与表内品牌/物料名称可能存在经销商与品牌差异，予以保留，提示复核")
+        terms['_supplier_note'] = f"商务单公章识别为“{sup}”，与表内文字存在差异，建议复核"
     return terms
 
 
@@ -299,7 +302,7 @@ def _pick_row_field(cells: dict, keys, exclude=()) -> str:
 
 # 原表材料名称列常把型号写在品名前面（NLED4916 吊装线型灯 / LED LEDA45J球泡 / LED T806P灯管），型号不进名称规格
 # 模型段必须以数字结尾或含数字，所以 CPL覆膜钢质门、UPVC排水管、HDPE双壁波纹管 这类不会被误删
-_MODEL_PREFIX_RE = re.compile(r'^(?:[A-Z]{1,6}[\s\-])?[A-Z]{0,6}\d[A-Z0-9\-]*[\s　]*')
+_MODEL_PREFIX_RE = re.compile(r'^(?:[A-Z0-9]+[\s\-])*[A-Z0-9]*\d[A-Z0-9\-]*[\s　]*')
 _BRACKET_CODE_RE = re.compile(r'^[\[\【][A-Za-z0-9\-_]+[\]\】][\s　]*')
 
 
@@ -779,19 +782,71 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
     canonical_items, source_rows = [], []
     group_of = {}  # source_ref -> 同系列分组 (矩阵表按列)
     seq = 10
-    disc_ratio = terms_info["discount_ratio"]
+    disc_ratio = terms_info.get("discount_ratio")
+
+    # 从工作表前3行标题/横幅及原表文本中补全公司名称、品牌、联系人+连写手机号、税率
+    banner_texts = []
+    for ws_tmp in wb_val.worksheets:
+        for r_idx in range(1, min(4, (ws_tmp.max_row or 1) + 1)):
+            for c_idx in range(1, min(15, (ws_tmp.max_column or 1) + 1)):
+                v = str(ws_tmp.cell(r_idx, c_idx).value or "").strip()
+                if v and v not in banner_texts:
+                    banner_texts.append(v)
+    banner_blob = "\n".join(banner_texts)
+
+    if not terms_info.get("supplier"):
+        m_sup = re.search(r'(?:公司名称|报价单位|供方|供应商)[：:\s]*([\u4e00-\u9fffA-Za-z0-9（）()]{4,30}?(?:有限公司|股份有限公司|股份公司|集团|有限责任公司|厂|经营部))', banner_blob)
+        if m_sup:
+            terms_info["supplier"] = m_sup.group(1).strip()
+            if not supplier:
+                supplier = terms_info["supplier"]
+
+    if not terms_info.get("brand"):
+        m_brand = re.search(r'(?:报价单品牌|报价品牌|品牌)[：:\s]*([\u4e00-\u9fffA-Za-z0-9]{2,15})', banner_blob)
+        if m_brand:
+            terms_info["brand"] = m_brand.group(1).strip()
+            if not brand:
+                brand = terms_info["brand"]
+
+    # 拆分连写的联系人与手机号（如“联系人：洪水土13850009333”）
+    m_contact = re.search(r'(?:联系人|业务员|报价人)[：:\s]*([\u4e00-\u9fff]{2,5})\s*(1[3-9]\d{9})?', banner_blob)
+    if m_contact:
+        if not terms_info.get("contact_person"):
+            terms_info["contact_person"] = m_contact.group(1).strip()
+        if m_contact.group(2) and not terms_info.get("contact_phone"):
+            terms_info["contact_phone"] = m_contact.group(2).strip()
+
+    # 从横幅或表头补充税率与含税信息
+    if not terms_info.get("tax_rate"):
+        m_tax = re.search(r'(?:含|税率)[：:\s]*(\d{1,2}%|\d{1,2}个点)', banner_blob)
+        if m_tax:
+            terms_info["tax_rate"] = m_tax.group(1).replace("个点", "%")
+            if not terms_info.get("is_tax_included"):
+                terms_info["is_tax_included"] = "是"
+
     # 检查原表工作表内是否已自带了商务条款列（如“税率”、“是否含税”、“运费”等），避免误报缺失
     table_has_terms = set()
     for _sn in wb_val.sheetnames:
         _ws = wb_val[_sn]
         if SKIP_HIDDEN_CONTENT and _ws.sheet_state != 'visible':
             continue
-        for _r in range(1, min(5, _ws.max_row or 1) + 1):
-            for _c in range(1, min(30, _ws.max_column or 1) + 1):
+        for _r in range(1, min(10, (_ws.max_row or 1) + 1)):
+            for _c in range(1, min(30, (_ws.max_column or 1) + 1)):
                 _v = str(_ws.cell(_r, _c).value or "")
-                if "税率" in _v: table_has_terms.add("增值税税率")
-                if "含税" in _v: table_has_terms.add("是否含增值税")
-                if "运费" in _v or "含运" in _v: table_has_terms.add("是否含运费")
+                if "税率" in _v or "%" in _v:
+                    table_has_terms.add("增值税税率")
+                    if not terms_info.get("tax_rate"):
+                        from terms_extractor import parse_tax_rate
+                        tr = parse_tax_rate(_v)
+                        if tr:
+                            terms_info["tax_rate"] = tr
+                if "含税" in _v:
+                    table_has_terms.add("是否含税")
+                    table_has_terms.add("是否含增值税")
+                    if not terms_info.get("is_tax_included"):
+                        terms_info["is_tax_included"] = "是" if ("不含" not in _v and "未含" not in _v) else "否"
+                if "运费" in _v or "含运" in _v:
+                    table_has_terms.add("是否含运费")
 
     missing = [m for m in missing_terms(terms_info) if m not in table_has_terms]
     if missing:
@@ -841,6 +896,19 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         group_of.update({r["id"]: r["group_key"] for r in raw_rows if r.get("group_key")})
         print(f"    -> 提取出有效物料原始行: {len(raw_rows)} 行，启动大模型槽位精准清洗...")
 
+        # 1. 计算整表主业先验，并为每行召回 Top-5 真实工料机候选类别
+        sheet_prior_t2 = compute_sheet_category_prior(raw_rows)
+        for it in raw_rows:
+            clean_src_name = _strip_model_prefix(_pick_row_field(it["raw_cells_dict"], SRC_NAME_KEYS, SRC_NAME_EXCLUDE))
+            src_cat_val = it.get("raw_cells_dict", {}).get("三级类别名称", "") or it.get("raw_cells_dict", {}).get("类别", "")
+            it["candidate_categories"] = retrieve_category_candidates(
+                raw_cat=src_cat_val,
+                std_name=clean_src_name,
+                raw_spec=it.get("raw_spec") or it.get("raw_full_line", ""),
+                sheet_prior=sheet_prior_t2,
+                top_k=5
+            )
+
         # 分批调用 DeepSeek 提炼标准物料模型（并发线程池加速）
         batch_size = 30
         batches = []
@@ -852,7 +920,8 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     "raw_cells": item["raw_cells_dict"],
                     "raw_text": item["raw_full_line"],
                     "raw_price": item["raw_price"],
-                    "raw_unit": item["raw_unit"]
+                    "raw_unit": item["raw_unit"],
+                    "candidate_categories": item.get("candidate_categories", [])
                 }
                 for item in batch_slice
             ]
@@ -902,27 +971,36 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 std_name = src_name or str(cleaned_res.get("standard_name") or "").strip()
                 if not std_name:
                     notes.append("未识别出物料名称")
-                # (模块级 import，见文件顶部)
-                cat_code, cat_src, cat_notes = '', '', []
-                src_cat_code = CATEGORY_CODE_MAP.get(src_cat) if src_cat else None
-                if src_cat_code:
-                    cat_code, cat_src = src_cat_code, 'source'
-                else:
-                    if src_cat:
-                        notes.append(f"原表三级类别名称“{src_cat}”不在标准编码库，改为按物料名判定")
-                    cat_code, cat_src, cat_notes = resolve_and_verify_category(
-                        std_name, item.get("raw_spec") or item.get("raw_full_line", ""), cleaned_res.get("category_code"))
-                notes.extend(cat_notes)
-                if cat_src == 'llm':
-                    notes.append(f"类别编码 {cat_code} 未经标准编码库核验")
-                elif not cat_code:
+
+                # 统一类别解析（BM25 + Sheet2 枚举反查 + 大模型受限单选 + 先验加成）
+                selected_c = str(cleaned_res.get("selected_category_code") or cleaned_res.get("category_code") or "").strip()
+                l1, l2, l3, cat_code, cat_verified, cat_reason = resolve_and_verify_category(
+                    raw_cat=src_cat or str(cleaned_res.get("predicted_category") or "").strip(),
+                    std_name=std_name,
+                    raw_spec=item.get("raw_spec") or item.get("raw_full_line", ""),
+                    sheet_prior=sheet_prior_t2,
+                    selected_code=selected_c
+                )
+                if not cat_code:
+                    cat_src = ""
                     notes.append("类别编码未确定" + ("" if CATEGORY_CODE_MAP else " (未配置标准编码库 CATEGORY_CODE_FILE)"))
+                elif src_cat:
+                    cat_src = "source"
+                elif cat_verified:
+                    cat_src = "catalog"
+                else:
+                    cat_src = "llm"
+                    notes.append(f"类别编码 {cat_code} 未经标准编码库精确核验")
+                if cat_reason and cat_reason not in notes:
+                    notes.append(cat_reason)
 
                 # 【名称兜底】：原件没写物料名称时才用标准分类名顶上（绝不把原件名称改成分类名）
                 if not std_name and cat_code:
                     cat_info = fetch_category_attributes(cat_code)
                     if cat_info and cat_info.get("type", {}).get("description"):
                         std_name = cat_info["type"]["description"].strip()
+                    elif l3:
+                        std_name = l3
 
                 if "型号/系列" in item["raw_cells_dict"]:
                     r_dict = item["raw_cells_dict"]
@@ -947,9 +1025,9 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     structured_specs = {**verbatim, **extra}
 
                 # 对照标准材料类别特定参数及要求接口规范，执行参数限定值校验与规范化
-                if cat_code:
+                if l3 or cat_code:
                     try:
-                        structured_specs, attr_notes = validate_and_normalize_specs(cat_code, structured_specs)
+                        structured_specs, attr_notes, _ = validate_and_normalize_specs(l3 or cat_code, structured_specs)
                         if attr_notes:
                             notes.extend(attr_notes)
                     except Exception:

@@ -77,28 +77,38 @@ SYSTEM_PROMPT_LAYOUT_DYNAMIC = """你是报价单表格结构分析员。
 }
 """
 
-SYSTEM_PROMPT_BATCH_DYNAMIC = """你是一个国家级建设工程招投标与建材物料领域的专家。请深度理解每一行原始报价数据的真实业务含义，判断每个单元格应该填什么，杜绝片面硬拆！
+SYSTEM_PROMPT_BATCH_DYNAMIC = """你是一位精通中国建筑工程造价与《工料机类别》标准的资深数据架构师。
+对于输入的每一条报价物料，请深度理解原始业务含义，完成以下任务并严格返回 JSON 格式 {"items": [...]}：
 
-【核心行业业务规则】：
-1. standard_name (名称规格): 只能是纯净的物料品类名称（如：铝板、暗杆闸阀、明杆闸阀、涡轮蝶阀、真石漆、木门等）。严禁将一堆规格型号、尺寸、单价混堆在品名中！
-2. structured_specs (规格参数): 必须且只能包含物料本身的【物理技术参数】（如材质/牌号、厚度、公称通径DN/De、系列型号、表面喷涂工艺等）。
+【核心任务】：
+1. standard_name: 剥离编码前缀（如[572305]、[571909]）、型号前缀后的纯净标准材料名称（如“光纤收发器”、“扣压式薄壁钢导管”、“液压脚踏阀”）。严禁将一堆规格型号、尺寸、单价混堆在品名中！
+2. selected_category_code: 【严格受限单选题】请仔细对比该行的 raw_name、raw_spec 与 candidate_categories（系统根据工料机标准库与Sheet2属性枚举召回的 Top-5 真实候选分类）。
+   - 必须从 candidate_categories 中选择最匹配的一项，原样输出其 code（例如 "25-01-04-07"）和 predicted_category（该项对应的 level3 名称）。
+   - 严禁捏造候选列表之外的分类！
+   - 尤其注意：若同一表内不同行的规格写明了不同品种（例如第1~5行是KBG管，第6~11行是JDG管），必须根据规格选择各自对应的细分分类编码！
+   - 若 candidate_categories 为空或确实无一匹配，填 null。
+3. structured_specs: 提取全部技术规格与物理属性为键值对字典（如材质/牌号、厚度、公称通径DN/De、系列型号、表面喷涂工艺等）。
+   - 若所选 candidate_categories 提供了 allowed_attributes（标准属性名），请优先将属性键名对齐到标准属性名（如“壁厚(mm)”、“外径(mm)”、“表面处理”、“品种”）。
    - 【严禁污染规格】：严禁将“基价”（如铝锭基价18000/吨、铜基价）、“指导价”、“调价依据”、“单价/总价/金额”、“品牌/厂家”、“税率/运费”、“表标题”等混入 structured_specs！
-   - 若原始数据含有“铝锭基价/吨: 18000”或“基价”，这是价格联动核算依据，绝不是规格型号，必须从规格中剥离！
-3. unit (计量单位): 必须是真实的工程物理计量单位（如：㎡、m、台、个、吨、套、kg、桶），去除“元/”、“单价：”等价格前缀（如“单价：元/㎡”应提炼出“㎡”）；
-4. price (单价): 纯数字价格；
-5. quote_desc_extra: 若从原始参数中剥离出了基价（如“铝锭基价18000元/吨”）、调价规则或计价依据，请提炼记录在此，无则填 null；
-6. category_code: 从标准分类编码库中选择，没有填 null。
+4. spec_model: 若存在独立的产品型号（如 ACB-GS-20、SFP-10G-LR-10、DN25），填入此字段。
+5. unit: 纯净物理计量单位（如：㎡、m、台、个、吨、套、kg、根、米），去除“元/”、“单价：”等价格前缀（如“根/3.6米”提炼出“根”或“米”）。
+6. price: 纯数字单价（如 20.5、24.2、31.3、6.3、650 等）。
+7. raw_spec: 纯净技术规格原文(过滤基价/表标题/单价)。
+8. quote_desc_extra: 若从原始参数中剥离出了基价（如“铝锭基价18000元/吨”）、调价规则或计价依据，请提炼记录在此，无则填 null。
 
 【返回格式】：严格返回合法 JSON 对象 {"items": [...]}，每个输入 id 对应一个对象：
 {"items": [
   {
     "id": "行ID",
     "standard_name": "品类名称",
-    "category_code": null,
+    "selected_category_code": "分类编码(如25-01-04-07) 或 null",
+    "predicted_category": "三级分类名称(如扣压式薄壁钢导管) 或 null",
+    "category_code": "分类编码 或 null",
     "unit": "纯净计量单位",
     "price": 0.0,
+    "spec_model": "独立产品型号或null",
     "structured_specs": {"技术参数名": "参数值"},
-    "raw_spec": "纯净技术规格原文(过滤基价/表标题/单价)",
+    "raw_spec": "纯净技术规格原文",
     "quote_desc_extra": "基价或调价说明 或 null"
   }
 ]}
@@ -369,6 +379,9 @@ class DeepSeekStandardizer:
             raw_cells = it.get('raw_cells') or {}
             raw_price = it.get('raw_price', 0.0)
             raw_unit = it.get('raw_unit', '')
+            candidates = it.get('candidate_categories') or []
+            selected_code = candidates[0].get('code', '') if candidates else ''
+            predicted_cat = candidates[0].get('level3', '') if candidates else ''
 
             specs = {}
             name = ''
@@ -385,13 +398,18 @@ class DeepSeekStandardizer:
             results.append({
                 "id": it.get('id', ''),
                 "standard_name": name,
-                "category_code": "",
+                "category_code": selected_code,
+                "selected_category_code": selected_code,
+                "predicted_category": predicted_cat,
                 "unit": raw_unit,
                 "price": float(raw_price) if raw_price else 0.0,
                 "structured_specs": specs,
                 "_source": "fallback"
             })
         return results
+
+    # 别名兼容
+    batch_clean_and_structure_items = standardize_batch
 
 
 # ====================================================================== TypeSafe Jev (试点)

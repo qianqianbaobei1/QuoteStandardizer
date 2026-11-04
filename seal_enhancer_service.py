@@ -209,3 +209,6 @@ class SealEnhancerService:
 
         return result
 
+    # 别名兼容
+    process_document_image = process_image
+

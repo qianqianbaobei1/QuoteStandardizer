@@ -76,6 +76,7 @@ DEFAULT_OUTPUT_DIR = os.getenv("OUTPUT_DIR") or os.path.join(CURRENT_DIR, "deliv
 DEFAULT_TEMPLATE_PATH = os.getenv("TEMPLATE_PATH", "")
 # 标准分类编码文件 (.csv / .xlsx，前两列为 名称、编码)；未配置时不做编码库匹配
 CATEGORY_CODE_FILE = os.getenv("CATEGORY_CODE_FILE", "")
+CATEGORY_DICT_PATH = os.getenv("CATEGORY_DICT_PATH") or CATEGORY_CODE_FILE or os.path.join(os.path.dirname(__file__), "工料机类别.xlsx")
 # 类别属性/填写要求接口；留空则只按标准编码库的本地规则，不调外部接口
 CATEGORY_ATTRS_API_URL = os.getenv("CATEGORY_ATTRS_API_URL", "")
 

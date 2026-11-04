@@ -7,7 +7,7 @@ parse_standalone_screenshot.py - 单独解析（不走批量源包）的两份�
 
 来源：用户在会话里贴的两张报价表截图（无原始文件可读），按 4~10 倍放大逐格核对后转录。
   1) 友发：电线、电缆套管（KGB 扣压式 / JDG 紧定式镀锌穿线管），12 行
-  2) 广东奥卡斯科技有限公司：光纤收发器/光模块/耦合器/尾纤/配线架，11 行
+  2) 广东奥卡斯网络科技有限公司：光纤收发器/光模块/耦合器/尾纤/配线架，11 行
 
 零编造纪律：
 - 只转录截图里读得到的格子；分类编码取自标准编码库（572305 等原表方括号已标注，直接采用）
@@ -38,7 +38,7 @@ YOUFA_ROWS = [
     ("JDG紧定式镀锌穿线管", "1.6", "20", 11.4),
     ("JDG紧定式镀锌穿线管", "1.6", "25", 15.1),
     ("JDG紧定式镀锌穿线管", "1.6", "32", 20.5),
-    ("JDG紧定式镀锌穿线管", "1.6", "40", 24.1),
+    ("JDG紧定式镀锌穿线管", "1.6", "40", 24.2),   # 印在公章圆环下，R 通道确认 24.2（不是 24.1）
     ("JDG紧定式镀锌穿线管", "1.6", "50", 31.3),
     ("KGB扣压式镀锌穿线管", "1", "16", 6.3),
 ]
@@ -59,7 +59,7 @@ AOKASI_ROWS = [
     ("光纤配线架", "571909", "ACFPP3048-CS2/ACFPP3148-FS2",
      "48口机架式光纤终端盒，SC/FC接口，含耦合器尾纤（厚款1.2mm）", "套", None),
 ]
-AOKASI_SUPPLIER = "广东奥卡斯科技有限公司"   # 公章环形字：广东奥卡斯科技有限公司
+AOKASI_SUPPLIER = "广东奥卡斯网络科技有限公司"   # 公章环形字（极易漏“网络”两字）
 
 
 def build_youfa(out_dir):
@@ -113,11 +113,11 @@ def build_aokasi(out_dir):
             clean_source="manual_transcription",
             category_source="dict",     # 编码取自原表方括号标注，与标准库一致
             quote_desc="本表由聊天截图转录（原件未提供）；税率、运费、报价地区截图中未标注"
-                       + ("；最后一行价格被红色公章压住，留空待核" if price is None else ""),
+                       + ("；最后一行原单价格格为空" if price is None else ""),
         )
         it.add_note("本表由聊天截图转录，税率/运费/报价地区截图中未标注")
         if price is None:
-            it.add_note("价格被红色公章遮挡，未读到，需核对原件")
+            it.add_note("原单该行价格格为空（公章压在这格上，R 通道暗像素确认无印刷数字），需向供方补价")
         items.append(it)
     out = os.path.join(out_dir, f"{AOKASI_SUPPLIER}-标准解析.xlsx")
     StandardizedWorkbookBuilder(DEFAULT_TEMPLATE_PATH).build_from_canonical_items(
@@ -144,14 +144,19 @@ if __name__ == "__main__":
             os.remove(p)
             print(f"[clean] 已删除错误旧件 {name}")
 
-    f1, items1 = build_youfa(DESKTOP)
-    f2, items2 = build_aokasi(DESKTOP)
-    dump_json(os.path.join(DESKTOP, "友发-电线电缆套管-转录底稿.json"), items1)
-    dump_json(os.path.join(DESKTOP, f"{AOKASI_SUPPLIER}-转录底稿.json"), items2)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    target_dir = os.path.join(base_dir, "deliveries", "成稿")
+    os.makedirs(target_dir, exist_ok=True)
+
+    f1, items1 = build_youfa(target_dir)
+    f2, items2 = build_aokasi(target_dir)
+    dump_json(os.path.join(target_dir, "友发-电线电缆套管-转录底稿.json"), items1)
+    dump_json(os.path.join(target_dir, f"{AOKASI_SUPPLIER}-转录底稿.json"), items2)
 
     # 自检：行数、编码、价格必须与转录源一致
     assert len(items1) == len(YOUFA_ROWS) == 12 and len(items2) == len(AOKASI_ROWS) == 11
     assert all(it.category_code for it in items1 + items2), "不许出现空类别编码"
     assert [it.market_price for it in items1][:3] == [8.6, 10.8, 13.8]
+    assert items1[9].market_price == 24.2, "第10行 24.2 是 R 通道确认值"
     assert items2[0].market_price == 125 and items2[-1].market_price is None
     print(f"[OK] {f1}\n[OK] {f2}")
