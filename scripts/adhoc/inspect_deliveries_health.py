@@ -7,13 +7,14 @@ inspect_deliveries_health.py - 全量交付件质量终审与健康体检巡检�
 3. 【内容丢失 (Data Loss)】：行数异常归零/截断、关键参数遗失核查
 4. 【商业级视觉与接口规范】：单Sheet标准化、厂家报价图片纯图片无文字、材料配图URL真实性
 """
+from _adhoc_paths import DELIVERIES_DIR
 import glob
 import os
 import re
 from typing import Dict, List, Any
 import openpyxl
 
-DELIVERY_DIR = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries"
+DELIVERY_DIR = DELIVERIES_DIR
 
 # 表头残留关键词（若数据行名称规格或原始规格出现此类词，说明发生了表头错行误提取）
 HEADER_LEAK_WORDS = ["序号", "材料名称", "规格型号", "规格参数", "计量单位", "单价(元)", "合价(元)", "项目特征", "品牌及厂家"]

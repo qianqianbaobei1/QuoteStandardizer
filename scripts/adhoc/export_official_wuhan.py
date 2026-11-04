@@ -1,3 +1,4 @@
+from _adhoc_paths import BACKUP_DIR, DELIVERIES_DIR, wuhan_source_xlsx
 import os
 import shutil
 import openpyxl
@@ -7,45 +8,37 @@ from config import DEFAULT_TEMPLATE_PATH
 from builder import StandardizedWorkbookBuilder
 from models import CanonicalMaterialItem, SourceRowRecord
 
-INPUT_FILE = "/Users/qianqianawodebaobei/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_4729077290012_a424/temp/RWTemp/2026-11/c84334e99d1789f1482d64048213c8ad/2026电线出厂全系列价格表.xlsx"
-OUTPUT_DIR = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries"
-CHENGGAO_DIR = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿"
+INPUT_FILE = wuhan_source_xlsx()
+DELIVERY_DIR = DELIVERIES_DIR
 SUPPLIER = "武汉第二电线电缆有限公司"
-IMG_DIR = os.path.join(CHENGGAO_DIR, f"{SUPPLIER}_图片库")
+IMG_DIR = os.path.join(DELIVERY_DIR, f"{SUPPLIER}_图片库")
 
 def clean_val(v):
     if v is None:
         return ""
     return str(v).strip()
 
-def build():
+def run():
+    print(f"[*] 准备输出目录与截图库...")
     os.makedirs(IMG_DIR, exist_ok=True)
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    os.makedirs(CHENGGAO_DIR, exist_ok=True)
-
-    print(f"[*] 准备底稿截图缩略图...")
-    # 确保 quote_img_{s}.png 存在并生成对应的 thumb_quote_img_{s}.jpg
+    os.makedirs(DELIVERY_DIR, exist_ok=True)
+    
+    # 将现有的底稿图复制到统一的 IMG_DIR，并确保有缩略图
+    backup_img_dir = os.path.join(BACKUP_DIR, "武汉第二电线电缆有限公司_图片库")
     sheet_imgs = {}
-    for s_name, fn in [
-        ("电线1", "quote_img_电线1.png"),
-        ("电线2", "quote_img_电线2.png"),
-        ("花线", "quote_img_花线.png"),
-        ("佳居线", "quote_img_佳居线.png"),
-        ("铝合金电缆", "quote_img_铝合金电缆.png"),
-        ("系统结算价", "quote_img_系统结算价.png"),
-    ]:
-        src = os.path.join(IMG_DIR, fn)
+    for s_name in ["电线1", "电线2", "花线", "佳居线", "铝合金电缆", "系统结算价"]:
+        src = os.path.join(backup_img_dir, f"quote_img_{s_name}.png")
+        dst = os.path.join(IMG_DIR, f"quote_img_{s_name}.png")
         if os.path.exists(src):
-            sheet_imgs[s_name] = fn
-            thumb_fn = f"thumb_{fn.replace('.png', '.jpg')}"
-            thumb_dst = os.path.join(IMG_DIR, thumb_fn)
-            if not os.path.exists(thumb_dst):
-                with PILImage.open(src) as pim:
-                    pim.thumbnail((220, 140))
-                    pim.convert("RGB").save(thumb_dst, "JPEG", quality=75)
+            if not os.path.exists(dst):
+                shutil.copy2(src, dst)
+            sheet_imgs[s_name] = f"quote_img_{s_name}.png"
+            thumb_dst = os.path.join(IMG_DIR, f"thumb_quote_img_{s_name}.jpg")
+            with PILImage.open(src) as pim:
+                pim.thumbnail((200, 120))
+                pim.convert("RGB").save(thumb_dst, "JPEG", quality=75)
 
-    print(f"[*] 已就绪的底稿截图映射: {sheet_imgs}")
-
+    print(f"[*] 载入源文件: {INPUT_FILE}")
     wb = openpyxl.load_workbook(INPUT_FILE, data_only=True)
     brand = "飞鹤"
     id_prefix = "WHFH"
@@ -54,7 +47,7 @@ def build():
     canonical_items = []
     source_rows = []
 
-    # 1. 电线1
+    # 1. Sheet: 电线1
     if "电线1" in wb.sheetnames:
         ws = wb["电线1"]
         img_fn = sheet_imgs.get("电线1", "quote_img_电线1.png")
@@ -215,7 +208,7 @@ def build():
                 canonical_items.append(item)
                 source_rows.append(SourceRowRecord(source_ref=source_ref, sheet="电线1", row=r, raw_text=f"BV(7股) {sec} | {f_price}", raw_price=f_price, decision="物料行"))
 
-    # 2. 电线2
+    # 2. Sheet: 电线2
     if "电线2" in wb.sheetnames:
         ws = wb["电线2"]
         img_fn = sheet_imgs.get("电线2", "quote_img_电线2.png")
@@ -245,7 +238,7 @@ def build():
                     canonical_items.append(item)
                     source_rows.append(SourceRowRecord(source_ref=source_ref, sheet="电线2", row=r, raw_text=f"{sec} | {m_val} {s_val} | {f_price}", raw_price=f_price, decision="物料行"))
 
-    # 3. 花线
+    # 3. Sheet: 花线
     if "花线" in wb.sheetnames:
         ws = wb["花线"]
         img_fn = sheet_imgs.get("花线", "quote_img_花线.png")
@@ -272,7 +265,7 @@ def build():
                     canonical_items.append(item)
                     source_rows.append(SourceRowRecord(source_ref=source_ref, sheet="花线", row=r, raw_text=f"{sec} | {m_val} | {f_price}", raw_price=f_price, decision="物料行"))
 
-    # 4. 佳居线
+    # 4. Sheet: 佳居线
     if "佳居线" in wb.sheetnames:
         ws = wb["佳居线"]
         img_fn = sheet_imgs.get("佳居线", "quote_img_佳居线.png")
@@ -296,7 +289,7 @@ def build():
             canonical_items.append(item)
             source_rows.append(SourceRowRecord(source_ref=source_ref, sheet="佳居线", row=r, raw_text=f"{m_val} | {sec} | {f_price}", raw_price=f_price, decision="物料行"))
 
-    # 5. 铝合金电缆
+    # 5. Sheet: 铝合金电缆
     if "铝合金电缆" in wb.sheetnames:
         ws = wb["铝合金电缆"]
         img_fn = sheet_imgs.get("铝合金电缆", "quote_img_铝合金电缆.png")
@@ -330,7 +323,7 @@ def build():
                     canonical_items.append(item)
                     source_rows.append(SourceRowRecord(source_ref=source_ref, sheet="铝合金电缆", row=r, raw_text=f"{sec} | {c_val} {m_val} | {f_price}", raw_price=f_price, decision="物料行"))
 
-    # 6. 系统结算价
+    # 6. Sheet: 系统结算价
     if "系统结算价" in wb.sheetnames:
         ws = wb["系统结算价"]
         img_fn = sheet_imgs.get("系统结算价", "quote_img_系统结算价.png")
@@ -379,15 +372,12 @@ def build():
         it.illustration_folder = folder_name
 
     out_name = f"{SUPPLIER}-标准解析.xlsx"
-    out_path = os.path.join(OUTPUT_DIR, out_name)
+    out_path = os.path.join(DELIVERY_DIR, out_name)
     
-    print(f"[*] 启动 StandardizedWorkbookBuilder 生成文件 (img_dir={IMG_DIR})...")
+    print(f"[*] 执行官方原生 StandardizedWorkbookBuilder 生成标准交付件...")
     builder = StandardizedWorkbookBuilder(template_path=DEFAULT_TEMPLATE_PATH)
     builder.build_from_canonical_items(canonical_items, out_path, IMG_DIR, reconciliation=source_rows)
-    
-    chg_path = os.path.join(CHENGGAO_DIR, out_name)
-    shutil.copy2(out_path, chg_path)
-    print(f"[✓] 构建并同步完成: {out_path} -> {chg_path}")
+    print(f"[✓] 成功落盘交付文件: {out_path} (大小: {os.path.getsize(out_path)} 字节)")
 
 if __name__ == "__main__":
-    build()
+    run()

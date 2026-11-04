@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-execute_batch_official.py - 官方全量多模态自动化批量解析与自我核对执行脚本
+execute_clean_batch.py - 严格单 Sheet 纯净批量解析引擎
 """
+import _adhoc_paths  # noqa: F401  把项目根目录加入 sys.path
 import os
 import re
 import sys
 import time
-import zipfile
 from pathlib import Path
 import openpyxl
 
@@ -15,10 +15,10 @@ from zip_standardizer_pipeline import ZipQuoteStandardizerPipeline
 from style_enhancer import apply_enterprise_style
 from llm_auditor import LLMAuditor
 
-# 源目录参数化：命令行第一个参数 > 环境变量 QS_SOURCE_ROOT
+# 源目录不写进代码：命令行第一个参数 > 环境变量 QS_SOURCE_ROOT
 src_root = Path(sys.argv[1] if len(sys.argv) > 1 else os.getenv('QS_SOURCE_ROOT', ''))
 if not str(src_root).strip() or str(src_root) in ('.', './') or not src_root.is_dir():
-    print('用法: python3 execute_batch_official.py <源目录>   (或设置 QS_SOURCE_ROOT)')
+    print('用法: python3 execute_clean_batch.py <源目录>   (或设置 QS_SOURCE_ROOT)')
     raise SystemExit(1)
 output_dir = Path('deliveries')
 output_dir.mkdir(parents=True, exist_ok=True)
@@ -51,7 +51,7 @@ for sdir_name in source_dirs:
         if not already_done:
             todo_tasks.append((sdir_name, vname, vpath))
 
-print(f"==================== 开始正式批量解析 (共 {len(todo_tasks)} 家) ====================")
+print(f"==================== 正式批量解析启动 (待处理 {len(todo_tasks)} 家) ====================")
 
 pipeline_zip = ZipQuoteStandardizerPipeline(str(output_dir))
 auditor = LLMAuditor()
@@ -59,10 +59,9 @@ auditor = LLMAuditor()
 results = []
 
 for idx, (batch_name, vendor_name, vendor_path) in enumerate(todo_tasks, 1):
-    print(f"\n[{idx}/{len(todo_tasks)}] 正在处理: {vendor_name} ({batch_name})...")
+    print(f"\n[{idx}/{len(todo_tasks)}] 正在解析: {vendor_name} ({batch_name})...")
     start_time = time.time()
     
-    # 查找主文件
     primary_file = find_primary_quote_file(vendor_path)
     if not primary_file:
         print(f"  [Error] 未找到主报价文件")
@@ -74,12 +73,16 @@ for idx, (batch_name, vendor_name, vendor_path) in enumerate(todo_tasks, 1):
     
     out_xlsx = None
     try:
-        # 如果是 ZIP 压缩包（可能含图片与多表数据）
         if ext == '.zip':
             out_xlsx = pipeline_zip.process_zip(str(primary_file), vendor_name)
         elif ext in ['.xlsx', '.xls', '.pdf', '.png', '.jpg', '.jpeg']:
             res_dict = run_single_vendor(vendor_path, output_dir)
             out_xlsx = res_dict.get('output_file')
+            # 完整性校验未过就不得算 PASS：run_single_vendor 的 failures 是唯一通行证
+            if res_dict.get('failures'):
+                results.append((vendor_name, "FAIL",
+                                f"完整性校验未通过 {len(res_dict['failures'])} 项: {res_dict['failures'][0]}", 0))
+                continue
             
         # ZIP 等不经过 main 校验的链路，也要独立体检后才算产出
         if out_xlsx and os.path.exists(out_xlsx):
@@ -88,18 +91,28 @@ for idx, (batch_name, vendor_name, vendor_path) in enumerate(todo_tasks, 1):
                 results.append((vendor_name, "FAIL",
                                 f"交付件体检未通过 {len(delivery_errs)} 项: {delivery_errs[0]}", 0))
                 continue
-            # 执行商业级投行排版与大模型自我核对
+            # 严格后处理：保证单 Sheet，应用美学样式，自检
             wb = openpyxl.load_workbook(out_xlsx)
-            for ws in wb.worksheets:
-                auditor.verify_and_auto_heal(ws, [ws.cell(1, c).value for c in range(1, ws.max_column+1)])
-                apply_enterprise_style(ws)
+            # 只留标准化报价
+            for s in list(wb.sheetnames):
+                if s != '标准化报价' and s != wb.sheetnames[0]:
+                    wb.remove(wb[s])
+            ws = wb.worksheets[0]
+            if ws.title != '标准化报价':
+                ws.title = '标准化报价'
+                
+            # 【重要】强制大模型深度业务逻辑终审与就地自愈回填
+            headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+            auditor.verify_and_auto_heal(ws, headers)
+            
+            # 美学样式刷新
+            apply_enterprise_style(ws)
             wb.save(out_xlsx)
             
-            # 计算行数
-            wb_check = openpyxl.load_workbook(out_xlsx, data_only=True)
-            total_items = sum(ws.max_row - 1 for ws in wb_check.worksheets)
+            # 统计
+            total_items = ws.max_row - 1
             duration = round(time.time() - start_time, 2)
-            print(f"  [✓ PASS] 成功生成: {out_xlsx} (共 {total_items} 行, 耗时 {duration}s)")
+            print(f"  [✓ PASS] 成功生成: {out_xlsx} (单Sheet, 共 {total_items} 行, 耗时 {duration}s)")
             results.append((vendor_name, "PASS", out_xlsx, total_items))
         else:
             results.append((vendor_name, "FAIL", "未生成有效Excel", 0))

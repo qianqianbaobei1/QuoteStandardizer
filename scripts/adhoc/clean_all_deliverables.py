@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
+from _adhoc_paths import DELIVERIES_DIR
 import os
 import re
 import glob
 import openpyxl
 
 DELIVERY_DIRS = [
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries"
+    os.path.join(DELIVERIES_DIR, "成稿"),
+    DELIVERIES_DIR
 ]
 
 FORBIDDEN_PATTERNS = [

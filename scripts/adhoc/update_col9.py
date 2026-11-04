@@ -1,7 +1,9 @@
+import os
+from _adhoc_paths import DELIVERIES_DIR
 import openpyxl
 
-file_path = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/武汉第二电线电缆有限公司-标准解析.xlsx"
-root_path = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/武汉第二电线电缆有限公司-标准解析.xlsx"
+file_path = os.path.join(DELIVERIES_DIR, "成稿", "武汉第二电线电缆有限公司-标准解析.xlsx")
+root_path = os.path.join(DELIVERIES_DIR, "武汉第二电线电缆有限公司-标准解析.xlsx")
 
 print("[*] 打开工作簿进行更新...")
 wb = openpyxl.load_workbook(file_path)

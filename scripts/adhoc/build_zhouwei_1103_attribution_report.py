@@ -5,12 +5,13 @@ build_zhouwei_1103_attribution_report.py
 严格按照《四人全景评差与缺陷归因总表.xlsx》的统计口径、缺陷代码字典与 Navy 商业级样式，
 生成《周伟E化11.03全景评差与缺陷归因总表.xlsx》。
 """
+from _adhoc_paths import DELIVERIES_DIR
 import os
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-output_dir = '/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries'
+output_dir = DELIVERIES_DIR
 os.makedirs(output_dir, exist_ok=True)
 target_path = os.path.join(output_dir, '周伟E化11.03全景评差与缺陷归因总表.xlsx')
 

@@ -9,6 +9,7 @@ run_full_132_concurrent.py - 全量 132 家厂商多线程并发高精度解析�
 5. 纯数值价格，纯单 Sheet (标准化报价)
 6. 多进程/线程并发流水线提速
 """
+from _adhoc_paths import SOURCE_ROOT
 import os
 import re
 import sys
@@ -29,7 +30,7 @@ output_dir = Path('deliveries')
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # 1. 扫描原始供应商目录：命令行第一个参数 > 环境变量 QS_SOURCE_ROOT > 默认全量经办人目录
-DEFAULT_SOURCE_ROOT = "/Users/qianqianawodebaobei/Desktop/数据异化/四人建材报价标准解析与评差全量汇总/02_四位经办人分类完整档案"
+DEFAULT_SOURCE_ROOT = SOURCE_ROOT
 cli_arg = sys.argv[1] if (len(sys.argv) > 1 and not sys.argv[1].startswith('-')) else ""
 source_path_str = cli_arg or os.getenv('QS_SOURCE_ROOT', DEFAULT_SOURCE_ROOT)
 root_agents = Path(source_path_str)

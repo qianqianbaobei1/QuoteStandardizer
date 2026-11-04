@@ -39,6 +39,13 @@ class TestB2FailureIsolation(unittest.TestCase):
         doc.save(self.pdf_path)
         doc.close()
 
+        # 视觉调用已被 mock，这里只需让扫描件走视觉通道（不依赖本机 .env 里的真实密钥）
+        for name, val in (("VISION_API_KEY", "test-key"), ("VISION_BASE_URL", "http://vision.invalid"),
+                          ("VISION_MODEL", "test-vision-model")):
+            patcher = patch(f"pdf_extractor.{name}", val)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def tearDown(self):
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir)

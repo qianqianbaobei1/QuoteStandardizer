@@ -96,6 +96,11 @@ zip_standardizer_pipeline.py  线上导出压缩包 → 单 Sheet 交付（多�
 reconcile_vs_source.py       交付件 vs 压缩包内原表逐格对账（保真度 / 补全量 / 致命项）
 health_check.py     模块自检（含评差引擎自检）
 ERROR_CODES.md      错误码字典 + 每日流程 + 修复账本
+scripts/adhoc/      一次性/批次专用脚本（武汉电线专版导出、历史批次体检/清洗/归因报表等）
+                    部分脚本手写坐标、写死品牌/编码，绕过主流程对账，不作为标准交付入口；
+                    路径一律来自环境变量 QS_DELIVERIES_DIR / QS_SOURCE_ROOT / QS_WUHAN_SOURCE_XLSX 等，
+                    见 scripts/adhoc/_adhoc_paths.py。运行方式：python3 scripts/adhoc/<脚本>.py
+tests/              单元测试（python -m pytest）；conftest.py 清空密钥并关闭外部接口，不依赖 .env、不联网
 ```
 
 ## 评差与验收口径

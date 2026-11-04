@@ -7,6 +7,7 @@ audit_all_deliveries.py - 工业级全量交付物四维深度体检与缺陷隔
 3. 【条数一致性】：原始物理行、识别物料行与最终落盘行数是否守恒一致
 4. 【内容真实性与质量】：价格是否纯正数值、规格是否残留内部编码、300DPI底稿图片及超链接是否100%全覆盖且物理存在
 """
+from _adhoc_paths import DELIVERIES_DIR
 import os
 import re
 import glob
@@ -16,7 +17,7 @@ from pathlib import Path
 from run_all_universe_vendors import scan_all_universe_tasks, clean_vendor_name
 from run_batch_standardize import find_primary_quote_file, extract_zip_if_needed
 
-DELIVERIES_DIR = Path('/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries')
+DELIVERIES_DIR = Path(DELIVERIES_DIR)
 
 FORBIDDEN_CODE_PATTERNS = [
     r'产品编码\s*[:：]', r'物料编码\s*[:：]', r'商品编码\s*[:：]',

@@ -23,6 +23,10 @@ class TestMaterialIllustrationService(unittest.TestCase):
     def setUp(self):
         self.output_dir = os.path.join(os.path.dirname(__file__), "scratch_test_output")
         os.makedirs(self.output_dir, exist_ok=True)
+        # conftest 默认关闭配图接口；本测试类验证的就是配图链路，这里显式打开 (接口调用全部 mock)
+        patcher = patch("material_illustration_service.ENABLE_MATERIAL_ILLUSTRATION", True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_clean_material_name(self):
         self.assertEqual(clean_material_name("  镀锌钢管 \n "), "镀锌钢管")
@@ -31,7 +35,7 @@ class TestMaterialIllustrationService(unittest.TestCase):
 
     def test_fetch_illustrations_mocked_success(self):
         """测试配图服务创建任务与轮询结果的完整链路"""
-        service = MaterialIllustrationService()
+        service = MaterialIllustrationService(enable=True)
 
         mock_create_resp = MagicMock()
         mock_create_resp.read.return_value = b'{"status": 200, "message": "success", "data": {"taskId": "mock-task-123"}}'
@@ -90,16 +94,18 @@ class TestMaterialIllustrationService(unittest.TestCase):
             unit="个"
         )
 
-        mock_result = {
-            "TEST0001": {
-                "matched": True,
-                "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000578/1cd97a16dbbdc896.jpg",
-                "pictureName": "镀锌钢管.jpg",
-                "folderName": "m0000578"
-            }
+        hit = {
+            "matched": True,
+            "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000578/1cd97a16dbbdc896.jpg",
+            "pictureName": "镀锌钢管.jpg",
+            "folderName": "m0000578"
         }
 
-        with patch("material_illustration_service.default_illustration_service.fetch_illustrations_batch", return_value=mock_result):
+        # 实现按材料名去重后查询 (uid 为 uniq_N)，mock 按材料名命中，不依赖 uid 编号
+        def fake_fetch(materials, **kwargs):
+            return {m["uid"]: hit for m in materials if m["materialName"] == "镀锌钢管"}
+
+        with patch("material_illustration_service.default_illustration_service.fetch_illustrations_batch", side_effect=fake_fetch):
             matched = match_illustrations_for_canonical_items([item1, item2], company_name="测试友发钢管公司")
             self.assertEqual(matched, 1)
             self.assertEqual(item1.picture_url, "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000578/1cd97a16dbbdc896.jpg")

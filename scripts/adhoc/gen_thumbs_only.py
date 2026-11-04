@@ -1,7 +1,8 @@
+from _adhoc_paths import DELIVERIES_DIR
 import os
 from PIL import Image as PILImage
 
-img_dir = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/武汉第二电线电缆有限公司_图片库"
+img_dir = os.path.join(DELIVERIES_DIR, "成稿", "武汉第二电线电缆有限公司_图片库")
 sheet_thumbs = {}
 
 for s_name in ["电线1", "电线2", "花线", "佳居线", "铝合金电缆", "系统结算价"]:

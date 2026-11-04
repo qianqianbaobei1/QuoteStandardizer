@@ -4,25 +4,26 @@ clean_wuhan_and_deliverables.py
 彻底清除所有交付文件中出现的「产品编码」、「物料编码」、「三级类别编码」等内部非物理参数杂质，
 并确保「厂家报价图片文件名」完整填入对应页面/底稿截图文件名。
 """
+from _adhoc_paths import DELIVERIES_DIR
 import os
 import re
 import glob
 import openpyxl
 
 DELIVERY_FILES = [
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/武汉第二电线电缆有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/武汉第二电线电缆有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/山东陆宇塑胶有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/青岛鼎信通讯消防安全有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/北京启达世纪装饰材料有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/南昌美霓光环境科技发展有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/山东正大防水材料股份有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/山东金晶科技股份有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/无锡萨科特新能源科技有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/泰安金绿色新型建材有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/山东拜尔建材有限公司-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/涿州市盛达建筑材料厂-标准解析.xlsx",
-    "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/深圳市凝光时代科技有限公司-标准解析.xlsx",
+    os.path.join(DELIVERIES_DIR, "成稿", "武汉第二电线电缆有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "武汉第二电线电缆有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "山东陆宇塑胶有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "青岛鼎信通讯消防安全有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "北京启达世纪装饰材料有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "南昌美霓光环境科技发展有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "山东正大防水材料股份有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "山东金晶科技股份有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "无锡萨科特新能源科技有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "泰安金绿色新型建材有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "山东拜尔建材有限公司-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "涿州市盛达建筑材料厂-标准解析.xlsx"),
+    os.path.join(DELIVERIES_DIR, "成稿", "深圳市凝光时代科技有限公司-标准解析.xlsx"),
 ]
 
 FORBIDDEN_KEYS = (
@@ -142,7 +143,7 @@ def clean_single_file(fpath):
 def main():
     # 扫一遍 deliveries/成稿 下全部文件
     all_targets = list(DELIVERY_FILES)
-    for f in glob.glob("/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/*.xlsx"):
+    for f in glob.glob(os.path.join(DELIVERIES_DIR, "成稿", "*.xlsx")):
         if os.path.isfile(f) and f not in all_targets:
             all_targets.append(f)
 

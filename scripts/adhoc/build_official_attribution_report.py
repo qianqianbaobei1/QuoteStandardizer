@@ -5,12 +5,13 @@ build_official_attribution_report.py
 生成针对桌面 5 家供应商压缩包的《桌面压缩包评差与缺陷归因总表.xlsx》。
 全量数据 100% 真实，来自底层实际解析与原单穿透比对。
 """
+from _adhoc_paths import DELIVERIES_DIR
 import os
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-output_dir = '/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries'
+output_dir = DELIVERIES_DIR
 os.makedirs(output_dir, exist_ok=True)
 target_path = os.path.join(output_dir, '桌面压缩包评差与缺陷归因总表.xlsx')
 

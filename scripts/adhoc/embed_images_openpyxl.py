@@ -1,11 +1,12 @@
+from _adhoc_paths import DELIVERIES_DIR
 import openpyxl
 from openpyxl.drawing.image import Image as OpenpyxlImage
 import os
 import sys
 
-file_path = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/武汉第二电线电缆有限公司-标准解析.xlsx"
-root_path = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/武汉第二电线电缆有限公司-标准解析.xlsx"
-img_dir = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/武汉第二电线电缆有限公司_图片库"
+file_path = os.path.join(DELIVERIES_DIR, "成稿", "武汉第二电线电缆有限公司-标准解析.xlsx")
+root_path = os.path.join(DELIVERIES_DIR, "武汉第二电线电缆有限公司-标准解析.xlsx")
+img_dir = os.path.join(DELIVERIES_DIR, "成稿", "武汉第二电线电缆有限公司_图片库")
 
 print(f"[*] 加载工作簿: {file_path}")
 wb = openpyxl.load_workbook(file_path)

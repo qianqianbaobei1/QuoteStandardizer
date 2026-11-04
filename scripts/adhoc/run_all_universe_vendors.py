@@ -15,6 +15,7 @@ run_all_universe_vendors.py - 全域 163 家建材供应商从 0 到 1 完整标
 - 企业级投行/咨询美学排版 (Navy 经典深蓝、宋体规范、会计千分位)
 - 自动生成全量对账评差归因总表，对齐《四人全景评差与缺陷归因总表.xlsx》
 """
+from _adhoc_paths import DELIVERIES_DIR, SOURCE_ROOT, ZHOUWEI_1103_DIR
 import os
 import sys
 import re
@@ -37,13 +38,13 @@ from style_enhancer import apply_enterprise_style
 from llm_auditor import LLMAuditor
 from clean_all_deliverables import clean_spec_text, clean_multiline_spec
 
-DELIVERIES_DIR = Path('/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries')
+DELIVERIES_DIR = Path(DELIVERIES_DIR)
 DELIVERIES_DIR.mkdir(parents=True, exist_ok=True)
 DELIVERIES_FINAL_DIR = DELIVERIES_DIR / "成稿"
 DELIVERIES_FINAL_DIR.mkdir(parents=True, exist_ok=True)
 
-ZHOUWEI_1103_PATH = Path('/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries_backup_20261103_1828/周伟E化11.03_unpacked/周伟E化11.03')
-FOUR_AGENTS_PATH = Path('/Users/qianqianawodebaobei/Desktop/数据异化/四人建材报价标准解析与评差全量汇总/02_四位经办人分类完整档案')
+ZHOUWEI_1103_PATH = Path(ZHOUWEI_1103_DIR)
+FOUR_AGENTS_PATH = Path(SOURCE_ROOT)
 
 def clean_vendor_name(name: str) -> str:
     return re.sub(r'^\d+[\._、\s]*', '', name).strip()
@@ -74,7 +75,7 @@ def scan_all_universe_tasks():
                 tasks.append(('周伟E化11.03', vd.name, vd))
                 
     # 2. 四位经办人分类完整档案
-    if FOUR_AGENTS_PATH.exists():
+    if SOURCE_ROOT and FOUR_AGENTS_PATH.exists():
         for ag in sorted(FOUR_AGENTS_PATH.iterdir()):
             if ag.is_dir() and not ag.name.startswith('.'):
                 for sub in ag.iterdir():

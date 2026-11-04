@@ -4,6 +4,7 @@ generate_benchmark_report.py
 生成商业级《桌面压缩包原解析表 vs QuoteStandardizer 功能代码全量对比与准确率评测报告.xlsx》
 遵循投行/咨询 Navy/Ice Blue 配色规范，包含完整看板、逐家明细、补全贡献与逐格审计。
 """
+from _adhoc_paths import DELIVERIES_DIR, ZIP_DIR
 import os
 import io
 import re
@@ -76,8 +77,8 @@ def auto_fit_columns(ws, min_width=12, max_width=50):
         ws.column_dimensions[col_letter].width = min(max(max_len + 3, min_width), max_width)
 
 def main():
-    zips = sorted(glob.glob('/Users/qianqianawodebaobei/Desktop/*.zip'))
-    output_dir = '/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries'
+    zips = sorted(glob.glob(os.path.join(ZIP_DIR, '*.zip')))
+    output_dir = DELIVERIES_DIR
     os.makedirs(output_dir, exist_ok=True)
     report_path = os.path.join(output_dir, '桌面压缩包原解析表vs代码标准化全量对比评测报告.xlsx')
 

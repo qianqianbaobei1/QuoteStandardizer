@@ -8,6 +8,7 @@ fast_audit_deliveries.py - 极速工业级四维交付物深度巡检与缺陷�
 4. 内容对不对（价格、残留内部编码、300DPI底稿图片与超链接）
 将有问题的供应商全部标记、隔离并输出明细清单，准备进行重新解析！
 """
+from _adhoc_paths import DELIVERIES_DIR
 import os
 import re
 import fitz
@@ -16,7 +17,7 @@ from pathlib import Path
 from run_all_universe_vendors import scan_all_universe_tasks, clean_vendor_name
 from run_batch_standardize import find_primary_quote_file, extract_zip_if_needed
 
-DELIVERIES_DIR = Path('/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries')
+DELIVERIES_DIR = Path(DELIVERIES_DIR)
 
 FORBIDDEN_CODE_PATTERNS = [
     r'产品编码\s*[:：]', r'物料编码\s*[:：]', r'商品编码\s*[:：]',

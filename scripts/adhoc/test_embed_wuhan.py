@@ -1,10 +1,11 @@
+from _adhoc_paths import DELIVERIES_DIR
 import openpyxl
 from openpyxl.drawing.image import Image
 from PIL import Image as PILImage
 import os
 
-input_file = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/武汉第二电线电缆有限公司-标准解析.xlsx"
-img_dir = "/Users/qianqianawodebaobei/PycharmProjects/QuoteStandardizer/deliveries/成稿/武汉第二电线电缆有限公司_图片库"
+input_file = os.path.join(DELIVERIES_DIR, "成稿", "武汉第二电线电缆有限公司-标准解析.xlsx")
+img_dir = os.path.join(DELIVERIES_DIR, "成稿", "武汉第二电线电缆有限公司_图片库")
 
 wb = openpyxl.load_workbook(input_file)
 ws = wb["标准化报价"]
