@@ -15,6 +15,7 @@ import os
 import re
 import time
 import unicodedata
+from typing import Optional, List, Dict, Any, Tuple
 
 import cv2
 import fitz
@@ -437,6 +438,49 @@ class PDFTableExtractor:
             out[i] = fn
         return out
 
+    def _ocr_seal_image(self, img_bgr) -> Optional[str]:
+        """识别扶正/展开后的公章图像中的企业名称"""
+        if img_bgr is None:
+            return None
+        # 1. 优先尝试本地 RapidOCR (若有安装)
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            ocr = RapidOCR()
+            result, _ = ocr(img_bgr)
+            if result:
+                full_text = "".join(line[1] for line in result)
+                if COMPANY_RE.search(full_text):
+                    return full_text
+        except Exception:
+            pass
+
+        # 2. 调用多模态视觉模型提取企业名称 (使用通用自由文本 Prompt，不走表格校验)
+        try:
+            import base64
+            b64 = base64.b64encode(cv2.imencode('.png', img_bgr)[1].tobytes()).decode()
+            if not VISION_API_KEY:
+                return None
+            url = f"{VISION_BASE_URL.rstrip('/')}/chat/completions"
+            headers = {"Authorization": f"Bearer {VISION_API_KEY}", "Content-Type": "application/json"}
+            payload = {
+                "model": VISION_MODEL,
+                "temperature": 0,
+                "messages": [
+                    {"role": "system", "content": "你是一位专业的文档与印章文字识别专家。请仔细识别图片中红色印章上的文字，只输出印章上的单位/企业全称（必须包含有限公司、股份有限公司、厂或经营部等），不要输出任何其他说明。"},
+                    {"role": "user", "content": [
+                        {"type": "text", "text": "请提取此印章中的企业全称："},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                    ]},
+                ]
+            }
+            resp = requests.post(url, headers=headers, json=payload, timeout=20)
+            if resp.status_code == 200:
+                txt = resp.json()["choices"][0]["message"]["content"]
+                return txt.strip()
+        except Exception:
+            pass
+        return None
+
     def guess_supplier(self):
         """从页面表格上方的标题文字，或旋转扶正后的红色公章中识别公司全称"""
         for t in self.page_titles:
@@ -453,16 +497,16 @@ class PDFTableExtractor:
                     pix = page.get_pixmap(dpi=150)
                     bgr = cv2.cvtColor(np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n),
                                        cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
-                    seal_res = _SEAL_ENHANCER.process_image(bgr)
-                    if seal_res.get("has_seal") and seal_res.get("upright_seal_img") is not None:
-                        upright_b64 = base64.b64encode(cv2.imencode('.png', seal_res["upright_seal_img"])[1].tobytes()).decode()
-                        prompt = "请仔细识别并提取此公章上的企业全称（仅输出包含有限公司或股份有限公司的完整公司名，不要任何其他文字）："
-                        resp = self._vision_call_prompt(upright_b64, prompt)
-                        if resp and isinstance(resp, dict):
-                            txt = resp.get("page_title") or resp.get("notes") or str(resp)
-                            m = COMPANY_RE.search(re.sub(r'\s', '', txt))
-                            if m and not re.match(r'^[（\(]?(集团|股份|有限|公司)', m.group(1)):
-                                return m.group(1).replace('(', '（').replace(')', '）')
+                    seal_res = _SEAL_ENHANCER.process_document_image(bgr)
+                    if seal_res.get("has_seal"):
+                        for key in ("polar_strip_img", "upright_seal_img"):
+                            target_img = seal_res.get(key)
+                            if target_img is not None:
+                                txt = self._ocr_seal_image(target_img)
+                                if txt:
+                                    m = COMPANY_RE.search(re.sub(r'\s', '', txt))
+                                    if m and not re.match(r'^[（\(]?(集团|股份|有限|公司)', m.group(1)):
+                                        return m.group(1).replace('(', '（').replace(')', '）')
         except Exception:
             pass
         return None

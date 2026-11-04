@@ -628,8 +628,10 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
             sample_units = [cell_str(ws.cell(r, unit_col)) for r in range(data_start_row, min(data_start_row + 10, ws.max_row + 1))]
             sample_units = [u for u in sample_units if u]
             if sample_units and any((':' in u or '：' in u or ';' in u or len(u) > 8) for u in sample_units):
+                old_u_col = unit_col
                 for c_idx, h_name in headers_map.items():
                     if c_idx != unit_col and any(k in h_name for k in ('单位', '计量单位')):
+                        headers_map[old_u_col] = "规格参数"
                         unit_col = c_idx
                         break
 
@@ -896,17 +898,19 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         group_of.update({r["id"]: r["group_key"] for r in raw_rows if r.get("group_key")})
         print(f"    -> 提取出有效物料原始行: {len(raw_rows)} 行，启动大模型槽位精准清洗...")
 
-        # 1. 计算整表主业先验，并为每行召回 Top-5 真实工料机候选类别
+        # 1. 先提取每行的 clean_src_name 与 src_cat，再计算整表主业先验并召回 Top-5 候选类别
+        for it in raw_rows:
+            it["src_name"] = _strip_model_prefix(_pick_row_field(it["raw_cells_dict"], SRC_NAME_KEYS, SRC_NAME_EXCLUDE))
+            it["src_cat"] = _pick_row_field(it["raw_cells_dict"], SRC_CAT_KEYS, ('编码',))
+
         sheet_prior_t2 = compute_sheet_category_prior(raw_rows)
         for it in raw_rows:
-            clean_src_name = _strip_model_prefix(_pick_row_field(it["raw_cells_dict"], SRC_NAME_KEYS, SRC_NAME_EXCLUDE))
-            src_cat_val = it.get("raw_cells_dict", {}).get("三级类别名称", "") or it.get("raw_cells_dict", {}).get("类别", "")
             it["candidate_categories"] = retrieve_category_candidates(
-                raw_cat=src_cat_val,
-                std_name=clean_src_name,
+                raw_cat=it["src_cat"],
+                std_name=it["src_name"],
                 raw_spec=it.get("raw_spec") or it.get("raw_full_line", ""),
                 sheet_prior=sheet_prior_t2,
-                top_k=5
+                top_k=5,
             )
 
         # 分批调用 DeepSeek 提炼标准物料模型（并发线程池加速）
@@ -994,13 +998,9 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 if cat_reason and cat_reason not in notes:
                     notes.append(cat_reason)
 
-                # 【名称兜底】：原件没写物料名称时才用标准分类名顶上（绝不把原件名称改成分类名）
-                if not std_name and cat_code:
-                    cat_info = fetch_category_attributes(cat_code)
-                    if cat_info and cat_info.get("type", {}).get("description"):
-                        std_name = cat_info["type"]["description"].strip()
-                    elif l3:
-                        std_name = l3
+                # 【名称兜底】：原件没写物料名称时才用标准三级分类名 l3 顶上
+                if not std_name and l3:
+                    std_name = l3
 
                 if "型号/系列" in item["raw_cells_dict"]:
                     r_dict = item["raw_cells_dict"]
@@ -1059,10 +1059,10 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                             row_tax_inc = "是"
                     elif ("含运" in k_str or "运费" in k_str) and not row_freight_inc and "税" not in k_str:
                         if any(w in val_str for w in ('不含', '未含', '否', '自提', '买方付')):
-                            row_freight_inc = "否"
+                            row_freight_inc = "不含"
                             row_freight_desc = row_freight_desc or val_str
-                        elif any(w in val_str for w in ('是', '含运', '含', '包邮', '送到')):
-                            row_freight_inc = "是"
+                        elif any(w in val_str for w in ('是', '含运', '含', '包邮', '送到', '包含')):
+                            row_freight_inc = "包含"
                             row_freight_desc = row_freight_desc or val_str
 
                 # 若价格列本身叫“含税价/含税单价”，且未明确为否，自动标记含税为“是”

@@ -14,17 +14,18 @@ from config import CATEGORY_DICT_PATH, CATEGORY_ATTRS_API_URL
 
 # 行业高频俗称/同义词扩展表（可持续扩充）
 DOMAIN_SYNONYMS: Dict[str, List[str]] = {
-    "铝镁锰": ["铝镁锰合金板", "金属屋面板", "屋面板", "涂层板"],
-    "钛锌板": ["钛锌合金板", "金属屋面板", "金属板"],
-    "彩钢板": ["彩色涂层钢板", "压型钢板", "金属面夹芯板"],
-    "镀锌钢板": ["热镀锌钢板", "镀锌薄钢板", "压型钢板", "白铁皮"],
-    "不锈钢制品": ["不锈钢板", "不锈钢天沟", "不锈钢管", "不锈钢型材"],
-    "kbg": ["扣压式薄壁钢导管", "金属穿线管", "镀锌穿线管", "电线管", "电线电缆套管"],
-    "jdg": ["紧定式薄壁钢导管", "金属穿线管", "镀锌穿线管", "电线管", "电线电缆套管"],
-    "穿线管": ["金属穿线管", "电线管", "刚性阻燃绝缘导管", "可挠金属电线保护套管"],
-    "液压脚踏阀": ["脚踏式冲洗阀", "大便冲洗阀", "冲洗阀"],
-    "蹲便器感应": ["感应式大便冲洗阀", "大便冲洗阀", "冲洗阀"],
-    "小便器感应": ["感应式小便冲洗阀", "小便冲洗阀", "冲洗阀"],
+    "铝镁锰": ["铝合金板", "压型金属板", "金属复合装饰板/屋面板", "金属饰面板"],
+    "钛锌板": ["压型金属板", "金属饰面板", "金属复合装饰板/屋面板", "锌材", "钛材"],
+    "钛锌": ["压型金属板", "金属饰面板", "金属复合装饰板/屋面板", "锌材", "钛材"],
+    "彩钢板": ["金属饰面板", "压型金属板", "金属复合装饰板/屋面板", "彩色涂层钢板"],
+    "镀锌钢板": ["镀锌钢板", "压型金属板", "热镀锌钢板"],
+    "不锈钢制品": ["不锈钢装饰板", "不锈钢管", "不锈钢型材"],
+    "kbg": ["电线、电缆套管"],
+    "jdg": ["电线、电缆套管"],
+    "穿线管": ["电线、电缆套管"],
+    "液压脚踏阀": ["洁具专用阀门", "大便冲洗阀", "冲洗阀"],
+    "蹲便器感应": ["洁具专用阀门", "大便冲洗阀", "冲洗阀"],
+    "小便器感应": ["洁具专用阀门", "小便冲洗阀", "冲洗阀"],
     "洗脸盆龙头": ["面盆水嘴", "面盆龙头", "冷热水嘴", "水嘴"],
     "小便斗": ["小便器", "立式小便器", "挂式小便器"],
     "洗脸盆": ["洗面盆", "台式洗面盆", "立柱式洗面盆"],
@@ -113,7 +114,7 @@ class EnrichedCategoryIndex:
                 raw_enum = str(a.get("enum") or "").strip()
                 if raw_enum:
                     enum_vals.extend(re.split(r'[,，;；/、\s|]+', raw_enum))
-            enum_vals = [v.strip() for v in enum_vals if len(v.strip()) >= 2]
+            enum_vals = [v.strip() for v in enum_vals if len(v.strip()) >= 2 and re.search(r'[\u4e00-\u9fffA-Za-z]', v)]
 
             # 字段权重：三级名称(5.0) > Sheet2枚举值(4.5) > 二级名称(2.0) > Sheet2属性名(1.5) > 一级名称(1.0)
             tf: Counter = Counter()
@@ -209,15 +210,15 @@ class EnrichedCategoryIndex:
                     reasons.append(f"行业俗称映射:{syn}->{t3}")
                     break
 
-            # C. Sheet2 枚举限定值反查命中（核心杀手锏：如规格含 KBG扣压式镀锌穿线管 / 脚踏式冲洗阀）
+            # C. Sheet2 枚举限定值反查命中（按该枚举值在全库出现的稀缺度加分，绝不压过品名精确匹配）
             for ev in entry["enum_set"]:
                 ev_lower = ev.lower()
-                if len(ev) >= 4 and (ev_lower in combined_text_lower):
-                    score += 1800.0
-                    reasons.append(f"命中Sheet2属性枚举:{ev}")
-                    break
-                elif len(ev) >= 3 and (ev_lower in combined_text_lower):
-                    score += 500.0
+                if not re.search(r'[\u4e00-\u9fffA-Za-z]', ev):
+                    continue
+                if len(ev) >= 3 and (ev_lower in combined_text_lower):
+                    # 若枚举词包含核心品名特征或长度>=5（如“kbg扣压式镀锌穿线管”、“脚踏式冲洗阀”），给高分 95；普通3~4字枚举（如“氟碳涂层”、“不锈钢”）给辅助分 25
+                    bonus = 95.0 if len(ev) >= 5 else 25.0
+                    score += bonus
                     reasons.append(f"命中Sheet2属性枚举:{ev}")
                     break
 
