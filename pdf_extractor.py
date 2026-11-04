@@ -24,6 +24,9 @@ import requests
 
 from config import (VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, VISION_DOUBLE_CHECK,
                     VISION_GAMMA, VISION_MAX_ROWS_PER_TILE, VISION_TILE_OVERLAP_ROWS, LLM_MAX_RETRIES)
+from seal_enhancer_service import SealEnhancerService
+
+_SEAL_ENHANCER = SealEnhancerService()
 
 COMPANY_RE = re.compile(r'([\u4e00-\u9fa5（）\(\)]{4,30}?(?:股份有限公司|有限责任公司|有限公司|股份公司))')
 SCAN_DPI = 300
@@ -145,7 +148,11 @@ class PDFTableExtractor:
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
         if enhanced:
             bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
-            gray = cv2.cvtColor(self._remove_red(bgr), cv2.COLOR_BGR2GRAY)
+            # 系统性公章脱印穿透与凸线骨架增强 (CLAHE + Unsharp Masking 滤波)
+            try:
+                gray = _SEAL_ENHANCER.penetrate_and_enhance_text(bgr)
+            except Exception:
+                gray = cv2.cvtColor(self._remove_red(bgr), cv2.COLOR_BGR2GRAY)
             out = (255 * (gray / 255.0) ** VISION_GAMMA).astype(np.uint8)
         else:
             out = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
@@ -232,7 +239,11 @@ class PDFTableExtractor:
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
         if enhanced:
             bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
-            gray = cv2.cvtColor(self._remove_red(bgr), cv2.COLOR_BGR2GRAY)
+            # 系统性公章脱印穿透与凸线骨架增强 (CLAHE + Unsharp Masking 滤波)
+            try:
+                gray = _SEAL_ENHANCER.penetrate_and_enhance_text(bgr)
+            except Exception:
+                gray = cv2.cvtColor(self._remove_red(bgr), cv2.COLOR_BGR2GRAY)
             out = (255 * (gray / 255.0) ** VISION_GAMMA).astype(np.uint8)
         else:
             out = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
@@ -427,12 +438,33 @@ class PDFTableExtractor:
         return out
 
     def guess_supplier(self):
-        """从页面表格上方的标题文字中识别公司全称"""
+        """从页面表格上方的标题文字，或旋转扶正后的红色公章中识别公司全称"""
         for t in self.page_titles:
             m = COMPANY_RE.search(re.sub(r'\s', '', t))
             # 只认出后半截 (如 “集团）股份有限公司”) 时不可用
             if m and not re.match(r'^[（\(]?(集团|股份|有限|公司)', m.group(1)):
                 return m.group(1).replace('(', '（').replace(')', '）')
+
+        # 兜底：尝试通过 SealEnhancerService 从页面中检测并扶正公章提取供应商
+        try:
+            with fitz.open(self.pdf_path) as doc:
+                if len(doc) > 0:
+                    page = doc[0]
+                    pix = page.get_pixmap(dpi=150)
+                    bgr = cv2.cvtColor(np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n),
+                                       cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+                    seal_res = _SEAL_ENHANCER.process_image(bgr)
+                    if seal_res.get("has_seal") and seal_res.get("upright_seal_img") is not None:
+                        upright_b64 = base64.b64encode(cv2.imencode('.png', seal_res["upright_seal_img"])[1].tobytes()).decode()
+                        prompt = "请仔细识别并提取此公章上的企业全称（仅输出包含有限公司或股份有限公司的完整公司名，不要任何其他文字）："
+                        resp = self._vision_call_prompt(upright_b64, prompt)
+                        if resp and isinstance(resp, dict):
+                            txt = resp.get("page_title") or resp.get("notes") or str(resp)
+                            m = COMPANY_RE.search(re.sub(r'\s', '', txt))
+                            if m and not re.match(r'^[（\(]?(集团|股份|有限|公司)', m.group(1)):
+                                return m.group(1).replace('(', '（').replace(')', '）')
+        except Exception:
+            pass
         return None
 
     # ------------------------------------------------------------------ 文字层

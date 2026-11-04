@@ -300,12 +300,19 @@ def _pick_row_field(cells: dict, keys, exclude=()) -> str:
 # 原表材料名称列常把型号写在品名前面（NLED4916 吊装线型灯 / LED LEDA45J球泡 / LED T806P灯管），型号不进名称规格
 # 模型段必须以数字结尾或含数字，所以 CPL覆膜钢质门、UPVC排水管、HDPE双壁波纹管 这类不会被误删
 _MODEL_PREFIX_RE = re.compile(r'^(?:[A-Z]{1,6}[\s\-])?[A-Z]{0,6}\d[A-Z0-9\-]*[\s　]*')
+_BRACKET_CODE_RE = re.compile(r'^[\[\【][A-Za-z0-9\-_]+[\]\】][\s　]*')
 
 
 def _strip_model_prefix(name: str) -> str:
-    """删掉品名前的型号编码；剥完只能是汉字或原样返回，防止把整串英文品名删空"""
+    """删掉品名前的型号编码与方括号编码（如 [572305]光纤收发器）；剥完只能是汉字或原样返回"""
     orig = re.sub(r'\s+', ' ', str(name or '')).strip()
     s = orig
+    # 1. 优先剥离方括号/中括号编码前缀 (如 [572305]、【FT-01】)
+    s_bracket = _BRACKET_CODE_RE.sub('', s).strip()
+    if s_bracket and re.search(r'[\u4e00-\u9fa5]', s_bracket):
+        s = s_bracket
+
+    # 2. 剥离标准字母数字型号前缀
     for _ in range(2):
         s2 = _MODEL_PREFIX_RE.sub('', s, count=1).strip()
         if s2 == s:
@@ -613,6 +620,16 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
         headers_map = _build_headers(ws, header_row, col_st, col_ed)
         header_values = set(headers_map.values())
 
+        # 智能校验 unit_col：防范同名“单位”列错位（若该列采样内容包含冒号/分号且平均长度>8，实为规格参数列，向后搜寻真正的单位列）
+        if unit_col:
+            sample_units = [cell_str(ws.cell(r, unit_col)) for r in range(data_start_row, min(data_start_row + 10, ws.max_row + 1))]
+            sample_units = [u for u in sample_units if u]
+            if sample_units and any((':' in u or '：' in u or ';' in u or len(u) > 8) for u in sample_units):
+                for c_idx, h_name in headers_map.items():
+                    if c_idx != unit_col and any(k in h_name for k in ('单位', '计量单位')):
+                        unit_col = c_idx
+                        break
+
         # 智能嗅探数量列与合价列 (用于物理数学勾稽审计)
         qty_col = next((c for c, h in headers_map.items() if any(k in h for k in ('数量', '工程量', '采购量'))), None)
         amount_col = next((c for c, h in headers_map.items() if any(k in h for k in ('合价', '总价', '金额', '小计')) and not _is_unit_price_header(h)), None)
@@ -763,7 +780,20 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
     group_of = {}  # source_ref -> 同系列分组 (矩阵表按列)
     seq = 10
     disc_ratio = terms_info["discount_ratio"]
-    missing = missing_terms(terms_info)
+    # 检查原表工作表内是否已自带了商务条款列（如“税率”、“是否含税”、“运费”等），避免误报缺失
+    table_has_terms = set()
+    for _sn in wb_val.sheetnames:
+        _ws = wb_val[_sn]
+        if SKIP_HIDDEN_CONTENT and _ws.sheet_state != 'visible':
+            continue
+        for _r in range(1, min(5, _ws.max_row or 1) + 1):
+            for _c in range(1, min(30, _ws.max_column or 1) + 1):
+                _v = str(_ws.cell(_r, _c).value or "")
+                if "税率" in _v: table_has_terms.add("增值税税率")
+                if "含税" in _v: table_has_terms.add("是否含增值税")
+                if "运费" in _v or "含运" in _v: table_has_terms.add("是否含运费")
+
+    missing = [m for m in missing_terms(terms_info) if m not in table_has_terms]
     if missing:
         global_notes = global_notes + [f"商务条款缺失: {'、'.join(missing)}"]
     if disc_ratio is None:
@@ -916,10 +946,52 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                              if _spec_key_norm(k) not in covered and v not in verbatim.values()}
                     structured_specs = {**verbatim, **extra}
 
+                # 对照标准材料类别特定参数及要求接口规范，执行参数限定值校验与规范化
+                if cat_code:
+                    try:
+                        structured_specs, attr_notes = validate_and_normalize_specs(cat_code, structured_specs)
+                        if attr_notes:
+                            notes.extend(attr_notes)
+                    except Exception:
+                        pass
+
                 # F7 结构化参数逐项核对原文出处
                 unproven_params = _check_param_provenance(structured_specs, item.get("raw_full_line", ""))
                 if unproven_params:
                     notes.append("参数无原文出处: " + "；".join(unproven_params))
+
+                # 系统性行级商务条款抽取 (优先从行单元格中提取税率/含税/运费，无则回退至外部 terms_info)
+                row_tax_rate = terms_info.get("tax_rate")
+                row_tax_inc = terms_info.get("is_tax_included")
+                row_freight_inc = terms_info.get("is_freight_included")
+                row_freight_desc = terms_info.get("freight_desc") or ""
+
+                for k, v in item["raw_cells_dict"].items():
+                    k_str = str(k or "").strip()
+                    val_str = str(v or "").strip()
+                    if not val_str:
+                        continue
+                    if "税率" in k_str and not row_tax_rate:
+                        from terms_extractor import parse_tax_rate
+                        row_tax_rate = parse_tax_rate(val_str) or val_str
+                    elif ("是否含税" in k_str or "含税" in k_str) and not row_tax_inc and "运费" not in k_str:
+                        if any(w in val_str for w in ('不含', '未含', '否', '不')):
+                            row_tax_inc = "否"
+                        elif any(w in val_str for w in ('是', '含税', '含', '包括')):
+                            row_tax_inc = "是"
+                    elif ("含运" in k_str or "运费" in k_str) and not row_freight_inc and "税" not in k_str:
+                        if any(w in val_str for w in ('不含', '未含', '否', '自提', '买方付')):
+                            row_freight_inc = "否"
+                            row_freight_desc = row_freight_desc or val_str
+                        elif any(w in val_str for w in ('是', '含运', '含', '包邮', '送到')):
+                            row_freight_inc = "是"
+                            row_freight_desc = row_freight_desc or val_str
+
+                # 若价格列本身叫“含税价/含税单价”，且未明确为否，自动标记含税为“是”
+                for k in item["raw_cells_dict"].keys():
+                    if "含税" in str(k) and "不含税" not in str(k) and not row_tax_inc:
+                        row_tax_inc = "是"
+                        break
 
                 # 行内自带报价地区时以行为准，否则用商务条款中的地区
                 row_region = next((v for k, v in item["raw_cells_dict"].items() if any(rk in k for rk in REGION_HEADER_KEYS)), '')
@@ -960,11 +1032,11 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     discount_ratio=disc_ratio,
                     project_price=round(final_price * disc_ratio, 2) if disc_ratio is not None and final_price > 0 else None,
                     discount_series=terms_info["discount_series"],
-                    is_freight_included=terms_info["is_freight_included"],
-                    freight_desc=terms_info["freight_desc"],
-                    is_tax_included=terms_info["is_tax_included"],
+                    is_freight_included=row_freight_inc,
+                    freight_desc=row_freight_desc or terms_info["freight_desc"],
+                    is_tax_included=row_tax_inc,
                     tax_desc=terms_info["tax_desc"],
-                    tax_rate=terms_info["tax_rate"],
+                    tax_rate=row_tax_rate,
                     freight_settle=terms_info["freight_settle"],
                     quote_desc=f"{terms_info['quote_desc']}；{cleaned_res['quote_desc_extra']}".strip('；') if cleaned_res.get('quote_desc_extra') else terms_info['quote_desc'],
                     quote_type=terms_info["quote_type"],

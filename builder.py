@@ -439,9 +439,9 @@ class StandardizedWorkbookBuilder:
             else:
                 ws_out.column_dimensions[col_letter].width = 13
 
-        # 用户核心指令：只要【标准化报价】单张 Sheet，绝不要多余的审计与对账 Sheet！
+        # 交付规范：保留【客户原始解析】与【标准化报价】双 Sheet，仅清除多余的调试/临时对账 Sheet
         for s in list(wb_out.sheetnames):
-            if s != '标准化报价':
+            if s not in ('客户原始解析', '标准化报价'):
                 wb_out.remove(wb_out[s])
 
         wb_out.save(output_xlsx_path)

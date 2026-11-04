@@ -51,8 +51,8 @@ EXTRACTOR_ENGINE = os.getenv("EXTRACTOR_ENGINE", "gemini").strip().lower()
 
 # Gemini 原生引擎配置
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.6-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-1.5-flash")
 # Gemini 思考预算 (0 为禁用思考/最低开销，-1 为自动，默认设为 0 以极速返回)
 GEMINI_THINKING_BUDGET = int(os.getenv("GEMINI_THINKING_BUDGET", "0"))
 

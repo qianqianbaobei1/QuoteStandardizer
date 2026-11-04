@@ -102,7 +102,7 @@ class GeminiPDFTableExtractor:
 
         # 优先使用 google-genai 官方 SDK
         if genai:
-            http_opts = types.HttpOptions(timeout=5.0) if hasattr(types, "HttpOptions") else None
+            http_opts = types.HttpOptions(timeout=60.0) if hasattr(types, "HttpOptions") else None
             client_kwargs = {"api_key": GEMINI_API_KEY}
             if http_opts:
                 client_kwargs["http_options"] = http_opts
@@ -110,10 +110,18 @@ class GeminiPDFTableExtractor:
             uploaded_file = None
 
             try:
-                # 方式 1: < 20MB 文件使用 Base64 Inline 方式传输 (官方文档推荐示例)
-                if file_size < 20 * 1024 * 1024:
+                # 兼容图片格式：若为 .png/.jpg/.jpeg，先借助 PyMuPDF 转为标准 PDF 字节流，保证格式完全兼容
+                ext = os.path.splitext(self.pdf_path)[1].lower()
+                if ext in ('.png', '.jpg', '.jpeg'):
+                    img_doc = fitz.open(self.pdf_path)
+                    pdf_bytes = img_doc.convert_to_pdf()
+                    img_doc.close()
+                else:
                     with open(self.pdf_path, "rb") as f:
                         pdf_bytes = f.read()
+
+                # 方式 1: < 20MB 文件使用 Base64 Inline 方式传输 (官方文档推荐示例)
+                if len(pdf_bytes) < 20 * 1024 * 1024:
                     b64_data = base64.b64encode(pdf_bytes).decode("utf-8")
 
                     for attempt in range(1, LLM_MAX_RETRIES + 2):
@@ -217,7 +225,7 @@ class GeminiPDFTableExtractor:
                 "Content-Type": "application/json",
                 "x-goog-api-key": GEMINI_API_KEY
             }
-            resp = requests.post(rest_url, json=payload, headers=headers, timeout=10)
+            resp = requests.post(rest_url, json=payload, headers=headers, timeout=60)
             if resp.status_code == 200:
                 res_data = resp.json()
                 raw_json_str = res_data.get("output_text") or (

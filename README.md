@@ -116,30 +116,20 @@ pip install -r requirements.txt
 python main.py -i "报价单.pdf"                       # 自动查找同目录的 报价说明/折扣单 图片
 python main.py -i "报价单.xlsx" -t "报价说明.png"
 python main.py -i "报价单.pdf" --terms-json terms.json  # 人工确认的商务条款
-python3 run_batch_standardize.py "<批次源目录>" "<输出目录>" --label 批次A  # 整批逐家解析；任一家完整性校验不通过则该家 FAIL、退出码 2
-python3 zip_standardizer_pipeline.py "报价单.zip"         # 线上导出的压缩包（报价数据.xlsx + quote_img*）→ 单 Sheet 交付
-python3 reconcile_vs_source.py "<zip 目录>"               # 交付件 vs 压缩包内原表逐格对账，打印保真度，明细落 deliveries/对账_vs压缩包原表.xlsx
+python3 cli/run_batch_standardize.py "<批次源目录>" "<输出目录>" --label 批次A  # 整批逐家解析；任一家完整性校验不通过则该家 FAIL、退出码 2
+python3 cli/zip_standardizer_pipeline.py "报价单.zip"         # 线上导出的压缩包（报价数据.xlsx + quote_img*）→ 双 Sheet 交付
+python3 cli/reconcile_vs_source.py "<zip 目录>"               # 交付件 vs 压缩包内原表逐格对账，打印保真度，明细落 deliveries/对账_vs压缩包原表.xlsx
 ```
 
 `terms.json` 的字段：`supplier`、`brand`、`province`、`city`、`is_tax_included`、`tax_rate`、`tax_desc`、`is_freight_included`、`freight_desc`、`freight_settle`、`discount_ratio`、`discount_series`、`quote_desc`、`quote_type`。没有的字段可以不写。
 
-## 文件
+## 质量保障与工业级缺陷门禁
 
-```text
-main.py             入口与解析主流程（清单式 / 矩阵式、清洗、对账）
-extractor.py        Excel 合并单元格展开、精度保护、图片定位
-pdf_extractor.py    PDF → 表格（文字层 / 视觉模型）
-terms_extractor.py  商务条款识别与规范化
-llm_agent.py        DeepSeek 表头推导与物料清洗
-models.py           物料记录与原表对账
-builder.py          输出工作簿
-config.py           环境配置、省份映射、编码库加载
-evaluate.py         评差引擎（与线上系统逐格比对、错误归纳、回归）
-run_batch_standardize.py  整批供应商批量解析
-zip_standardizer_pipeline.py  线上导出压缩包 → 单 Sheet 交付（多类别 Sheet 收口、列序对齐 33 列标准）
-reconcile_vs_source.py       交付件 vs 压缩包内原表逐格对账（保真度 / 补全量 / 致命项）
-health_check.py     模块自检（含评差引擎自检）
-ERROR_CODES.md      错误码字典 + 每日流程 + 修复账本
+系统建立并固化了 16+ 类缺陷错误分类体系（详见 [`ERROR_CODES.md`](ERROR_CODES.md)），支持端到端自动化评差、红线规则拦截与回归体检：
+
+```bash
+python3 cli/health_check.py     # 全生命周期模块自检与 CI 准入门禁
+python3 cli/evaluate.py selftest # 评差引擎自检（0 差异基线 / 13 类错误全命中 / 等价写法不误报）
 ```
 
 ## 评差与验收口径
@@ -147,9 +137,9 @@ ERROR_CODES.md      错误码字典 + 每日流程 + 修复账本
 线上系统对同一份报价单也出一份结果，本地结果要与它逐格比对评差：
 
 ```bash
-python evaluate.py scan --ours-dir ours/ --theirs-dir theirs/ -o cases.csv   # 自动配对
-python evaluate.py batch --cases cases.csv -o eval_out/     # 评差出报告
-python evaluate.py regression                              # 回归，任一用例变差即退出码 1
+python3 cli/evaluate.py scan --ours-dir ours/ --theirs-dir theirs/ -o cases.csv   # 自动配对
+python3 cli/evaluate.py batch --cases cases.csv -o eval_out/     # 评差出报告
+python3 cli/evaluate.py regression                              # 回归，任一用例变差即退出码 1
 ```
 
 **验收口径：单份文件零差异才算 PASS。** 10 份文件 9 份各错 1 处 = 1/10 PASS（1 份合格），不是 99% 准确率。

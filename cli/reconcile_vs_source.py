@@ -1,3 +1,6 @@
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+
 # -*- coding: utf-8 -*-
 """
 reconcile_vs_source.py - 交付件 vs 压缩包内 报价数据.xlsx 的逐格对账

@@ -113,7 +113,7 @@ def verify_delivery_file(path: str) -> list:
     if '标准化报价' not in wb.sheetnames:
         return [f"缺少「标准化报价」Sheet: {wb.sheetnames}"]
     errs = []
-    extra = [s for s in wb.sheetnames if s != '标准化报价']
+    extra = [s for s in wb.sheetnames if s not in ('客户原始解析', '标准化报价')]
     if extra:
         errs.append(f"主交付含多余 Sheet: {extra}")
     ws = wb['标准化报价']
