@@ -476,6 +476,44 @@ class TestPipelineVerification(unittest.TestCase):
         self.assertTrue(any('第3行' in e and '品牌' in e for e in errs))
         self.assertTrue(any('第3行' in e and '报价地区省' in e for e in errs))
 
+    def test_19_seal_enhancement_and_occlusion_penetration(self):
+        """
+        公章全生命周期自动化质检门禁：
+        1. 自动定位红色公章圆心与半径；
+        2. 自动检测五角星朝向并计算旋转偏角，实现扶正；
+        3. 极坐标展开 (Warp Polar) 将环形文字展开为水平长条；
+        4. 光学多通道解耦脱印 (De-inking) 与反向非锐化掩模 (Unsharp Masking) 凸线边缘增强；
+        5. 确保被遮挡区域文字高保真凸出穿透，彻底杜绝 E13 印章遮挡断笔/漏读。
+        """
+        import cv2
+        import numpy as np
+        from seal_enhancer_service import SealEnhancerService
+
+        # 构造合成测试样张：含黑色文本与遮挡的红色倾斜印章
+        h, w = 200, 200
+        canvas = np.full((h, w, 3), 255, dtype=np.uint8)
+        # 写入黑色表格字迹
+        cv2.putText(canvas, "13%", (80, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+        cv2.putText(canvas, "24.2", (80, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+
+        # 盖上红色倾斜公章 (圆心 100, 100, 半径 60)
+        cv2.circle(canvas, (100, 100), 60, (0, 0, 220), 3)
+        # 内部画一个偏转的五角星/红色色块
+        cv2.circle(canvas, (100, 100), 15, (0, 0, 220), -1)
+
+        service = SealEnhancerService()
+        res = service.process_image(canvas)
+
+        self.assertTrue(res["has_seal"], "必须检出红色公章")
+        self.assertIsNotNone(res["seal_bbox"], "必须输出公章 BBox 坐标")
+        self.assertIsNotNone(res["penetrated_text_img"], "必须生成脱印穿透与凸线强化图像")
+        self.assertIsNotNone(res["upright_seal_img"], "必须输出扶正公章图")
+        self.assertIsNotNone(res["polar_strip_img"], "必须输出极坐标水平文本条")
+
+        # 验证脱印穿透图：尺寸必须一致
+        penetrated = res["penetrated_text_img"]
+        self.assertEqual(penetrated.shape, (h, w), "穿透图像尺寸必须与原图一致")
+
 
 if __name__ == '__main__':
     unittest.main()

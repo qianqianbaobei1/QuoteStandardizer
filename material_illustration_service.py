@@ -317,6 +317,29 @@ def match_illustrations_for_canonical_items(items: list,
         if hit:
             key_hit_map[key] = hit
 
+    # 品名带型号/长尾描述时接口常查不到图（筒灯、灯管、NLED9203SA 筒灯…）：
+    # 退一步用标准类别名再查一次，类别名是编码库里的叫法，配图覆盖率得多
+    from config import CATEGORY_CODE_MAP
+    code_to_name = {}
+    for _n, _c in CATEGORY_CODE_MAP.items():
+        code_to_name.setdefault(_c, _n)
+    miss = {}
+    for key, udata in unique_materials.items():
+        hit = key_hit_map.get(key)
+        if hit and hit.get("pictureUrl"):
+            continue
+        cat_name = code_to_name.get(str(udata.get("categoryCode") or "").strip())
+        if not cat_name or cat_name == udata["materialName"]:
+            continue
+        miss[key] = dict(udata, uid=str(udata["uid"]) + "_cat", materialName=cat_name)
+    if miss:
+        cat_hits = default_illustration_service.fetch_illustrations_batch(
+            list(miss.values()), company_name=company, download_bytes=download_bytes)
+        for key, udata in miss.items():
+            hit = cat_hits.get(udata["uid"])
+            if hit and hit.get("pictureUrl"):
+                key_hit_map[key] = hit
+
     matched_count = 0
     for idx, it in enumerate(items):
         uid = it.quote_id or f"item_{idx}"

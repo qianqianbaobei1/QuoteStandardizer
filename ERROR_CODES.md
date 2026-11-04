@@ -59,9 +59,11 @@ python evaluate.py selftest          # 评差引擎：0 差异基线 / 13 类错
 | `E10_BRAND` | 品牌不一致 | ERROR | `main.derive_supplier_and_brand_dynamic` / 表内品牌列 |
 | `E11_TERMS` | 商务条款不一致（折扣/税/运费/结算） | ERROR | `terms_extractor` / 商务单图片识别 / 折扣解析 |
 | `E12_REGION` | 报价地区不一致 | ERROR | `config.expand_region` / 行内地区列 |
+| `E13_SEAL_OCCLUSION` | **印章遮挡穿透失败/漏采单价或商务条款** | FATAL | `seal_enhancer_service.penetrate_and_enhance_text` / R通道脱印 / 凸线强化 |
 | `E15_PAGE` | 原表页码不一致 | ERROR | `pdf_extractor` 页序 / Gemini `page_number` / 切块合并 |
 | `E14_STRUCTURE` | **疑似整表结构判错（已折叠逐行差异）** | FATAL | `main._detect_matrix` / `_collect_list_rows` 表头行 |
 | `E16_HEADER` | 输出表结构/列名对不上 | FATAL | 对方列名与标准 33 列的映射（`ALIASES`） |
+| `E17_SEAL_SUPPLIER_MISMATCH` | **公章抽取供应商与文件名/表头严重歧异** | ERROR | `seal_enhancer_service.rotate_seal_upright` / 极坐标展开 / 三方对齐 |
 
 `E14_STRUCTURE` 是**归纳的核心**：一份文件里 ≥20% 的行对不上时，逐行差异是症状、结构判错才是病根。
 引擎会把它们折叠成一条 E14 并优先作为「主错误码」，明细仍完整保留在报告里。

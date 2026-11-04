@@ -9495,42 +9495,566 @@
     "pictureName": "",
     "folderName": ""
   },
-  "PE给水管件": {
-    "matched": false,
-    "pictureUrl": "",
-    "pictureName": "",
-    "folderName": ""
-  },
-  "PE管件": {
-    "matched": false,
-    "pictureUrl": "",
-    "pictureName": "",
-    "folderName": ""
-  },
-  "PVC-U排水管": {
-    "matched": false,
-    "pictureUrl": "",
-    "pictureName": "",
-    "folderName": ""
-  },
-  "PPR给水管": {
-    "matched": false,
-    "pictureUrl": "",
-    "pictureName": "",
-    "folderName": ""
-  },
-  "PVC-U给水管": {
-    "matched": false,
-    "pictureUrl": "",
-    "pictureName": "",
-    "folderName": ""
-  },
-  "洗脸盆": {
+  "塑壳断路器": {
     "matched": true,
-    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0005451/4e23630ce7a48595.jpg",
-    "pictureName": "洗脸盆.jpg",
-    "folderName": "m0005451",
-    "templateName": "18-洁具及燃气器具-惠达",
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0008818/247b5dbe7826922f.jpg",
+    "pictureName": "塑壳断路器.jpg",
+    "folderName": "m0008818",
+    "templateName": "55-电气设备及附件-长城",
+    "matchType": "NAME_SEARCH"
+  },
+  "双电源自动转换开关": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001732/b83f2bd0214d294d.jpg",
+    "pictureName": "双电源自动转换开关.jpg",
+    "folderName": "m0001732",
+    "templateName": "55-配电开关-启观",
+    "matchType": "NAME_SEARCH"
+  },
+  "小型断路器": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001731/609fdbc26bce6173.jpg",
+    "pictureName": "小型断路器.jpg",
+    "folderName": "m0001731",
+    "templateName": "55-断路器-启观",
+    "matchType": "NAME_SEARCH"
+  },
+  "漏电断路器": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0001731/95f2509493db1c2e.jpg",
+    "pictureName": "漏电断路器.jpg",
+    "folderName": "m0001731",
+    "templateName": "55-断路器-启观",
+    "matchType": "NAME_SEARCH"
+  },
+  "PVC-U漩涡降噪管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U雨落水管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "HRS高层雨、排水管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U螺旋管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U拉链板系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U保温管/保温槽系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U线槽系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U绝缘电工系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U电力电缆系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "电工弹簧": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U给水系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U农田灌溉给水栓出水口": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U阀门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PP-R冷热水系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PP-R铝塑型稳态复合管材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE-RT (I型) 给水系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE给水系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE压力管材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PP给水系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "HDPE钢丝网骨架复合管系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "HDPE深海网箱专用管系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE地源热泵系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "HDPE建筑排水系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE电力电缆管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PB给水系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PE-RT阻氧管系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "分集水器系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "地暖系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-C消防系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PP静音排水系列": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "HDPE超静音排水管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U空调保护套管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U空调冷凝水管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U电工管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U新风管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "HDPE新风管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PP-R冷却液输送管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "空调内机套阀": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "暖通专用分集水器": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "给水用不锈钢管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "管材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚氯乙烯(PVC-U)管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "PVC-U管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "硬聚氯乙烯(PVC-U)管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "塑料管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "塑料管材": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚乙烯(PE)管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "异径接头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "管帽": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "内丝接头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "阀门": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "橡胶软接头": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚氯乙烯(PVC)管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "聚丙烯(PP)管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "异径管": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "塑料管件": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "每个数 单价(元/只).47-269.79-505.57-573.02-943.70-1478.01-1818.18-(元/套)": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "铝镁锰合金板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0017521/3ffb20e3c04897b9.jpg",
+    "pictureName": "铝镁锰合金板.jpg",
+    "folderName": "m0017521",
+    "templateName": "07-装饰石材及地板-英豪",
+    "matchType": "NAME_SEARCH"
+  },
+  "钛锌板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0018169/8d0ccb4a2a97036e.jpg",
+    "pictureName": "钛锌板.jpg",
+    "folderName": "m0018169",
+    "templateName": "04-混凝土空心方桩-强宏建材",
+    "matchType": "NAME_SEARCH"
+  },
+  "彩钢板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0017245/f692986e2d5bbdfb.png",
+    "pictureName": "彩钢板.png",
+    "folderName": "m0017245",
+    "templateName": "01-黑色及有色金属-包钢",
+    "matchType": "NAME_SEARCH"
+  },
+  "不锈钢制品": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0027648/e06c3202bc374bf5.jpg",
+    "pictureName": "不锈钢制品.jpg",
+    "folderName": "m0027648",
+    "templateName": "北京天涯比邻建筑装饰工程有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "镀锌钢板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0008955/6661374346525ab8.jpg",
+    "pictureName": "镀锌钢板.jpg",
+    "folderName": "m0008955",
+    "templateName": "0129-钢板",
+    "matchType": "NAME_SEARCH"
+  },
+  "镀锌钢板/压型钢板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "同质透心 SBR 橡胶地板": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039339/fa8b93fe9ae8d5923b9946733e022c79.png",
+    "pictureName": "同质透心SBR橡胶地板.png",
+    "folderName": "m0039339",
+    "templateName": "山西汉豹家居建材有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "普通橡胶地板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0005857/5ac7dcb0da50defe.jpg",
+    "pictureName": "普通橡胶地板.jpg",
+    "folderName": "m0005857",
+    "templateName": "07-塑胶地板-圣特秦力",
+    "matchType": "NAME_SEARCH"
+  },
+  "EPDM橡胶地板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038319/d14782e715d46148.png",
+    "pictureName": "EPDM橡胶地板.png",
+    "folderName": "m0038319",
+    "templateName": "1成都四方恒红建材有限公司兰州分公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "液压脚踏阀": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038297/b61ca3a2c7c93e26.png",
+    "pictureName": "液压脚踏阀.png",
+    "folderName": "m0038297",
+    "templateName": "广东帝富龙厨卫科技有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "蹲便器感应式冲洗阀": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038180/2e18c5970bce248d.png",
+    "pictureName": "蹲便器感应式冲洗阀.png",
+    "folderName": "m0038180",
+    "templateName": "广州米客工程有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "发泡陶瓷保温板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0015555/79026e687b4de82d.jpg",
+    "pictureName": "发泡陶瓷保温板.jpg",
+    "folderName": "m0015555",
+    "templateName": "08-墙面、天棚装饰及屋面材料-渔政",
+    "matchType": "NAME_SEARCH"
+  },
+  "泡沫玻璃保温板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0004954/ffa670c51150b327.jpg",
+    "pictureName": "泡沫玻璃保温板.jpg",
+    "folderName": "m0004954",
+    "templateName": "13-绝热、耐火材料-紫赛",
+    "matchType": "NAME_SEARCH"
+  },
+  "热固复合聚苯乙烯泡沫保温板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0026408/7817e50088ed8c53.jpg",
+    "pictureName": "热固复合聚苯乙烯泡沫保温板.jpg",
+    "folderName": "m0026408",
+    "templateName": "沈阳绿洲节能建材有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "石墨改性模塑聚苯板保温装饰板": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039374/24fdbba39748205e6b3614a9ff73603e.png",
+    "pictureName": "石墨改性模塑聚苯板保温装饰板 (硅酸钙板 + 石墨聚苯板 + 真石漆).png",
+    "folderName": "m0039374",
+    "templateName": "河北瑞逵建筑工程有限公司-2026",
+    "matchType": "NAME_SEARCH"
+  },
+  "模塑聚苯板保温装饰板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "岩棉板保温装饰板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "同质透心PVC塑胶地板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0010064/6c678d9b478ba1fe.jpg",
+    "pictureName": "同质透心PVC塑胶地板.jpg",
+    "folderName": "m0010064",
+    "templateName": "07-橡胶地板-迈瑞",
+    "matchType": "NAME_SEARCH"
+  },
+  "石塑防滑地板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0038296/fd91f8c60e664889.png",
+    "pictureName": "石塑防滑地板.png",
+    "folderName": "m0038296",
+    "templateName": "甘肃特华装饰工程有限公司",
+    "matchType": "NAME_SEARCH"
+  },
+  "橡塑柔性地板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0000006/55266b4063bbadda.png",
+    "pictureName": "橡塑柔性地板.png",
+    "folderName": "m0000006",
+    "templateName": "菲林格尔-木地板",
+    "matchType": "NAME_SEARCH"
+  },
+  "石塑地板": {
+    "matched": true,
+    "pictureUrl": "https://gcj-pub.oss-cn-beijing.aliyuncs.com/opcrm/pic_pictures/m0017270/2f35f799b666178c.jpg",
+    "pictureName": "石塑地板.jpg",
+    "folderName": "m0017270",
+    "templateName": "19-风口-泉蕾",
+    "matchType": "NAME_SEARCH"
+  },
+  "锁扣SPC地板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "普通石塑地板": {
+    "matched": false,
+    "pictureUrl": "",
+    "pictureName": "",
+    "folderName": ""
+  },
+  "微孔铝蜂窝吸音板": {
+    "matched": true,
+    "pictureUrl": "http://gcj-pub.oss-cn-beijing.aliyuncs.com/gcj-digitalize-system-manager/cst/scj/pic_pictures/m0039280/c4857600890a1f2d2e89cf6a7e798826.png",
+    "pictureName": "微孔铝蜂窝吸音板.png",
+    "folderName": "m0039280",
+    "templateName": "广东丽音声学科技有限公司-2026",
     "matchType": "NAME_SEARCH"
   }
 }
