@@ -270,62 +270,64 @@ def _load_catalog() -> None:
             return
 
     wb = openpyxl.load_workbook(dict_path, read_only=True, data_only=True)
-    # 1. 加载 Sheet 1: 工料机类别 (自适应兼容 6列标准表头 与 4列简表)
-    ws1 = wb.worksheets[0]
-    first_row = next(ws1.iter_rows(min_row=1, max_row=1, values_only=True), None)
-    is_6_cols = False
-    if first_row and any('三级类别名称' in str(c or '') for c in first_row):
-        is_6_cols = True
+    try:
+        # 1. 加载 Sheet 1: 工料机类别 (自适应兼容 6列标准表头 与 4列简表)
+        ws1 = wb.worksheets[0]
+        first_row = next(ws1.iter_rows(min_row=1, max_row=1, values_only=True), None)
+        is_6_cols = False
+        if first_row and any('三级类别名称' in str(c or '') for c in first_row):
+            is_6_cols = True
 
-    for row in ws1.iter_rows(min_row=2, values_only=True):
-        if not row:
-            continue
-        if is_6_cols:
-            if len(row) < 6:
+        for row in ws1.iter_rows(min_row=2, values_only=True):
+            if not row:
                 continue
-            t1 = str(row[1] or "").strip()
-            t2 = str(row[3] or "").strip()
-            t3 = str(row[5] or "").strip()
-            code = _format_cat_code(row[4])
-        else:
-            if len(row) < 4:
-                continue
-            t1 = str(row[0] or "").strip()
-            t2 = str(row[1] or "").strip()
-            t3 = str(row[2] or "").strip()
-            code = _format_cat_code(row[3])
+            if is_6_cols:
+                if len(row) < 6:
+                    continue
+                t1 = str(row[1] or "").strip()
+                t2 = str(row[3] or "").strip()
+                t3 = str(row[5] or "").strip()
+                code = _format_cat_code(row[4])
+            else:
+                if len(row) < 4:
+                    continue
+                t1 = str(row[0] or "").strip()
+                t2 = str(row[1] or "").strip()
+                t3 = str(row[2] or "").strip()
+                code = _format_cat_code(row[3])
 
-        if not t3:
-            continue
-        item = (t1, t2, t3, code)
-        _CATALOG_ROWS.append(item)
-        _EXACT_T3_MAP[t3] = item
-        t3_clean = re.sub(r'[（(].*?[)）]', '', t3).strip()
-        if t3_clean and t3_clean not in _EXACT_T3_MAP:
-            _EXACT_T3_MAP[t3_clean] = item
-        if code:
-            _CODE_MAP[code] = item
+            if not t3:
+                continue
+            item = (t1, t2, t3, code)
+            _CATALOG_ROWS.append(item)
+            _EXACT_T3_MAP[t3] = item
+            t3_clean = re.sub(r'[（(].*?[)）]', '', t3).strip()
+            if t3_clean and t3_clean not in _EXACT_T3_MAP:
+                _EXACT_T3_MAP[t3_clean] = item
+            if code:
+                _CODE_MAP[code] = item
 
-    # 2. 加载 Sheet 2: 三级类别属性 (从 Excel 或本地 category_attrs_cache.json 加载)
-    if len(wb.worksheets) >= 2:
-        ws2 = wb.worksheets[1]
-        for row in ws2.iter_rows(min_row=2, values_only=True):
-            if not row or len(row) < 2:
-                continue
-            t3_name = str(row[0] or "").strip()
-            attr_name = str(row[1] or "").strip()
-            if not t3_name or not attr_name:
-                continue
-            enum_str = str(row[2] or "").strip() if len(row) > 2 else ""
-            req_str = str(row[3] or "").strip() if len(row) > 3 else ""
-            price_str = str(row[4] or "").strip() if len(row) > 4 else ""
-            _ATTR_SCHEMA_MAP.setdefault(t3_name, []).append({
-                "name": attr_name,
-                "enum": enum_str,
-                "required": req_str in ("是", "必填", "1", "True", "true"),
-                "affects_price": price_str in ("是", "1", "True", "true"),
-            })
-    wb.close()
+        # 2. 加载 Sheet 2: 三级类别属性 (从 Excel 或本地 category_attrs_cache.json 加载)
+        if len(wb.worksheets) >= 2:
+            ws2 = wb.worksheets[1]
+            for row in ws2.iter_rows(min_row=2, values_only=True):
+                if not row or len(row) < 2:
+                    continue
+                t3_name = str(row[0] or "").strip()
+                attr_name = str(row[1] or "").strip()
+                if not t3_name or not attr_name:
+                    continue
+                enum_str = str(row[2] or "").strip() if len(row) > 2 else ""
+                req_str = str(row[3] or "").strip() if len(row) > 3 else ""
+                price_str = str(row[4] or "").strip() if len(row) > 4 else ""
+                _ATTR_SCHEMA_MAP.setdefault(t3_name, []).append({
+                    "name": attr_name,
+                    "enum": enum_str,
+                    "required": req_str in ("是", "必填", "1", "True", "true"),
+                    "affects_price": price_str in ("是", "1", "True", "true"),
+                })
+    finally:
+        wb.close()
 
     # 3. 增强：融合本地 category_attrs_cache.json 中的真实接口限定枚举与必填规则
     cache_json = os.path.join(os.path.dirname(__file__), "category_attrs_cache.json")
@@ -496,7 +498,38 @@ def retrieve_category_candidates(
     _load_catalog()
     if not _SEARCH_INDEX:
         return []
+
+    # 1. 广材实盘词表 (category_lexicon.db) 先验召回（39.8万条企业真实报价分布）
+    lex_hits = []
+    try:
+        from jev_category_scorer import lexicon_candidates
+        lex_hits = lexicon_candidates(std_name, limit=3)
+    except Exception:
+        pass
+
+    # 2. 联合检索引擎（BM25 + Sheet2 枚举反查 + 整表先验投票）
     cands = _SEARCH_INDEX.search(std_name, raw_cat, raw_spec, sheet_prior_t2=sheet_prior, top_k=top_k)
+
+    # 3. 词表实盘先验置顶融合 (解决品名有同义词/特定行业叫法如“洗脸盆龙头”搜不到“水嘴”)
+    if lex_hits:
+        seen_codes = set()
+        merged = []
+        for lh in lex_hits:
+            if lh["code"] not in seen_codes:
+                merged.append({
+                    "level1": lh["level1"],
+                    "level2": lh["level2"],
+                    "level3": lh["level3"],
+                    "code": lh["code"],
+                    "score": round(150.0 * lh.get("share", 1.0), 2),
+                    "reason": lh.get("reason", "广材词表实盘先验"),
+                })
+                seen_codes.add(lh["code"])
+        for c in cands:
+            if c["code"] not in seen_codes:
+                merged.append(c)
+                seen_codes.add(c["code"])
+        cands = merged[:max(top_k, len(lex_hits))]
 
     # 同族展开分两轮：第一轮只补同二级大类（本表主业）的同族三级类；若不足 10 个，第二轮才按同一级大类补充
     # 彻底杜绝一级大类排在前面的几百个无关类目抢占名额的 Bug
@@ -573,6 +606,18 @@ def resolve_and_verify_category(
         if q_clean in _EXACT_T3_MAP:
             t1, t2, t3, code = _EXACT_T3_MAP[q_clean]
             return t1, t2, t3, code, True, f"字典精确匹配:{t3}"
+
+    # 2.5 检查广材实盘词表 (category_lexicon.db) 高置信度匹配
+    try:
+        from jev_category_scorer import lexicon_candidates
+        lex_hits = lexicon_candidates(std_name, limit=2)
+        if lex_hits:
+            top_lex = lex_hits[0]
+            if (len(lex_hits) == 1 or top_lex.get("share", 0) >= 0.75) and top_lex.get("companies", 0) >= 2:
+                if not sheet_prior or top_lex["level2"] in sheet_prior:
+                    return top_lex["level1"], top_lex["level2"], top_lex["level3"], top_lex["code"], True, f"广材词表实盘命中({top_lex['reason']})"
+    except Exception:
+        pass
 
     # 3. 走 BM25 + Sheet2 枚举 + 整表先验联合检索
     if _SEARCH_INDEX:
