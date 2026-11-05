@@ -219,25 +219,23 @@ class SealEnhancerService:
     # 别名兼容
     process_document_image = process_image
 
-    def balance_illumination_and_orient(self, bgr_img: np.ndarray) -> np.ndarray:
+    def balance_illumination_and_orient(self, bgr_img: np.ndarray, do_orient: bool = True) -> np.ndarray:
         """
-        杀手锏 5：手机翻拍图与扫描件预处理（自动摆正 + 暗角光照均衡）
-        1. 自动检测横竖摆正（消除 ±90°/180° 横向或倒置扫描，基于 RapidOrientation/形态学置信度自动旋转正立）；
-        2. 大核高斯背景估计与除法：消除手机拍照左右明暗不均、手影、暗角，使表格线和小数点清晰显现。
+        手机翻拍图与扫描件预处理（自动摆正 + LAB 亮度通道阴影均衡）：
+        重要：必须在 LAB 色彩空间仅对 L (亮度) 通道做背景除法，100% 保留 A/B 色彩通道，
+        绝不能转成 GRAY 黑白图，否则会抹掉红色公章的色彩信息导致后续 R 通道红章穿透失效！
         """
         if bgr_img is None or bgr_img.size == 0:
             return bgr_img
         try:
-            # 步骤 1：物理方向摆正（通杀正反 ±90°、180° 倒置）
-            oriented = auto_orient_page_upright(bgr_img)
-
-            # 步骤 2：光照均衡与消除手影暗角
+            oriented = auto_orient_page_upright(bgr_img) if do_orient else bgr_img
             h, w = oriented.shape[:2]
-            gray = cv2.cvtColor(oriented, cv2.COLOR_BGR2GRAY)
+            lab = cv2.cvtColor(oriented, cv2.COLOR_BGR2LAB)
+            l_ch, a_ch, b_ch = cv2.split(lab)
             ksize = 51 if min(h, w) > 300 else 21
-            bg = cv2.GaussianBlur(gray, (ksize, ksize), 0)
-            balanced_gray = cv2.divide(gray, bg, scale=255)
-            return cv2.cvtColor(balanced_gray, cv2.COLOR_GRAY2BGR)
+            bg = cv2.GaussianBlur(l_ch, (ksize, ksize), 0)
+            norm_l = cv2.divide(l_ch, bg, scale=255)
+            return cv2.cvtColor(cv2.merge([norm_l, a_ch, b_ch]), cv2.COLOR_LAB2BGR)
         except Exception:
             return bgr_img
 

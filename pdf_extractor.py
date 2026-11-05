@@ -178,9 +178,9 @@ class PDFTableExtractor:
                 bgr = auto_orient_page_upright(bgr)
             except Exception:
                 pass
-            # 杀手锏 5：手机拍照与扫描件光照均衡 (去阴影暗角，增强细小数字与小数点对比度)
+            # 杀手锏 5：手机拍照与扫描件 LAB 亮度均衡 (消除阴影暗角，100% 保留红色通道，do_orient=False 避免二次摆正)
             try:
-                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
+                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr, do_orient=False)
             except Exception:
                 pass
             # 系统性公章脱印穿透与凸线骨架增强 (CLAHE + Unsharp Masking 滤波)
@@ -196,7 +196,7 @@ class PDFTableExtractor:
             except Exception:
                 pass
             try:
-                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
+                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr, do_orient=False)
             except Exception:
                 pass
             out = bgr
@@ -288,9 +288,9 @@ class PDFTableExtractor:
                 bgr = auto_orient_page_upright(bgr)
             except Exception:
                 pass
-            # 杀手锏 5：手机拍照与扫描件光照均衡 (去阴影暗角，增强细小数字与小数点对比度)
+            # 杀手锏 5：手机拍照与扫描件 LAB 亮度均衡 (消除阴影暗角，100% 保留红色通道，do_orient=False 避免二次摆正)
             try:
-                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
+                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr, do_orient=False)
             except Exception:
                 pass
             # 系统性公章脱印穿透与凸线骨架增强 (CLAHE + Unsharp Masking 滤波)
@@ -306,7 +306,7 @@ class PDFTableExtractor:
             except Exception:
                 pass
             try:
-                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
+                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr, do_orient=False)
             except Exception:
                 pass
             out = bgr
