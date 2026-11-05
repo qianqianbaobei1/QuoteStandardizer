@@ -171,6 +171,43 @@ class TestWuhanCableAndMatrixSpecs(unittest.TestCase):
         self.assertEqual(r3, 0.88)
         self.assertIn("电线系列", s3)
 
+    def test_bottom_clustered_tables_and_bv_7strand(self):
+        """测试底部并排小表：单行表头不吞下一行价格、以及未写规格二字的独立小表 BV（7股）正确切分"""
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        # R1: 顶层表头
+        ws.append(['截面', 'BV', 'BVR', 'WDZC', 'JKLYJ', 'JKLV', 'YJV'])
+        # R2~R5: 主表数据行
+        ws.append(['1.5', 100, 200, 300, 400, 500, 600])
+        ws.append(['2.5', 150, 250, 350, 450, 550, 650])
+        ws.append(['4', 200, 300, 400, 500, 600, 700])
+        ws.append(['6', 300, 400, 500, 600, 700, 800])
+        # R6: 空行
+        ws.append([])
+        # R7: 底部横幅大标题行
+        ws.append(['音响线', '', '网线', '', '', 'BV（7股）'])
+        # R8: 局部子表头行（单行表头）
+        ws.append(['规格', '单价', '规格', '单价', '', 'BV（7股）', '价格'])
+        # R9: 第一行数据行（价格 1814 绝不能被吞进列名！）
+        ws.append(['2×0.5', 1814, '超五类', 2419, '', '2.5', 2563])
+        # R10: 第二行数据
+        ws.append(['2×0.75', 2620, '六类', 3150, '', '4', 4069])
+
+        mx = _detect_matrix(ws)
+        self.assertIsNotNone(mx)
+        raw_rows, records = _collect_matrix_rows(ws, 'Sheet1', mx, {})
+
+        # 1. 验证价格 1814 没有被拼进列标题
+        audio_items = [r for r in raw_rows if '音响线' in r['raw_spec'] or '2×0.5' in r['raw_spec']]
+        self.assertTrue(len(audio_items) > 0)
+        self.assertNotIn('1814', audio_items[0]['raw_cells_dict'].get('列标题', ''), "单行表头绝不能把第一行数据的价格吞进列名")
+
+        # 2. 验证未写规格二字的独立小表 BV（7股）被正确提取，且规格为 2.5，单价为 2563
+        bv7_items = [r for r in raw_rows if 'BV（7股）' in r['raw_spec'] or '7股' in r['raw_full_line']]
+        self.assertTrue(len(bv7_items) >= 2, "未写'规格'二字的 BV（7股）独立小表必须被正确切分识别")
+        self.assertEqual(bv7_items[0]['raw_cells_dict']['规格型号'], '2.5')
+        self.assertEqual(bv7_items[0]['raw_price'], 2563.0)
+
 
 if __name__ == '__main__':
     unittest.main()

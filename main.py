@@ -727,6 +727,7 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue, hid_rows=frozenset(), hid_co
     active_titles = {c: mx.get('table_title') or '' for c in mx['value_cols']}
     max_c = ws.max_column or 1
     pending_band_titles = {}
+    consumed_hdr_rows = set()  # 记录已被双层局部表头消费掉的第二层表头行号，防止重复触发覆盖
 
     for r in range(mx['data_start'], ws.max_row + 1):
         if r in hid_rows:
@@ -739,84 +740,112 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue, hid_rows=frozenset(), hid_co
             pending_band_titles = {}
             continue
 
-        sub_hdr_cols = [c for c, v in row_vals.items() if _HEADER_ANCHOR_RE.match(v) or _PRICE_ANCHOR_RE.match(v)]
-        sub_label_candidates = [c for c in sub_hdr_cols if _HEADER_ANCHOR_RE.match(row_vals[c])]
+        # 若本行是上一行双层子表头的第 2 层（如 R14=型号, R15=规格 中的 R15），仅提取其左侧主表的数据列，不再重复更新子表头！
+        if r in consumed_hdr_rows:
+            sub_zone_header_cells = {c for c, lbl_c in active_label_cols.items() if lbl_c > mx['label_col']} | {
+                lbl_c for lbl_c in active_label_cols.values() if lbl_c > mx['label_col']
+            }
+        else:
+            sub_hdr_cols = [c for c, v in row_vals.items() if _HEADER_ANCHOR_RE.match(v) or _PRICE_ANCHOR_RE.match(v)]
+            sub_label_candidates = [c for c in sub_hdr_cols if _HEADER_ANCHOR_RE.match(row_vals[c])]
 
-        # 若整行全是非数字短文本且无局部表头锚点，作为子表分区大标题行（如 Row 26: 音响线 | SYWV电视电缆 | 电话线 | 网线）
-        num_cnt = sum(1 for v in non_empty.values() if safe_clean_price(v) > 0)
-        if num_cnt == 0 and not sub_hdr_cols:
-            cur_t = ""
-            for c in range(1, max_c + 1):
-                if c in non_empty:
-                    cur_t = non_empty[c]
-                if cur_t:
-                    pending_band_titles[c] = cur_t
-            continue
+            # 若整行全是非数字短文本且无局部表头锚点，作为子表分区大标题行（如 Row 26: 音响线 | SYWV电视电缆 | 电话线 | 网线）
+            num_cnt = sum(1 for v in non_empty.values() if safe_clean_price(v) > 0)
+            if num_cnt == 0 and not sub_hdr_cols:
+                cur_t = ""
+                for c in range(1, max_c + 1):
+                    if c in non_empty:
+                        cur_t = non_empty[c]
+                    if cur_t:
+                        pending_band_titles[c] = cur_t
+                continue
 
-        # 若上一行是型号、当前行是规格 (如 R14=型号, R15=规格)
-        if not sub_label_candidates and r > mx['data_start']:
-            prev_row_vals = {c: cell_str(ws.cell(r - 1, c)) for c in range(1, max_c + 1) if c not in hid_cols}
-            sub_label_candidates = [c for c, v in row_vals.items() if _HEADER_ANCHOR_RE.match(v) and prev_row_vals.get(c) in ("型号", "品名")]
+            sub_zone_header_cells = set()
+            if sub_label_candidates:
+                next_row_vals = {c: cell_str(ws.cell(r + 1, c)) for c in range(1, max_c + 1) if c not in hid_cols} if r < ws.max_row else {}
+                # 补充检测：同一行右侧由空列隔开的独立小表首列（如 Row 27 Col 16 的 "BV（7股）"，虽未写“规格”二字，但下一行该列是规格、右侧是价格）
+                for c in sorted(non_empty.keys()):
+                    if c not in sub_label_candidates and c not in sub_hdr_cols and (c - 1 not in non_empty):
+                        if r < ws.max_row and next_row_vals.get(c) and not _HEADER_ANCHOR_RE.match(next_row_vals.get(c, "")):
+                            if any(safe_clean_price(next_row_vals.get(cr, "")) > 0 for cr in range(c + 1, min(c + 4, max_c + 1))):
+                                sub_label_candidates.append(c)
+                sub_label_candidates = sorted(set(sub_label_candidates))
 
-        sub_zone_header_cells = set()
-        if sub_label_candidates:
-            # 若局部表头从第 1 列就开始了，说明进入了全新的底部子表带，重置旧列绑定
-            if min(sub_label_candidates) == 1:
-                active_col_paths.clear()
-                active_label_cols.clear()
-                active_units.clear()
-                active_titles.clear()
-                mx['value_cols'].clear()
+                # 关键判定：下一行 r+1 是否也是配套的第 2 层表头（必须在相同锚点列也是“规格/型号”文字，绝不能把数据行当成 h2！）
+                has_second_hdr_row = any(
+                    _HEADER_ANCHOR_RE.match(next_row_vals.get(lbl_c, "")) for lbl_c in sub_label_candidates
+                )
+                if has_second_hdr_row:
+                    consumed_hdr_rows.add(r + 1)
 
-            next_row_vals = {c: cell_str(ws.cell(r + 1, c)) for c in range(1, max_c + 1) if c not in hid_cols} if r < ws.max_row else {}
-            for i, lbl_c in enumerate(sub_label_candidates):
-                next_lbl = sub_label_candidates[i + 1] if i + 1 < len(sub_label_candidates) else (max_c + 1)
-                sub_data_cols = [c for c in range(lbl_c + 1, next_lbl) if c not in hid_cols and (row_vals.get(c) or next_row_vals.get(c))]
-                if not sub_data_cols:
-                    continue
-                # 寻找子表大标题（先看 pending_band_titles，再向上逐行寻找）
-                sub_title = pending_band_titles.get(lbl_c) or pending_band_titles.get(sub_data_cols[0]) or ""
-                if not sub_title:
-                    for up_r in (r - 1, r - 2):
-                        if up_r >= 1:
-                            val = cell_str(ws.cell(up_r, lbl_c)) or cell_str(ws.cell(up_r, sub_data_cols[0]))
-                            if val and val not in ("型号", "规格", "价格", "单价"):
-                                sub_title = val
-                                break
-                for c in sub_data_cols:
-                    sub_zone_header_cells.add(c)
-                    sub_zone_header_cells.add(lbl_c)
-                    active_label_cols[c] = lbl_c
-                    h1 = row_vals.get(c, "")
-                    h2 = next_row_vals.get(c, "")
-                    parts = []
-                    if sub_title and sub_title not in parts:
-                        parts.append(sub_title)
-                    if h1 and not _PRICE_ANCHOR_RE.match(h1) and h1 not in ("价格", "单价", "数值", "元") and h1 not in parts:
-                        parts.append(h1)
-                    if h2 and not _PRICE_ANCHOR_RE.match(h2) and h2 not in ("价格", "单价", "数值", "元") and h2 not in parts:
-                        parts.append(h2)
-                    if parts:
-                        active_col_paths[c] = "-".join(parts)
-                    # 识别局部单位
-                    for txt in (h1, h2):
-                        u_m = _UNIT_IN_HDR_RE.search(txt)
-                        if u_m:
-                            active_units[c] = u_m.group(1).replace("公里", "km")
-                        elif any(u in txt for u in ("元/公里", "元/km", "公里", "km")):
-                            active_units[c] = "km"
-                        elif any(u in txt for u in ("元/箱", "箱")):
-                            active_units[c] = "箱"
-                        elif any(u in txt for u in ("元/盘", "盘", "卷")):
-                            active_units[c] = "卷"
-                        elif any(u in txt for u in ("元/根", "元/支", "根", "支")):
-                            active_units[c] = "根"
-                        elif any(u in txt for u in ("元/米", "元/m", "米", "m")):
-                            active_units[c] = "米"
-                    if sub_title:
-                        active_titles[c] = sub_title
-                    if c not in mx['value_cols']:
-                        mx['value_cols'].append(c)
+                # 若局部表头从第 1 列开始，说明进入了全新的底部子表带，重置旧列绑定
+                if min(sub_label_candidates) == 1:
+                    active_col_paths.clear()
+                    active_label_cols.clear()
+                    active_units.clear()
+                    active_titles.clear()
+                    mx['value_cols'].clear()
+
+                for i, lbl_c in enumerate(sub_label_candidates):
+                    next_lbl = sub_label_candidates[i + 1] if i + 1 < len(sub_label_candidates) else (max_c + 1)
+                    if has_second_hdr_row:
+                        sub_data_cols = [c for c in range(lbl_c + 1, next_lbl) if c not in hid_cols and (row_vals.get(c) or next_row_vals.get(c))]
+                    else:
+                        sub_data_cols = [c for c in range(lbl_c + 1, next_lbl) if c not in hid_cols and (row_vals.get(c) or safe_clean_price(next_row_vals.get(c, "")) > 0)]
+                    if not sub_data_cols:
+                        continue
+
+                    lbl_cell_text = row_vals.get(lbl_c, "")
+                    sub_title = ""
+                    if not _HEADER_ANCHOR_RE.match(lbl_cell_text):
+                        sub_title = lbl_cell_text  # 如 "BV（7股）" 本身就是该独立小表的标题
+                    if not sub_title:
+                        sub_title = pending_band_titles.get(lbl_c) or pending_band_titles.get(sub_data_cols[0]) or ""
+                    if not sub_title:
+                        for up_r in (r - 1, r - 2):
+                            if up_r >= 1:
+                                val = cell_str(ws.cell(up_r, lbl_c)) or cell_str(ws.cell(up_r, sub_data_cols[0]))
+                                if val and not _HEADER_ANCHOR_RE.match(val) and not _PRICE_ANCHOR_RE.match(val) and not _is_number_text(val):
+                                    sub_title = val
+                                    break
+
+                    for c in sub_data_cols:
+                        sub_zone_header_cells.add(c)
+                        sub_zone_header_cells.add(lbl_c)
+                        active_label_cols[c] = lbl_c
+                        h1 = row_vals.get(c, "")
+                        # 只有当下一行确实是第 2 层表头时才读取 h2，严禁把第一行数据的价格拼进表头！
+                        h2 = next_row_vals.get(c, "") if has_second_hdr_row else ""
+                        parts = []
+                        if sub_title and sub_title not in parts:
+                            parts.append(sub_title)
+                        if h1 and not _PRICE_ANCHOR_RE.match(h1) and h1 not in ("价格", "单价", "数值", "元") and h1 not in parts:
+                            parts.append(h1)
+                        if h2 and not _PRICE_ANCHOR_RE.match(h2) and h2 not in ("价格", "单价", "数值", "元") and h2 not in parts:
+                            parts.append(h2)
+                        active_col_paths[c] = "-".join(parts) if parts else (sub_title or h1 or f"第{c}列")
+
+                        for txt in (h1, h2):
+                            if not txt:
+                                continue
+                            u_m = _UNIT_IN_HDR_RE.search(txt)
+                            if u_m:
+                                active_units[c] = u_m.group(1).replace("公里", "km")
+                            elif any(u in txt for u in ("元/公里", "元/km", "公里", "km")):
+                                active_units[c] = "km"
+                            elif any(u in txt for u in ("元/箱", "箱")):
+                                active_units[c] = "箱"
+                            elif any(u in txt for u in ("元/盘", "盘", "卷")):
+                                active_units[c] = "卷"
+                            elif any(u in txt for u in ("元/根", "元/支", "根", "支")):
+                                active_units[c] = "根"
+                            elif any(u in txt for u in ("元/米", "元/m", "米", "m")):
+                                active_units[c] = "米"
+                        if sub_title:
+                            active_titles[c] = sub_title
+                        if c not in mx['value_cols']:
+                            mx['value_cols'].append(c)
+                pending_band_titles = {}
 
         for c in list(mx['value_cols']):
             if c in hid_cols:
