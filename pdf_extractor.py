@@ -509,17 +509,18 @@ class PDFTableExtractor:
             if m and not re.match(r'^[（\(]?(集团|股份|有限|公司)', m.group(1)):
                 return m.group(1).replace('(', '（').replace(')', '）')
 
-        # 兜底：尝试通过 SealEnhancerService 从页面中检测并扶正公章提取供应商
+        # 兜底：尝试通过 SealEnhancerService 从页面中检测并扶正公章提取供应商 (优先末页与首页)
         try:
             with fitz.open(self.pdf_path) as doc:
-                if len(doc) > 0:
-                    page = doc[0]
+                pages_to_check = [doc[-1], doc[0]] if len(doc) > 1 else ([doc[0]] if len(doc) > 0 else [])
+                for page in pages_to_check:
                     pix = page.get_pixmap(dpi=150)
                     bgr = cv2.cvtColor(np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n),
                                        cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
                     seal_res = _SEAL_ENHANCER.process_document_image(bgr)
                     if seal_res.get("has_seal"):
-                        for key in ("polar_strip_img", "upright_seal_img"):
+                        # 优先读取旋转扶正后的正立印章，其次读取极坐标展开条
+                        for key in ("upright_seal_img", "polar_strip_img"):
                             target_img = seal_res.get(key)
                             if target_img is not None:
                                 txt = self._ocr_seal_image(target_img)

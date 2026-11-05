@@ -193,7 +193,8 @@ class SealEnhancerService:
 
             rot_angle = self.estimate_star_orientation(seal_crop, center, radius)
             upright_seal = self.rotate_seal_upright(seal_crop, center, rot_angle)
-            polar_strip = self.unwrap_seal_polar(seal_crop, center, radius)
+            # 必须对已经扶正后的公章做极坐标展开，防止倒置印章在未扶正时展开将企业名称拦腰切断
+            polar_strip = self.unwrap_seal_polar(upright_seal, center, radius)
 
             result.update({
                 "upright_seal_img": upright_seal,

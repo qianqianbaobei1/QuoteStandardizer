@@ -160,8 +160,8 @@ class TestQuoteStandardizerHealth(unittest.TestCase):
             builder.build_from_canonical_items([item], test_out_path, img_dir=os.path.join(tempfile.gettempdir(), "_qs_builder_tmp_imgs"))
             wb = openpyxl.load_workbook(test_out_path)
             
-            # 契约：只要【标准化报价】单张 Sheet（审计内容靠主表红字黄底+批注承载）
-            self.assertEqual(wb.sheetnames, ['标准化报价'])
+            # 契约：双 Sheet 标准交付（【客户原始解析】+【标准化报价】）
+            self.assertEqual(wb.sheetnames, ['客户原始解析', '标准化报价'])
 
             ws_main = wb['标准化报价']
             self.assertEqual(ws_main.max_column, 33)

@@ -206,8 +206,7 @@ class GeminiPDFTableExtractor:
         # 兜底: 若 SDK 失败或未安装，使用官方 REST API (https://generativelanguage.googleapis.com/v1beta/interactions)
         if not raw_json_str:
             print("[Gemini B-Rail] 启动官方 REST API 备选调用通道...")
-            with open(self.pdf_path, "rb") as f:
-                b64_pdf = base64.b64encode(f.read()).decode("utf-8")
+            b64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
 
             rest_url = "https://generativelanguage.googleapis.com/v1beta/interactions"
             payload = {

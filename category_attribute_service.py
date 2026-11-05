@@ -414,27 +414,47 @@ def retrieve_category_candidates(
         return []
     cands = _SEARCH_INDEX.search(std_name, raw_cat, raw_spec, sheet_prior_t2=sheet_prior, top_k=top_k)
 
-    # 同族展开：本表主业二级大类下的其余三级类别补进候选池。
-    # 原表写的是生僻俗称、字面一个字也不命中时，靠这一手让模型仍能在这十几个同族节点里做选择题。
-    # 按一级大类展开：二级到三级往往只有 1 个孩子（“光源”就只挂了一个节点），只按二级展开等于没展开
+    # 同族展开分两轮：第一轮只补同二级大类（本表主业）的同族三级类；若不足 10 个，第二轮才按同一级大类补充
+    # 彻底杜绝一级大类排在前面的几百个无关类目抢占名额的 Bug
     if sheet_prior and len(cands) < 10:
-        prior_t1 = {t1 for t1, t2, _t3, _c in _CATALOG_ROWS if t2 in sheet_prior}
         seen_codes = {c["code"] for c in cands}
         floor_score = min([c["score"] for c in cands], default=1.0) * 0.5
+
+        # 第一轮：绝对优先填充本表二级类别 (sheet_prior) 下的同族三级类
         for e in _SEARCH_INDEX.entries:
-            if e["code"] in seen_codes or (e["t2"] not in sheet_prior and e["t1"] not in prior_t1):
+            if e["code"] in seen_codes:
                 continue
-            cands.append({
-                "level1": e["t1"],
-                "level2": e["t2"],
-                "level3": e["t3"],
-                "code": e["code"],
-                "score": round(floor_score, 2),
-                "reason": f"同表主业({e['t1']}/{e['t2']})同族候选",
-            })
-            seen_codes.add(e["code"])
-            if len(cands) >= 10:
-                break
+            if e["t2"] in sheet_prior:
+                cands.append({
+                    "level1": e["t1"],
+                    "level2": e["t2"],
+                    "level3": e["t3"],
+                    "code": e["code"],
+                    "score": round(floor_score, 2),
+                    "reason": f"同表主业二级类({e['t2']})同族候选",
+                })
+                seen_codes.add(e["code"])
+                if len(cands) >= 10:
+                    break
+
+        # 第二轮：若二级分类全部补完后仍不足 10 个，才允许同一级大类 (prior_t1) 兜底补充
+        if len(cands) < 10:
+            prior_t1 = {t1 for t1, t2, _t3, _c in _CATALOG_ROWS if t2 in sheet_prior}
+            for e in _SEARCH_INDEX.entries:
+                if e["code"] in seen_codes:
+                    continue
+                if e["t1"] in prior_t1:
+                    cands.append({
+                        "level1": e["t1"],
+                        "level2": e["t2"],
+                        "level3": e["t3"],
+                        "code": e["code"],
+                        "score": round(floor_score * 0.8, 2),
+                        "reason": f"同表一级大类({e['t1']})同族候选",
+                    })
+                    seen_codes.add(e["code"])
+                    if len(cands) >= 10:
+                        break
 
     for c in cands:
         attrs = _ATTR_SCHEMA_MAP.get(c["level3"], [])
@@ -495,7 +515,15 @@ def validate_and_normalize_specs(
     返回: (normalized_specs, missing_required_attrs, enum_warnings)
     """
     _load_catalog()
-    schema = _ATTR_SCHEMA_MAP.get(str(level3_name or "").strip(), [])
+    # 支持传入标准三级名称 (如 '彩钢板') 或标准分类编码 (如 '12-09-07' / '120907')
+    lvl3 = str(level3_name or "").strip()
+    if lvl3 in _CODE_MAP:
+        lvl3 = _CODE_MAP[lvl3][2]
+    else:
+        fmt_c = _format_cat_code(lvl3)
+        if fmt_c in _CODE_MAP:
+            lvl3 = _CODE_MAP[fmt_c][2]
+    schema = _ATTR_SCHEMA_MAP.get(lvl3, [])
     if not specs or not isinstance(specs, dict):
         specs = {}
     clean_specs: Dict[str, str] = {str(k).strip(): str(v).strip() for k, v in specs.items() if str(v or "").strip()}

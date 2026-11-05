@@ -970,6 +970,15 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         if m_contact.group(2) and not terms_info.get("contact_phone"):
             terms_info["contact_phone"] = m_contact.group(2).strip()
 
+    # 将识别到的联系人与手机号真正落盘入库：合入 terms_info["quote_desc"]，落盘至交付 Excel 的【报价说明】列
+    c_person = terms_info.get("contact_person", "").strip()
+    c_phone = terms_info.get("contact_phone", "").strip()
+    if c_person or c_phone:
+        c_str = f"联系人:{c_person} {c_phone}".strip()
+        cur_desc = (terms_info.get("quote_desc") or "").strip()
+        if c_str not in cur_desc:
+            terms_info["quote_desc"] = f"{cur_desc}；{c_str}".strip("；")
+
     # 从横幅补充税率与含税信息（必须紧邻冒号或数字，避免表头跨行误判）
     if not terms_info.get("tax_rate"):
         m_tax = re.search(r'(?:含税|税率)[ \t]*[：:][ \t]*(\d{1,2}%|\d{1,2}个点)', banner_blob)

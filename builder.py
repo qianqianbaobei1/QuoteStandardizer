@@ -16,7 +16,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from PIL import Image as PILImage
-from models import (CanonicalMaterialItem, GROUP_ADVICE, SEVERITY_ORDER, classify_note, note_field,
+from models import (CanonicalMaterialItem, SourceRowRecord, GROUP_ADVICE, SEVERITY_ORDER, classify_note, note_field,
                     summarize_audit)
 
 # 未配置模板时使用的内置标准表头 (GenOffice 33 列)
@@ -438,6 +438,66 @@ class StandardizedWorkbookBuilder:
                 ws_out.column_dimensions[col_letter].width = 15
             else:
                 ws_out.column_dimensions[col_letter].width = 13
+
+        # 真正兑现双 Sheet 标准交付架构：生成 Sheet 1【客户原始解析】
+        ws_raw = wb_out.create_sheet(title='客户原始解析', index=0)
+        ws_raw.views.sheetView[0].showGridLines = True
+        raw_headers = ['序号', '工作表/页码', '原表行标识', '原表文本内容', '原表单价', '解析判定', '说明备注']
+        ws_raw.row_dimensions[1].height = 32
+
+        raw_header_fill = PatternFill(start_color='203764', end_color='203764', fill_type='solid')
+        raw_header_font = Font(name='宋体', size=11, bold=True, color='FFFFFF')
+        for c_idx, rh in enumerate(raw_headers, 1):
+            c = ws_raw.cell(row=1, column=c_idx, value=rh)
+            c.fill = raw_header_fill
+            c.font = raw_header_font
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.border = thin_border
+
+        raw_row_idx = 2
+        rec_list = reconciliation or []
+        if not rec_list:
+            for it in items:
+                rec_list.append(SourceRowRecord(
+                    source_ref=getattr(it, 'source_ref', '') or f"R{raw_row_idx}",
+                    sheet=getattr(it, 'file_page', '') or '原表',
+                    row=raw_row_idx,
+                    raw_text=getattr(it, 'raw_full_line', '') or getattr(it, 'raw_spec', ''),
+                    raw_price=getattr(it, 'market_price', 0.0),
+                    decision='item'
+                ))
+
+        for idx, rec in enumerate(rec_list, 1):
+            r_fill = alt_fill if (raw_row_idx % 2 == 0) else white_fill
+            s_ref = getattr(rec, 'source_ref', '')
+            s_sheet = getattr(rec, 'sheet', '')
+            s_text = getattr(rec, 'raw_text', '')
+            s_price = getattr(rec, 'raw_price', None)
+            s_dec = getattr(rec, 'decision', 'item')
+            s_note = getattr(rec, 'issue', '') or ('' if s_dec == 'item' else s_dec)
+
+            row_data = [idx, s_sheet, s_ref, safe_excel_val(s_text), s_price, s_dec, safe_excel_val(s_note)]
+            for col_i, val in enumerate(row_data, 1):
+                cell = ws_raw.cell(row=raw_row_idx, column=col_i, value=val)
+                cell.font = body_font
+                cell.fill = r_fill
+                cell.border = thin_border
+                if col_i in (1, 2, 3, 6):
+                    cell.alignment = center_align
+                elif col_i == 5 and isinstance(val, (int, float)):
+                    cell.alignment = right_align
+                    cell.number_format = '0.00'
+                else:
+                    cell.alignment = multiline_left_align
+            raw_row_idx += 1
+
+        ws_raw.column_dimensions['A'].width = 8
+        ws_raw.column_dimensions['B'].width = 14
+        ws_raw.column_dimensions['C'].width = 16
+        ws_raw.column_dimensions['D'].width = 65
+        ws_raw.column_dimensions['E'].width = 14
+        ws_raw.column_dimensions['F'].width = 18
+        ws_raw.column_dimensions['G'].width = 30
 
         # 交付规范：保留【客户原始解析】与【标准化报价】双 Sheet，仅清除多余的调试/临时对账 Sheet
         for s in list(wb_out.sheetnames):
