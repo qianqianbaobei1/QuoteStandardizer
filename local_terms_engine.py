@@ -234,7 +234,7 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
     m_prov = re.search(r'([一-龥]{2,6}(?:省|市|自治区))(?:\s*范围)?(?:内)?(?:含运费|包运)', full_text)
     if m_prov and not terms.get('province'):
         terms['province'] = m_prov.group(1).strip()
-    if '湖北' in full_text and any(k in full_text for k in ('武汉', '第二电线电缆')):
+    if '湖北' in full_text and '武汉' in full_text:
         if not terms.get('province'):
             terms['province'] = '湖北省'
         if not terms.get('city'):

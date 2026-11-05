@@ -12,14 +12,17 @@ import json
 import os
 import re
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional, Any
 
+import cv2
 import fitz  # PyMuPDF
+import numpy as np
 import openpyxl
 import requests
 
 from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_THINKING_BUDGET, LLM_MAX_RETRIES
-from universal_pdf_grid_engine import unify_and_broadcast_cross_page_headers
+from universal_pdf_grid_engine import unify_and_broadcast_cross_page_headers, auto_orient_page_upright
+from seal_enhancer_service import SealEnhancerService
 
 try:
     from google import genai
@@ -87,145 +90,120 @@ class GeminiPDFTableExtractor:
         except Exception as e:
             print(f"[GeminiPDFTableExtractor] 打开 PDF 失败: {e}")
 
-    def to_workbook(self) -> openpyxl.Workbook:
+    def _prepare_enhanced_pdf_bytes(self, page_range: Optional[Tuple[int, int]] = None) -> bytes:
         """
-        调用 Gemini 3.8 Flash 原生全模态读取 PDF，并将结果转换为 openpyxl.Workbook
+        为 Gemini B 轨准备预处理后的高保真 PDF 字节流：
+        1. 针对扫描件或图片：调用 auto_orient_page_upright 四向摆正 + balance_illumination_and_orient LAB 亮度通道均衡；
+        2. 针对纯矢量文字页：直接原样抽取对应页面以保留 100% 矢量字形与极速吞吐；
+        3. 支持按页区间 page_range=(start_idx, end_idx) 分批打包，防止长文档单次输出超 Token 截断或偷懒跳行。
         """
-        if not GEMINI_API_KEY:
-            raise ValueError("未配置 GEMINI_API_KEY，无法使用 Gemini 原生全模态线路")
+        enhancer = SealEnhancerService()
+        ext = os.path.splitext(self.pdf_path)[1].lower()
+        if ext in ('.png', '.jpg', '.jpeg'):
+            img_doc = fitz.open(self.pdf_path)
+            src_doc = fitz.open("pdf", img_doc.convert_to_pdf())
+            img_doc.close()
+        else:
+            src_doc = fitz.open(self.pdf_path)
 
-        print(f"[Gemini B-Rail] 启动 Google GenAI 原生全模态直传流水线: {self.pdf_path}")
-        print(f"[*] 使用模型: {GEMINI_MODEL} | 文档总页数: {self.total_pages}")
+        out_doc = fitz.open()
+        p_start, p_end = page_range if page_range else (0, len(src_doc))
+        try:
+            for p_idx in range(p_start, min(p_end, len(src_doc))):
+                page = src_doc[p_idx]
+                text_len = len(re.sub(r'\s', '', page.get_text()))
+                # 原生矢量电子版且字数充足：直接拷贝矢量页
+                if ext not in ('.png', '.jpg', '.jpeg') and text_len >= 50:
+                    out_doc.insert_pdf(src_doc, from_page=p_idx, to_page=p_idx)
+                    continue
 
-        file_size = os.path.getsize(self.pdf_path)
+                # 扫描页/图片：执行 5ms 四向摆正 + LAB 阴影均衡 (100% 保留红色公章色度)
+                pix = page.get_pixmap(dpi=200)
+                arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+                bgr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+                try:
+                    bgr = auto_orient_page_upright(bgr)
+                except Exception:
+                    pass
+                try:
+                    bgr = enhancer.balance_illumination_and_orient(bgr, do_orient=False)
+                except Exception:
+                    pass
+
+                ok, buf = cv2.imencode(".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+                if ok:
+                    img_pdf = fitz.open(stream=buf.tobytes(), filetype="jpg").convert_to_pdf()
+                    with fitz.open("pdf", img_pdf) as tmp_p:
+                        out_doc.insert_pdf(tmp_p)
+            return out_doc.tobytes()
+        finally:
+            out_doc.close()
+            src_doc.close()
+
+    def _call_gemini_raw(self, client, pdf_bytes: bytes) -> str:
+        """调用 Gemini 原生接口 (官方 SDK 优先，REST API 兜底)，强制配置 max_output_tokens=65536"""
+        b64_data = base64.b64encode(pdf_bytes).decode("utf-8")
         raw_json_str = None
-        start_t = time.time()
 
-        # 优先使用 google-genai 官方 SDK
-        if genai:
-            http_opts = types.HttpOptions(timeout=60.0) if hasattr(types, "HttpOptions") else None
-            client_kwargs = {"api_key": GEMINI_API_KEY}
-            if http_opts:
-                client_kwargs["http_options"] = http_opts
-            client = genai.Client(**client_kwargs)
-            uploaded_file = None
+        if client:
+            for attempt in range(1, LLM_MAX_RETRIES + 2):
+                cur_model = GEMINI_MODEL if attempt == 1 else (GEMINI_FALLBACK_MODEL or GEMINI_MODEL)
+                try:
+                    if hasattr(client, "interactions"):
+                        interaction = client.interactions.create(
+                            model=cur_model,
+                            input=[
+                                {
+                                    "type": "document",
+                                    "data": b64_data,
+                                    "mime_type": "application/pdf"
+                                },
+                                {"type": "text", "text": GEMINI_PDF_TRANSCRIPTION_PROMPT}
+                            ]
+                        )
+                        raw_json_str = getattr(interaction, "output_text", None)
+                    else:
+                        pdf_part = types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
+                        config_kwargs = {
+                            "response_mime_type": "application/json",
+                            "temperature": 0.0,
+                            "max_output_tokens": 65536,
+                        }
+                        if GEMINI_THINKING_BUDGET and hasattr(types, "ThinkingConfig"):
+                            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET)
+                        response = client.models.generate_content(
+                            model=cur_model,
+                            contents=[pdf_part, GEMINI_PDF_TRANSCRIPTION_PROMPT],
+                            config=types.GenerateContentConfig(**config_kwargs)
+                        )
+                        raw_json_str = response.text
+                    if raw_json_str:
+                        break
+                except Exception as e:
+                    print(f"[Gemini B-Rail] SDK ({cur_model}) 调用异常 (重试 {attempt}/{LLM_MAX_RETRIES}): {e}")
+                    time.sleep(2)
 
-            try:
-                # 兼容图片格式：若为 .png/.jpg/.jpeg，先借助 PyMuPDF 转为标准 PDF 字节流，保证格式完全兼容
-                ext = os.path.splitext(self.pdf_path)[1].lower()
-                if ext in ('.png', '.jpg', '.jpeg'):
-                    img_doc = fitz.open(self.pdf_path)
-                    pdf_bytes = img_doc.convert_to_pdf()
-                    img_doc.close()
-                else:
-                    with open(self.pdf_path, "rb") as f:
-                        pdf_bytes = f.read()
-
-                # 方式 1: < 20MB 文件使用 Base64 Inline 方式传输 (官方文档推荐示例)
-                if len(pdf_bytes) < 20 * 1024 * 1024:
-                    b64_data = base64.b64encode(pdf_bytes).decode("utf-8")
-
-                    for attempt in range(1, LLM_MAX_RETRIES + 2):
-                        cur_model = GEMINI_MODEL if attempt == 1 else (GEMINI_FALLBACK_MODEL or GEMINI_MODEL)
-                        try:
-                            # 优先尝试官方文档的 interactions.create 接口
-                            if hasattr(client, "interactions"):
-                                interaction = client.interactions.create(
-                                    model=cur_model,
-                                    input=[
-                                        {
-                                            "type": "document",
-                                            "data": b64_data,
-                                            "mime_type": "application/pdf"
-                                        },
-                                        {"type": "text", "text": GEMINI_PDF_TRANSCRIPTION_PROMPT}
-                                    ]
-                                )
-                                raw_json_str = getattr(interaction, "output_text", None)
-                            else:
-                                # 回退到 models.generate_content
-                                pdf_part = types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
-                                response = client.models.generate_content(
-                                    model=cur_model,
-                                    contents=[pdf_part, GEMINI_PDF_TRANSCRIPTION_PROMPT],
-                                    config=types.GenerateContentConfig(
-                                        response_mime_type="application/json",
-                                        temperature=0.0,
-                                        thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET)
-                                    )
-                                )
-                                raw_json_str = response.text
-                            if raw_json_str:
-                                break
-                        except Exception as e:
-                            print(f"[Gemini B-Rail] SDK ({cur_model}) 调用异常 (重试 {attempt}/{LLM_MAX_RETRIES}): {e}")
-                            time.sleep(2)
-                else:
-                    # 方式 2: >= 20MB 文件使用 Files API 上传
-                    print(f"[*] 文件大小 {file_size / (1024*1024):.1f}MB，使用 Google Files API 上传...")
-                    uploaded_file = client.files.upload(file=self.pdf_path)
-                    
-                    for attempt in range(1, LLM_MAX_RETRIES + 2):
-                        cur_model = GEMINI_MODEL if attempt == 1 else (GEMINI_FALLBACK_MODEL or GEMINI_MODEL)
-                        try:
-                            if hasattr(client, "interactions"):
-                                interaction = client.interactions.create(
-                                    model=cur_model,
-                                    input=[
-                                        {
-                                            "type": "document",
-                                            "uri": uploaded_file.uri,
-                                            "mime_type": uploaded_file.mime_type or "application/pdf"
-                                        },
-                                        {"type": "text", "text": GEMINI_PDF_TRANSCRIPTION_PROMPT}
-                                    ]
-                                )
-                                raw_json_str = getattr(interaction, "output_text", None)
-                            else:
-                                response = client.models.generate_content(
-                                    model=cur_model,
-                                    contents=[uploaded_file, GEMINI_PDF_TRANSCRIPTION_PROMPT],
-                                    config=types.GenerateContentConfig(
-                                        response_mime_type="application/json",
-                                        temperature=0.0,
-                                        thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET)
-                                    )
-                                )
-                                raw_json_str = response.text
-                            if raw_json_str:
-                                break
-                        except Exception as e:
-                            print(f"[Gemini B-Rail] Files API ({cur_model}) 调用异常 (重试 {attempt}/{LLM_MAX_RETRIES}): {e}")
-                            time.sleep(2)
-            finally:
-                if uploaded_file:
-                    try:
-                        client.files.delete(name=uploaded_file.name)
-                    except Exception:
-                        pass
-
-        # 兜底: 若 SDK 失败或未安装，使用官方 REST API (https://generativelanguage.googleapis.com/v1beta/interactions)
+        # 兜底: 若 SDK 失败或未安装，使用官方 REST API
         if not raw_json_str:
             print("[Gemini B-Rail] 启动官方 REST API 备选调用通道...")
-            b64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
-
             rest_url = "https://generativelanguage.googleapis.com/v1beta/interactions"
             payload = {
                 "model": GEMINI_MODEL,
                 "input": [
                     {
                         "type": "document",
-                        "data": b64_pdf,
+                        "data": b64_data,
                         "mime_type": "application/pdf"
                     },
                     {"type": "text", "text": GEMINI_PDF_TRANSCRIPTION_PROMPT}
-                ]
+                ],
+                "generationConfig": {"maxOutputTokens": 65536}
             }
             headers = {
                 "Content-Type": "application/json",
                 "x-goog-api-key": GEMINI_API_KEY
             }
-            resp = requests.post(rest_url, json=payload, headers=headers, timeout=60)
+            resp = requests.post(rest_url, json=payload, headers=headers, timeout=90)
             if resp.status_code == 200:
                 res_data = resp.json()
                 raw_json_str = res_data.get("output_text") or (
@@ -234,14 +212,11 @@ class GeminiPDFTableExtractor:
             else:
                 raise RuntimeError(f"REST API 调用失败 [{resp.status_code}]: {resp.text}")
 
-        if not raw_json_str:
-            raise RuntimeError("Gemini 返回内容为空")
+        return raw_json_str or ""
 
-        elapsed = time.time() - start_t
-        print(f"[Gemini B-Rail] 原生全模态转录完成，总耗时: {elapsed:.2f}s")
-
-        # 解析与格式化
-        clean_json_str = raw_json_str.strip()
+    @staticmethod
+    def _clean_and_parse_json(raw_json_str: str) -> dict:
+        clean_json_str = (raw_json_str or "").strip()
         m_block = re.search(r'```(?:json)?\s*(\{.*\}|\[.*\])\s*```', clean_json_str, re.DOTALL)
         if m_block:
             clean_json_str = m_block.group(1).strip()
@@ -252,13 +227,54 @@ class GeminiPDFTableExtractor:
             m_brace = re.search(r'(\{.*\})', clean_json_str, re.DOTALL)
             if m_brace:
                 clean_json_str = m_brace.group(1).strip()
+        return json.loads(clean_json_str)
 
-        try:
-            parsed = json.loads(clean_json_str)
-        except Exception as err:
-            print(f"[Gemini B-Rail] JSON 解析失败: {err}，原始内容预览: {clean_json_str[:300]}")
-            raise err
-        return self._build_workbook_from_gemini_json(parsed)
+    def to_workbook(self) -> openpyxl.Workbook:
+        """
+        调用 Gemini 3.8 Flash 原生全模态读取 PDF，并将结果转换为 openpyxl.Workbook
+        """
+        if not GEMINI_API_KEY:
+            raise ValueError("未配置 GEMINI_API_KEY，无法使用 Gemini 原生全模态线路")
+
+        print(f"[Gemini B-Rail] 启动 Google GenAI 原生全模态直传流水线: {self.pdf_path}")
+        print(f"[*] 使用模型: {GEMINI_MODEL} | 文档总页数: {self.total_pages}")
+
+        client = None
+        if genai:
+            http_opts = types.HttpOptions(timeout=90.0) if hasattr(types, "HttpOptions") else None
+            client_kwargs = {"api_key": GEMINI_API_KEY}
+            if http_opts:
+                client_kwargs["http_options"] = http_opts
+            client = genai.Client(**client_kwargs)
+
+        all_pages: List[Dict[str, Any]] = []
+        # 当总页数 > 4 时，按每 3 页一批进行分批打包与识别，杜绝长表注意力跳行与 Token 截断
+        batch_size = 3 if self.total_pages > 4 else max(1, self.total_pages)
+
+        for p_start in range(0, max(1, self.total_pages), batch_size):
+            p_end = min(self.total_pages, p_start + batch_size) if self.total_pages > 0 else 1
+            if self.total_pages > 4:
+                print(f"    [*] [B轨分批] 正在执行第 {p_start + 1} ~ {p_end} 页预处理与识别 (共 {self.total_pages} 页)...")
+
+            pdf_bytes = self._prepare_enhanced_pdf_bytes((p_start, p_end))
+            raw_json = self._call_gemini_raw(client, pdf_bytes)
+            try:
+                parsed = self._clean_and_parse_json(raw_json)
+            except Exception as err:
+                print(f"[Gemini B-Rail] JSON 解析失败: {err}，原始内容预览: {raw_json[:300]}")
+                raise err
+
+            batch_pages = parsed.get("pages", []) if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else [])
+            for p_info in batch_pages:
+                try:
+                    rel_pno = int(p_info.get("page_number", 1))
+                except Exception:
+                    rel_pno = 1
+                if rel_pno <= batch_size and p_start > 0:
+                    p_info["page_number"] = p_start + rel_pno
+                all_pages.append(p_info)
+
+        return self._build_workbook_from_gemini_json({"pages": all_pages})
 
     def _build_workbook_from_gemini_json(self, data: dict) -> openpyxl.Workbook:
         """
