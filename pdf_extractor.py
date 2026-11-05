@@ -149,6 +149,11 @@ class PDFTableExtractor:
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
         if enhanced:
             bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            # 杀手锏 5：手机拍照与扫描件光照均衡 (去阴影暗角，增强细小数字与小数点对比度)
+            try:
+                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
+            except Exception:
+                pass
             # 系统性公章脱印穿透与凸线骨架增强 (CLAHE + Unsharp Masking 滤波)
             try:
                 gray = _SEAL_ENHANCER.penetrate_and_enhance_text(bgr)
@@ -156,7 +161,12 @@ class PDFTableExtractor:
                 gray = cv2.cvtColor(self._remove_red(bgr), cv2.COLOR_BGR2GRAY)
             out = (255 * (gray / 255.0) ** VISION_GAMMA).astype(np.uint8)
         else:
-            out = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            try:
+                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
+            except Exception:
+                pass
+            out = bgr
         scale = VISION_MAX_EDGE / max(out.shape[:2])
         if scale < 1:
             out = cv2.resize(out, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
@@ -240,6 +250,11 @@ class PDFTableExtractor:
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
         if enhanced:
             bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            # 杀手锏 5：手机拍照与扫描件光照均衡 (去阴影暗角，增强细小数字与小数点对比度)
+            try:
+                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
+            except Exception:
+                pass
             # 系统性公章脱印穿透与凸线骨架增强 (CLAHE + Unsharp Masking 滤波)
             try:
                 gray = _SEAL_ENHANCER.penetrate_and_enhance_text(bgr)
@@ -247,7 +262,12 @@ class PDFTableExtractor:
                 gray = cv2.cvtColor(self._remove_red(bgr), cv2.COLOR_BGR2GRAY)
             out = (255 * (gray / 255.0) ** VISION_GAMMA).astype(np.uint8)
         else:
-            out = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            try:
+                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
+            except Exception:
+                pass
+            out = bgr
         H, W = out.shape[:2]
         tile_h = int(H / num_tiles)
         overlap_h = int(tile_h * 0.1) # 10% 物理重叠

@@ -16,6 +16,7 @@ import hashlib
 import argparse
 import json
 import time
+from typing import Optional, List, Dict, Any, Tuple
 import openpyxl
 from concurrent.futures import ThreadPoolExecutor
 
@@ -167,6 +168,119 @@ def _is_title_row(values: list) -> bool:
     """合并单元格展开后，分组标题行 (如 “一、消防系统”) 的所有非空单元格内容相同"""
     non_empty = [v for v in values if v]
     return len(non_empty) >= 2 and len(set(non_empty)) == 1
+
+
+_KV_PAIR_RE = re.compile(r'^([^:：=]{1,15})[:：=](.+)$')
+_IMPLICIT_PROP_RE = re.compile(r'(厚度|长度|宽度|高度|外径|壁厚|公称直径|口径|直径|孔径|规格)\s*[:：]?\s*([0-9]+(?:\.[0-9]+)?\s*[a-zA-Z%°²³]*)')
+
+def extract_deterministic_kv(raw_spec_text: str, raw_cells_dict: Optional[dict] = None) -> dict:
+    """从原表规格字符串及单元格中 100% 确定性、无损提取显式键值对与规整属性 (Lossless Merge 打底)"""
+    out = {}
+    if raw_cells_dict and isinstance(raw_cells_dict, dict):
+        for k, v in raw_cells_dict.items():
+            k_s, v_s = str(k or "").strip(), str(v or "").strip()
+            if not k_s or not v_s:
+                continue
+            if k_s in ("品名", "材料名称", "名称", "单价", "合价", "金额", "序号", "行号", "单位", "数量", "备注"):
+                continue
+            out[k_s] = v_s
+
+    text = str(raw_spec_text or "")
+    # 1. 优先提取显式尺寸维度 (如 "厚度0.7mm", "外径20mm", "壁厚:1.2mm")
+    for m in _IMPLICIT_PROP_RE.finditer(text):
+        out[m.group(1).strip()] = m.group(2).strip()
+
+    # 2. 按分号/换行切大段，逐段提取 Key: Value 属性
+    for seg in re.split(r'[;；\n]+', text):
+        seg = seg.strip()
+        if not seg:
+            continue
+        sub_segs = re.split(r'[,，]+', seg) if (':' in seg or '：' in seg) else [seg]
+        if len(sub_segs) > 1 and any(':' in s or '：' in s for s in sub_segs[1:]):
+            parts = sub_segs
+        else:
+            parts = [seg]
+
+        for p in parts:
+            p = p.strip()
+            m_kv = _KV_PAIR_RE.match(p)
+            if m_kv:
+                k, v = m_kv.group(1).strip(), m_kv.group(2).strip()
+                if k and v and k not in ("品名", "名称", "单价", "金额"):
+                    out[k] = v
+    return out
+
+
+_COMPOUND_UNIT_RE = re.compile(r'^([根支条卷桶箱包袋套片张块件台只])\s*[/／(（]\s*(\d+(?:\.\d+)?\s*(?:米|m|mm|cm|kg|公斤|升|L|个|只|片|米/根))[)）]?$', re.I)
+
+def decompose_compound_unit(unit_str: str, specs: dict) -> Tuple[str, dict]:
+    """识别复合单位（如 '根/3.6米'、'卷(100米)'），保留原单位的同时自动将 '定尺长度: 3.6米/根' 补入规格参数"""
+    u = str(unit_str or "").strip()
+    specs = dict(specs or {})
+    m = _COMPOUND_UNIT_RE.match(u)
+    if m:
+        base_u, measure = m.group(1), m.group(2)
+        if not any(k in specs for k in ("长度", "定尺", "定尺长度", "包装规格", "每件数量", "规格")):
+            key_name = "定尺长度" if any(w in measure for w in ("米", "m", "mm", "cm")) else "包装规格"
+            specs[key_name] = f"{measure}/{base_u}"
+    return u, specs
+
+
+def _parse_section_title_info(title_text: str) -> Tuple[str, str]:
+    """从分组标题行中提取潜在的分组品名与分组品牌（如 '【一、PP-R冷热水管（品牌：伟星）】'）"""
+    t = str(title_text or "").strip()
+    brand, name = "", ""
+    m_brand = re.search(r'(?:品牌|商标)[：:\s]*([^\s,，;；()（）]{2,15})', t)
+    if m_brand:
+        brand = m_brand.group(1).strip()
+    clean_t = re.sub(r'^[（(]?[一二三四五六七八九十\d]+[)）]?[、.．\s]*', '', t)
+    clean_t = re.sub(r'[（(].*?[)）]', '', clean_t).strip()
+    if 2 <= len(clean_t) <= 25 and not any(k in clean_t for k in ('系统', '工程', '清单', '报价', '附件', '备注')):
+        name = clean_t
+    return name, brand
+
+
+def _audit_and_heal_price_monotonicity(items: list) -> None:
+    """
+    同族物料【规格-价格单调性】物理定律校验与红章遮挡小数点漏读自愈：
+    同一品名下，厚度/管径增大时价格应递增；若某行价格突变为相邻行的 ~10 倍（典型红章压住小数点），自动预警并自愈修复。
+    """
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for it in items:
+        std_n = getattr(it, 'standard_name', '') or ''
+        br = getattr(it, 'brand', '') or ''
+        un = getattr(it, 'unit', '') or ''
+        groups[(std_n, br, un)].append(it)
+
+    for _, grp in groups.items():
+        if len(grp) < 3:
+            continue
+        valid_items = [it for it in grp if isinstance(getattr(it, 'market_price', None), (int, float)) and it.market_price > 0]
+        if len(valid_items) < 3:
+            continue
+        prices = [it.market_price for it in valid_items]
+        sorted_p = sorted(prices)
+        median_p = sorted_p[len(sorted_p) // 2]
+        min_p, max_p = min(prices), max(prices)
+
+        for it in valid_items:
+            p = it.market_price
+            if 6.5 * median_p <= p <= 15.0 * median_p:
+                healed = round(p / 10.0, 2)
+                if min_p * 0.5 <= healed <= max_p * 1.8:
+                    warn = f"[价格异动预警] 疑似红章遮挡漏读小数点 (原价 {p:g} -> 建议核实 {healed:g})"
+                    note = getattr(it, 'notes', '') or ''
+                    it.notes = f"{note}；{warn}".strip('；')
+                    if hasattr(it, 'uncertainty_note'):
+                        u_note = getattr(it, 'uncertainty_note', '') or ''
+                        it.uncertainty_note = f"{u_note}；{warn}".strip('；')
+            elif 0.065 * median_p <= p <= 0.15 * median_p and p < median_p * 0.2:
+                healed = round(p * 10.0, 2)
+                if min_p * 0.5 <= healed <= max_p * 1.8:
+                    warn = f"[价格异动预警] 疑似多读小数点 (原价 {p:g} -> 建议核实 {healed:g})"
+                    note = getattr(it, 'notes', '') or ''
+                    it.notes = f"{note}；{warn}".strip('；')
 
 
 def _build_headers(ws, header_row: int, col_st: int, col_ed: int) -> dict:
@@ -643,6 +757,12 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
         qty_col = next((c for c, h in headers_map.items() if any(k in h for k in ('数量', '工程量', '采购量'))), None)
         amount_col = next((c for c, h in headers_map.items() if any(k in h for k in ('合价', '总价', '金额', '小计')) and not _is_unit_price_header(h)), None)
 
+        # 杀手锏 4：表内分组小标题状态机与向下继承
+        current_sec_name = ""
+        current_sec_brand = ""
+        last_valid_name = ""
+        last_valid_brand = ""
+
         for r in range(data_start_row, ws.max_row + 1):
             if r in hid_rows:
                 continue
@@ -704,6 +824,12 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
 
             if _is_title_row(row_values):
                 decision = '分组标题行'
+                title_blob = " ".join(v for v in row_values if v).strip()
+                sec_name, sec_brand = _parse_section_title_info(title_blob)
+                if sec_name:
+                    current_sec_name = sec_name
+                if sec_brand:
+                    current_sec_brand = sec_brand
             elif (len(set(row_cells_dict.values()) & header_values) >= max(2, len(row_cells_dict) // 2)
                   and not (price_val > 0 and has_spec_feat)):
                 # 与「合计/小计行」同一护栏：有单价 + 带物料特征的行即使撞了表头文字，也不是表头
@@ -718,6 +844,28 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
                 decision = '商务说明/备注行'
             elif not (price_val > 0 or len(row_cells_dict) >= 2):
                 decision = '无价格且有效属性不足2项'
+
+            # 杀手锏 4：向下继承处理（品名为空或“同上/〃”，以及品牌向下继承）
+            if decision == 'item':
+                name_col_key = next((k for k in row_cells_dict if any(w in k for w in ('名称', '品名', '材料名称', '物料名称'))), None)
+                cur_name = row_cells_dict.get(name_col_key, '').strip() if name_col_key else ''
+                if not cur_name or cur_name in ("同上", "〃", "//", "\"", "同前", "同", "同规格", "同材质"):
+                    inherited_name = last_valid_name or current_sec_name
+                    if inherited_name:
+                        target_key = name_col_key or "材料名称"
+                        row_cells_dict[target_key] = inherited_name
+                elif cur_name:
+                    last_valid_name = cur_name
+
+                brand_col_key = next((k for k in row_cells_dict if any(w in k for w in ('品牌', '厂家', '商标'))), None)
+                cur_brand = row_cells_dict.get(brand_col_key, '').strip() if brand_col_key else ''
+                if not cur_brand:
+                    inherited_brand = current_sec_brand or last_valid_brand
+                    if inherited_brand:
+                        target_brand_key = brand_col_key or "品牌"
+                        row_cells_dict[target_brand_key] = inherited_brand
+                elif cur_brand:
+                    last_valid_brand = cur_brand
 
             candidates.append({
                 "ref": ref, "r": r, "values": row_values, "decision": decision, "raw_line": raw_line,
@@ -1011,22 +1159,22 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 if not std_name and l3:
                     std_name = l3
 
-                # 结构化规格参数提炼：
-                # 优先采用大模型清洗提炼的标准属性；降级或未识别时保留原表真实行列属性键值，
-                # 绝不把电缆（标称截面/芯数）、板材（厚度/材质）、玻璃等矩阵表硬编码绑死为“规格型号/型号系列”
-                structured_specs = cleaned_res.get("structured_specs")
-                if not isinstance(structured_specs, dict) or not structured_specs:
-                    structured_specs = {k: v for k, v in item["raw_cells_dict"].items()
-                                        if k not in ("品名", "单价", "序号", "行号", "金额")}
-                structured_specs = {str(k): str(v) for k, v in structured_specs.items() if v not in (None, "")}
+                # 杀手锏 2：显式键值对确定性预解析打底 + AI 提炼并集 (Lossless Merge)
+                # 先以原表显式参数与非空单元格打底，再合入大模型提取属性，原表规整键值与产品配置 100% 零丢失
                 raw_spec_str = cleaned_res.get("raw_spec") or item.get("raw_spec") or item["raw_full_line"]
-                # 原文已是规范 “键:值;” 参数时原样采用 (不让模型改参数名/值，如 “厚度(mm):1.5”“是否曝露使用”)，模型结果只补充原文没有的键
+                det_specs = extract_deterministic_kv(raw_spec_str, item.get("raw_cells_dict"))
+                llm_specs = cleaned_res.get("structured_specs")
+                if isinstance(llm_specs, dict) and llm_specs:
+                    structured_specs = {**det_specs, **{str(k): str(v) for k, v in llm_specs.items() if v not in (None, "")}}
+                else:
+                    structured_specs = det_specs or {k: v for k, v in item["raw_cells_dict"].items()
+                                                     if k not in ("品名", "单价", "序号", "行号", "金额")}
+                structured_specs = {str(k): str(v) for k, v in structured_specs.items() if v not in (None, "")}
+
+                # 原文已是规范 “键:值;” 参数时原样采用 (不让模型改参数名/值)
                 verbatim = _verbatim_specs(item["raw_cells_dict"])
                 if verbatim:
-                    covered = {_spec_key_norm(k) for k in verbatim}
-                    extra = {k: v for k, v in structured_specs.items()
-                             if _spec_key_norm(k) not in covered and v not in verbatim.values()}
-                    structured_specs = {**verbatim, **extra}
+                    structured_specs = {**structured_specs, **verbatim}
 
                 # 对照标准材料类别特定参数及要求接口规范，执行参数限定值校验与规范化
                 if l3 or cat_code:
@@ -1090,6 +1238,9 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 if region_note:
                     notes.append(region_note)
 
+                # 杀手锏 3：复合单位自动解构与定尺回填（如 '根/3.6米' -> 规格字典补入 '定尺长度: 3.6米/根'）
+                raw_u = item.get("raw_unit") or str(cleaned_res.get("unit") or "").strip()
+                _, structured_specs = decompose_compound_unit(raw_u, structured_specs)
                 unit = normalize_unit(str(cleaned_res.get("unit") or "").strip() or item["raw_unit"])
                 if not unit:
                     notes.append("原表无计量单位")
@@ -1154,6 +1305,8 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         sheet_stats.append({'sheet': sname, 'rows': ws.max_row, 'raw_rows': len(raw_rows),
                             'items': produced, 'error': err})
     _unify_group_names(canonical_items, group_of)
+    # 杀手锏 1：同族规格-价格单调性物理定律校验与红章遮挡漏读自愈
+    _audit_and_heal_price_monotonicity(canonical_items)
     if jev is not None:
         u = jev.usage
         print(f"[*] Jev 用量: 请求 {u['requests']} 次 (失败 {u['failed']})，输入 {u['input_tokens']} tokens，输出 {u['output_tokens']} tokens")

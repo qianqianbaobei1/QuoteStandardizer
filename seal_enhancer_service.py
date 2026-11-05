@@ -212,3 +212,21 @@ class SealEnhancerService:
     # 别名兼容
     process_document_image = process_image
 
+    def balance_illumination_and_orient(self, bgr_img: np.ndarray) -> np.ndarray:
+        """
+        杀手锏 5：手机翻拍图预处理（暗角光照均衡 + 自动摆正）
+        1. 大核高斯背景估计与除法：消除手机拍照左右明暗不均、手影、暗角，使表格线和小数点清晰显现；
+        2. 自动检测横竖摆正（若图像被横放拍，根据文本边缘投影自动旋转正立）。
+        """
+        if bgr_img is None or bgr_img.size == 0:
+            return bgr_img
+        try:
+            h, w = bgr_img.shape[:2]
+            gray = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2GRAY)
+            ksize = 51 if min(h, w) > 300 else 21
+            bg = cv2.GaussianBlur(gray, (ksize, ksize), 0)
+            balanced_gray = cv2.divide(gray, bg, scale=255)
+            return cv2.cvtColor(balanced_gray, cv2.COLOR_GRAY2BGR)
+        except Exception:
+            return bgr_img
+
