@@ -20,19 +20,30 @@ from openpyxl.utils import column_index_from_string
 
 def hidden_axes(ws):
     """返回 (隐藏行号集合, 隐藏列号集合)。
-
-    隐藏口径：被"隐藏"的行/列多是后台数据或已停用档位（如厂商把整张「系统结算价」设为 hidden），
-    解析时一律不取。row/column_dimensions 是稀疏字典，只收录 XML 里真实出现过的行/列，
-    所以这里读的是已有的维度对象，不会把整表扫一遍。
-    read_only 模式不提供 row_dimensions（也读不到隐藏标记），此时返回空集。
+    完整覆盖：
+    1. 显式 hidden=True 的行与列；
+    2. Excel 连续多列隐藏区间 (<col min="5" max="8" hidden="1"/> -> dim.min..dim.max)；
+    3. 行高或列宽被拉为 0 (height<=0.1 / width<=0.1) 的视觉隐藏行与列。
     """
     if getattr(ws, 'row_dimensions', None) is None:
         return set(), set()
-    rows = {r for r, dim in ws.row_dimensions.items() if dim.hidden}
+    rows = set()
+    for r, dim in ws.row_dimensions.items():
+        if getattr(dim, 'hidden', False) or (getattr(dim, 'height', None) is not None and dim.height <= 0.1):
+            try:
+                rows.add(int(r))
+            except (ValueError, TypeError):
+                continue
+
     cols = set()
     for key, dim in ws.column_dimensions.items():
-        if not dim.hidden:
+        is_hid = getattr(dim, 'hidden', False) or (getattr(dim, 'width', None) is not None and dim.width <= 0.1)
+        if not is_hid:
             continue
+        c_min = getattr(dim, 'min', None)
+        c_max = getattr(dim, 'max', None)
+        if isinstance(c_min, int) and isinstance(c_max, int) and c_max >= c_min:
+            cols.update(range(c_min, c_max + 1))
         try:
             cols.add(column_index_from_string(key))
         except (ValueError, TypeError):
@@ -255,13 +266,15 @@ class ExcelAssetExtractor:
         except Exception as e:
             print(f"[ExcelAssetExtractor Warning] 底层媒体解包异常: {e}")
 
-    def get_images_for_region(self, ws, sname, row_idx, col_min=1, col_max=30, col_tolerance=1):
+    def get_images_for_region(self, ws, sname, row_idx, col_min=1, col_max=30, col_tolerance=1, hid_cols=frozenset()):
         """
-        获取特定 Sheet 在特定行和列区间内的所有图片路径（支持多图）
+        获取特定 Sheet 在特定行和列区间内的所有图片路径（支持多图，跳过隐藏列）
         col_tolerance: 浮动图允许越出子表边界的列数；左右并排子表时应传 0，避免图片串到相邻子表
         """
         imgs = []
         for c in range(col_min, col_max + 1):
+            if c in hid_cols:
+                continue
             val = str(ws.cell(row_idx, c).value or '')
             if 'DISPIMG' in val:
                 for m in re.finditer(r'\"(ID_[A-F0-9]+)\"', val):
@@ -271,6 +284,8 @@ class ExcelAssetExtractor:
                         
         anchors = self.sheet_drawing_anchors.get(sname, {}).get(row_idx, [])
         for c, mp in anchors:
+            if c in hid_cols:
+                continue
             if col_min - col_tolerance <= c <= col_max + col_tolerance:
                 if mp not in imgs:
                     imgs.append(mp)
@@ -293,15 +308,15 @@ class ExcelAssetExtractor:
 
 
 def extract_sheet_sample_rows(ws, max_rows=10, max_cols=25):
-    """提取 Sheet 前几行样本用于 LLM 结构推导 (已做安全精度转换；隐藏行不参与)"""
+    """提取 Sheet 前几行样本用于 LLM 结构推导 (隐藏行跳过，隐藏列置空以保持物理列号对齐且不泄露隐藏内容)"""
     samples = []
-    hid_rows, _ = hidden_axes(ws)
+    hid_rows, hid_cols = hidden_axes(ws)
     for r in range(1, min(ws.max_row + 1, max_rows + 1)):
         if r in hid_rows:
             continue
         row_data = []
         for c in range(1, min(ws.max_column + 1, max_cols + 1)):
-            row_data.append(cell_str(ws.cell(r, c)))
+            row_data.append("" if c in hid_cols else cell_str(ws.cell(r, c)))
         if any(row_data):
             samples.append({"row_idx": r, "cells": row_data})
     return samples

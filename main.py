@@ -283,20 +283,23 @@ def _audit_and_heal_price_monotonicity(items: list) -> None:
                     it.notes = f"{note}；{warn}".strip('；')
 
 
-def _build_headers(ws, header_row: int, col_st: int, col_ed: int) -> dict:
+def _build_headers(ws, header_row: int, col_st: int, col_ed: int, hid_cols=frozenset()) -> dict:
     """
     读取表头：
     - 支持两级表头 (上一行为父表头时拼接为 “父-子”)
     - 重名表头自动加序号，避免同名列互相覆盖
+    - 跳过 hid_cols 隐藏列，避免隐藏列抢占可见列的表头名
     """
     parent_vals = []
     if header_row > 1:
-        parent_vals = [cell_str(ws.cell(header_row - 1, c)) for c in range(col_st, col_ed + 1)]
+        parent_vals = ["" if c in hid_cols else cell_str(ws.cell(header_row - 1, c)) for c in range(col_st, col_ed + 1)]
         if _is_title_row(parent_vals) or sum(1 for v in parent_vals if v) < 2:
             parent_vals = []
 
     headers_map, seen = {}, {}
     for i, c in enumerate(range(col_st, col_ed + 1)):
+        if c in hid_cols:
+            continue
         child = cell_str(ws.cell(header_row, c))
         parent = parent_vals[i] if parent_vals else ''
         h = f"{parent}-{child}" if parent and child and parent != child else (child or parent or f"第{c}列")
@@ -323,8 +326,11 @@ def _workbook_text(wb, limit=20000):
     for ws in wb.worksheets:
         if SKIP_HIDDEN_CONTENT and ws.sheet_state != 'visible':
             continue
-        for row in ws.iter_rows(values_only=True):
-            parts.extend(str(v) for v in row if v not in (None, ''))
+        hid_rows, hid_cols = hidden_axes(ws) if SKIP_HIDDEN_CONTENT else (set(), set())
+        for r_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
+            if r_idx in hid_rows:
+                continue
+            parts.extend(str(v) for c_idx, v in enumerate(row, 1) if (c_idx not in hid_cols) and v not in (None, ''))
             if sum(map(len, parts)) > limit:
                 return parts
     return parts
@@ -738,7 +744,7 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
         if unit_col in hid_cols:
             unit_col = None
 
-        headers_map = _build_headers(ws, header_row, col_st, col_ed)
+        headers_map = _build_headers(ws, header_row, col_st, col_ed, hid_cols=hid_cols)
         header_values = set(headers_map.values())
 
         # 智能校验 unit_col：防范同名“单位”列错位（若该列采样内容包含冒号/分号且平均长度>8，实为规格参数列，向后搜寻真正的单位列）
@@ -879,7 +885,8 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
                     raw_price=price_val,
                     raw_unit=unit_val,
                     mpaths=(extractor.get_images_for_region(ws_f, sname, r, col_st, col_ed,
-                                                            col_tolerance=0 if side_by_side else 1) if extractor else []),
+                                                            col_tolerance=0 if side_by_side else 1,
+                                                            hid_cols=hid_cols) if extractor else []),
                     file_page=sname,
                     table_name=t_name,
                     notes=layout_notes + _cell_notes(cell_issue, sname, r, cols, headers_map, price_col),
@@ -938,11 +945,18 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
     seq = 10
     disc_ratio = terms_info.get("discount_ratio")
 
-    # 从工作表前3行标题/横幅及原表文本中补全公司名称、品牌、联系人+连写手机号、税率
+    # 从工作表前3行标题/横幅及原表文本中补全公司名称、品牌、联系人+连写手机号、税率（严格跳过隐藏表与隐藏行列）
     banner_texts = []
     for ws_tmp in wb_val.worksheets:
+        if SKIP_HIDDEN_CONTENT and ws_tmp.sheet_state != 'visible':
+            continue
+        _h_rows, _h_cols = hidden_axes(ws_tmp) if SKIP_HIDDEN_CONTENT else (set(), set())
         for r_idx in range(1, min(4, (ws_tmp.max_row or 1) + 1)):
+            if r_idx in _h_rows:
+                continue
             for c_idx in range(1, min(15, (ws_tmp.max_column or 1) + 1)):
+                if c_idx in _h_cols:
+                    continue
                 v = str(ws_tmp.cell(r_idx, c_idx).value or "").strip()
                 if v and v not in banner_texts:
                     banner_texts.append(v)
@@ -993,8 +1007,13 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         _ws = wb_val[_sn]
         if SKIP_HIDDEN_CONTENT and _ws.sheet_state != 'visible':
             continue
+        _h_rows, _h_cols = hidden_axes(_ws) if SKIP_HIDDEN_CONTENT else (set(), set())
         for _r in range(1, min(10, (_ws.max_row or 1) + 1)):
+            if _r in _h_rows:
+                continue
             for _c in range(1, min(30, (_ws.max_column or 1) + 1)):
+                if _c in _h_cols:
+                    continue
                 _v = str(_ws.cell(_r, _c).value or "")
                 if "税率" in _v or "%" in _v:
                     table_has_terms.add("增值税税率")

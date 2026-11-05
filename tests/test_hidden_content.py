@@ -92,6 +92,62 @@ class TestHiddenContent(unittest.TestCase):
         self.assertNotIn('B', flat)      # 隐藏行被丢弃
         self.assertNotIn('Z', flat)      # 隐藏表被丢弃
 
+    def test_multi_column_span_and_zero_dimension_hidden(self):
+        """测试连续多列隐藏区间与行高/列宽拉成 0 的隐藏过滤"""
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        # 模拟 Excel 底层 XML 的连续列隐藏 <col min="5" max="8" hidden="1"/>
+        cd = ws.column_dimensions['E']
+        cd.min = 5
+        cd.max = 8
+        cd.hidden = True
+
+        # 模拟行高拉为 0 和列宽拉为 0
+        ws.row_dimensions[10].height = 0.0
+        ws.column_dimensions['J'].width = 0.0
+
+        hid_rows, hid_cols = hidden_axes(ws)
+        self.assertIn(10, hid_rows)
+        for c in (5, 6, 7, 8, 10):  # 5~8(E~H) 及 10(J)
+            self.assertIn(c, hid_cols, f"列 {c} 必须在隐藏列集合中")
+
+    def test_extract_sheet_sample_rows_masks_hidden_cols(self):
+        """测试给 LLM 结构推导的样本行：隐藏列置空，隐藏行跳过"""
+        from extractor import extract_sheet_sample_rows
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['序号', '品名', '内部底价', '外报价'])  # R1
+        ws.append(['1', '镀锌钢管', '50.0', '80.0'])      # R2 (可见)
+        ws.append(['2', '废弃行', '10.0', '20.0'])        # R3 (隐藏)
+
+        ws.row_dimensions[3].hidden = True
+        ws.column_dimensions['C'].hidden = True  # C 列（第 3 列内部底价）隐藏
+
+        samples = extract_sheet_sample_rows(ws, max_rows=10, max_cols=10)
+        self.assertEqual(len(samples), 2)  # R1 和 R2，R3 被跳过
+        r1_cells = samples[0]["cells"]
+        r2_cells = samples[1]["cells"]
+        # 第 3 列 (C 列) 必须被置空为 ""，不能泄露 "内部底价" 或 "50.0"
+        self.assertEqual(r1_cells[2], "")
+        self.assertEqual(r2_cells[2], "")
+        self.assertEqual(r2_cells[1], "镀锌钢管")
+        self.assertEqual(r2_cells[3], "80.0")
+
+    def test_build_headers_skips_hidden_cols(self):
+        """测试表头读取跳过隐藏列，防止隐藏列抢占可见列表头名"""
+        from main import _build_headers
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['品名', '隐藏单位', '规格', '真实单位', '单价'])
+        # 假设第 2 列是隐藏列
+        hid_cols = {2}
+        headers = _build_headers(ws, header_row=1, col_st=1, col_ed=5, hid_cols=hid_cols)
+        self.assertNotIn(2, headers)
+        self.assertEqual(headers[1], '品名')
+        self.assertEqual(headers[3], '规格')
+        self.assertEqual(headers[4], '真实单位')  # 真实单位未被抢占或编号
+        self.assertEqual(headers[5], '单价')
+
 
 if __name__ == '__main__':
     unittest.main()

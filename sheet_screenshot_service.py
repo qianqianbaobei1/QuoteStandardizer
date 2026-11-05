@@ -48,12 +48,17 @@ def generate_retina_thumbnail(master_img_path: str, output_thumb_path: str, targ
 
 def render_fallback_sheet_image(ws, target_path: str, max_r: int = 100, max_c: int = 20):
     """
-    当系统原生渲染器不可用时的高清网格绘制兜底引擎 (2400px 超清排版)
+    当系统原生渲染器不可用时的高清网格绘制兜底引擎 (2400px 超清排版，跳过隐藏行与列)
     """
     try:
+        from extractor import hidden_axes
+        hid_rows, hid_cols = hidden_axes(ws) if SKIP_HIDDEN_CONTENT else (set(), set())
+        vis_rows = [r for r in range(1, (ws.max_row or 1) + 1) if r not in hid_rows][:max_r]
+        vis_cols = [c for c in range(1, (ws.max_column or 1) + 1) if c not in hid_cols][:max_c]
+
         cell_w, cell_h = 160, 40
-        img_w = min(max_c * cell_w, 2400)
-        img_h = max_r * cell_h + 80
+        img_w = min(max(len(vis_cols), 1) * cell_w, 2400)
+        img_h = max(len(vis_rows), 1) * cell_h + 80
         img = Image.new("RGB", (img_w, img_h), color=(255, 255, 255))
         draw = ImageDraw.Draw(img)
 
@@ -86,15 +91,15 @@ def render_fallback_sheet_image(ws, target_path: str, max_r: int = 100, max_c: i
         if font is None:
             font = ImageFont.load_default()
 
-        # 绘制表头与网格
-        for r in range(1, max_r + 1):
-            for c in range(1, max_c + 1):
-                val = str(ws.cell(r, c).value or '')
-                x1 = (c - 1) * cell_w
-                y1 = (r - 1) * cell_h + 40
+        # 绘制表头与网格 (仅绘制可见单元格)
+        for out_r, src_r in enumerate(vis_rows, 1):
+            for out_c, src_c in enumerate(vis_cols, 1):
+                val = str(ws.cell(src_r, src_c).value or '')
+                x1 = (out_c - 1) * cell_w
+                y1 = (out_r - 1) * cell_h + 40
                 x2 = x1 + cell_w
                 y2 = y1 + cell_h
-                fill_color = (240, 244, 248) if r == 1 else (255, 255, 255)
+                fill_color = (240, 244, 248) if out_r == 1 else (255, 255, 255)
                 draw.rectangle([x1, y1, x2, y2], fill=fill_color, outline=(210, 215, 220))
                 if val:
                     draw.text((x1 + 6, y1 + 10), val[:14], fill=(0, 0, 0), font=font)
@@ -137,8 +142,10 @@ def capture_excel_sheets(excel_path: str, output_dir: str) -> Dict[str, str]:
                 generate_retina_thumbnail(target_path, thumb_path)
             continue
 
-        max_r = min(ws.max_row or 1, 300)
-        max_c = min(ws.max_column or 1, 35)
+        from extractor import hidden_axes
+        hid_rows, hid_cols = hidden_axes(ws) if SKIP_HIDDEN_CONTENT else (set(), set())
+        vis_rows = [r for r in range(1, (ws.max_row or 1) + 1) if r not in hid_rows][:300]
+        vis_cols = [c for c in range(1, (ws.max_column or 1) + 1) if c not in hid_cols][:35]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_wb = openpyxl.Workbook()
@@ -146,9 +153,9 @@ def capture_excel_sheets(excel_path: str, output_dir: str) -> Dict[str, str]:
             temp_ws.title = str(sname)[:31]
             temp_ws.views.sheetView[0].showGridLines = True
 
-            for r in range(1, max_r + 1):
-                for c in range(1, max_c + 1):
-                    temp_ws.cell(r, c, ws.cell(r, c).value)
+            for out_r, src_r in enumerate(vis_rows, 1):
+                for out_c, src_c in enumerate(vis_cols, 1):
+                    temp_ws.cell(out_r, out_c, ws.cell(src_r, src_c).value)
 
             temp_file = os.path.join(tmpdir, f"sheet_{idx}.xlsx")
             temp_wb.save(temp_file)
