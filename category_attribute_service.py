@@ -8,36 +8,12 @@ import re
 import math
 import json
 from collections import Counter
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Set
 import openpyxl
 from config import CATEGORY_DICT_PATH, CATEGORY_ATTRS_API_URL
 
-# 行业高频俗称/同义词扩展表（可持续扩充）
-DOMAIN_SYNONYMS: Dict[str, List[str]] = {
-    "铝镁锰": ["铝合金板", "压型金属板", "金属复合装饰板/屋面板", "金属饰面板"],
-    "钛锌板": ["压型金属板", "金属饰面板", "金属复合装饰板/屋面板", "锌材", "钛材"],
-    "钛锌": ["压型金属板", "金属饰面板", "金属复合装饰板/屋面板", "锌材", "钛材"],
-    "彩钢板": ["金属饰面板", "压型金属板", "金属复合装饰板/屋面板", "彩色涂层钢板"],
-    "镀锌钢板": ["镀锌钢板", "压型金属板", "热镀锌钢板"],
-    "不锈钢制品": ["不锈钢装饰板", "不锈钢管", "不锈钢型材"],
-    "kbg": ["电线、电缆套管"],
-    "jdg": ["电线、电缆套管"],
-    "穿线管": ["电线、电缆套管"],
-    "液压脚踏阀": ["洁具专用阀门", "大便冲洗阀", "冲洗阀"],
-    "蹲便器感应": ["洁具专用阀门", "大便冲洗阀", "冲洗阀"],
-    "小便器感应": ["洁具专用阀门", "小便冲洗阀", "冲洗阀"],
-    "洗脸盆龙头": ["面盆水嘴", "面盆龙头", "冷热水嘴", "水嘴"],
-    "小便斗": ["小便器", "立式小便器", "挂式小便器"],
-    "洗脸盆": ["洗面盆", "台式洗面盆", "立柱式洗面盆"],
-    "拖布池": ["洗涤盆", "拖把池", "污水池"],
-    "成套淋浴器": ["淋浴器", "冷热淋浴器", "花洒"],
-    "光纤收发器": ["光电转换器", "光纤收发器", "光端机"],
-    "光模块": ["SFP光模块", "光收发模块", "光模块"],
-    "光纤耦合器": ["光纤适配器", "光纤耦合器", "光法兰"],
-    "光纤跳线": ["光纤跳线", "尾纤", "光跳线"],
-    "尾纤": ["光纤跳线", "尾纤"],
-    "光纤配线架": ["光纤配线架", "光纤终端盒", "ODF配线架"],
-}
+# 全局动态全库属性枚举反向索引 (品种/类型/系列/型号/材质等属性枚举自动成为三级分类别名，严禁硬编码测试集字典)
+_DYNAMIC_ENUM_ALIAS_MAP: Dict[str, Set[str]] = {}
 
 _BRACKET_PREFIX_RE = re.compile(r'^[\[\【][A-Za-z0-9\-_]+[\]\】][\s　]*')
 _TOKEN_RE = re.compile(r'[A-Za-z0-9]+(?:[\-/\.][A-Za-z0-9]+)*|[\u4e00-\u9fff]+')
@@ -95,6 +71,20 @@ def _tokenize(text: str) -> List[str]:
     return tokens
 
 
+def _is_specific_enum(v: str) -> bool:
+    """属性枚举值是否够“具体”到能当品类别名。
+
+    像“LED”“A”“B”这种短英文/字母枚举几百个品类都有，当别名会把“LED灯管”推到
+    可视对讲主机上去（实测过）。所以只留：带汉字的，或 5 位以上的字母数字串（形如型号）。
+    """
+    s = str(v or '').strip()
+    if len(s) < 2:
+        return False
+    if re.search(r'[\u4e00-\u9fff]', s):
+        return True
+    return len(s) >= 5 and bool(re.fullmatch(r'[A-Za-z0-9\-./]+', s))
+
+
 class EnrichedCategoryIndex:
     """联合 Sheet1 (分类树) + Sheet2 (属性名称与限定值枚举) 的 BM25+IDF 检索引擎"""
 
@@ -111,10 +101,14 @@ class EnrichedCategoryIndex:
             attr_names = [str(a.get("name") or "").strip() for a in attrs if a.get("name")]
             enum_vals: List[str] = []
             for a in attrs:
+                a_name = str(a.get("name") or "").strip()
+                # 仅将品种/类型/系列/名称等分类核心属性的枚举值作为品类专有特征，排除材质/颜色等通用干扰
+                if not any(k in a_name for k in ('品种', '类型', '系列', '名称', '品名')):
+                    continue
                 raw_enum = str(a.get("enum") or "").strip()
                 if raw_enum:
                     enum_vals.extend(re.split(r'[,，;；/、\s|]+', raw_enum))
-            enum_vals = [v.strip() for v in enum_vals if len(v.strip()) >= 2 and re.search(r'[\u4e00-\u9fffA-Za-z]', v)]
+            enum_vals = [v.strip() for v in enum_vals if _is_specific_enum(v)]
 
             # 字段权重：三级名称(5.0) > Sheet2枚举值(4.5) > 二级名称(2.0) > Sheet2属性名(1.5) > 一级名称(1.0)
             tf: Counter = Counter()
@@ -166,17 +160,22 @@ class EnrichedCategoryIndex:
         clean_cat = _BRACKET_PREFIX_RE.sub('', str(raw_cat or '').strip())
         spec_str = str(raw_spec or '').strip()
 
-        # 1. 同义词扩展
+        # 1. 动态全库枚举别名反查（从全库数千个品类的 Sheet2 枚举值中自动提取反查，无硬编码）
         expanded_name_terms = [clean_name, clean_cat]
         combined_text_lower = f"{clean_name} {clean_cat} {spec_str}".lower()
-        for kw, syns in DOMAIN_SYNONYMS.items():
-            if kw in combined_text_lower:
-                expanded_name_terms.extend(syns)
+        matched_dynamic_t3 = set()
+        for ev_lower, t3_set in _DYNAMIC_ENUM_ALIAS_MAP.items():
+            if len(ev_lower) >= 3 and ev_lower in combined_text_lower:
+                matched_dynamic_t3.update(t3_set)
+            elif len(ev_lower) == 2 and (ev_lower in clean_name.lower() or ev_lower in clean_cat.lower()):
+                matched_dynamic_t3.update(t3_set)
 
-        # 2. 构造查询 Token 权重（品名与同义词 x3.0，规格参数 x1.5）
+        # 2. 构造查询 Token 权重（品名 x3.0，规格参数 x1.5）
         q_tokens: Counter = Counter()
+        # 两字切片（如“线型灯”→“线型/型灯/线/型/灯”）在 BM25 里会把“混凝土扶手”这种
+        # 八竿子打不着的节点顶上来；只给长词全权重，两字词降权
         for tok in _tokenize(" ".join(expanded_name_terms)):
-            q_tokens[tok] += 3.0
+            q_tokens[tok] += 3.0 if len(tok) >= 3 else 0.6
         for tok in _tokenize(spec_str):
             q_tokens[tok] += 1.5
 
@@ -203,12 +202,10 @@ class EnrichedCategoryIndex:
                     reasons.append(f"品名包含:{t3}")
                     break
 
-            # B. 同义词直达三级类别
-            for syn in expanded_name_terms[2:]:
-                if syn == t3 or syn == t3_c:
-                    score += 85.0
-                    reasons.append(f"行业俗称映射:{syn}->{t3}")
-                    break
+            # B. 动态全库属性枚举反查直达（全行业几千个品类自动通用，无任何面向测试集的写死词表）
+            if t3 in matched_dynamic_t3 or t3_c in matched_dynamic_t3:
+                score += 85.0
+                reasons.append(f"属性枚举动态反查命中:{t3}")
 
             # C. Sheet2 枚举限定值反查命中（按该枚举值在全库出现的稀缺度加分，绝不压过品名精确匹配）
             for ev in entry["enum_set"]:
@@ -361,6 +358,30 @@ def _load_catalog() -> None:
         except Exception:
             pass
 
+    # 4. 自动全库构建核心属性枚举反向索引 (仅从 品种/类型/系列/名称/品名 等核心分类属性的枚举值构建反查，排除材质/颜色等通用属性干扰)
+    CORE_TYPE_ATTR_KEYS = ('品种', '类型', '系列', '名称', '品名')
+    _DYNAMIC_ENUM_ALIAS_MAP.clear()
+    for t3_name, attrs in _ATTR_SCHEMA_MAP.items():
+        t3_clean = re.sub(r'[（(].*?[)）]', '', t3_name).strip()
+        for a in attrs:
+            a_name = str(a.get("name") or "").strip()
+            # 严格限定只提取能表征物料品种/类型的核心属性
+            if not any(k in a_name for k in CORE_TYPE_ATTR_KEYS):
+                continue
+            raw_enum = str(a.get("enum") or "").strip()
+            if not raw_enum:
+                continue
+            vals = re.split(r'[,，;；/、\s|]+', raw_enum)
+            for v in vals:
+                v_clean = v.strip()
+                if not _is_specific_enum(v_clean):
+                    continue
+                if len(v_clean) >= 2 and re.search(r'[\u4e00-\u9fffA-Za-z]', v_clean):
+                    v_lower = v_clean.lower()
+                    _DYNAMIC_ENUM_ALIAS_MAP.setdefault(v_lower, set()).add(t3_name)
+                    if t3_clean:
+                        _DYNAMIC_ENUM_ALIAS_MAP.setdefault(v_lower, set()).add(t3_clean)
+
     _SEARCH_INDEX = EnrichedCategoryIndex(_CATALOG_ROWS, _ATTR_SCHEMA_MAP)
 
 
@@ -392,6 +413,29 @@ def retrieve_category_candidates(
     if not _SEARCH_INDEX:
         return []
     cands = _SEARCH_INDEX.search(std_name, raw_cat, raw_spec, sheet_prior_t2=sheet_prior, top_k=top_k)
+
+    # 同族展开：本表主业二级大类下的其余三级类别补进候选池。
+    # 原表写的是生僻俗称、字面一个字也不命中时，靠这一手让模型仍能在这十几个同族节点里做选择题。
+    # 按一级大类展开：二级到三级往往只有 1 个孩子（“光源”就只挂了一个节点），只按二级展开等于没展开
+    if sheet_prior and len(cands) < 10:
+        prior_t1 = {t1 for t1, t2, _t3, _c in _CATALOG_ROWS if t2 in sheet_prior}
+        seen_codes = {c["code"] for c in cands}
+        floor_score = min([c["score"] for c in cands], default=1.0) * 0.5
+        for e in _SEARCH_INDEX.entries:
+            if e["code"] in seen_codes or (e["t2"] not in sheet_prior and e["t1"] not in prior_t1):
+                continue
+            cands.append({
+                "level1": e["t1"],
+                "level2": e["t2"],
+                "level3": e["t3"],
+                "code": e["code"],
+                "score": round(floor_score, 2),
+                "reason": f"同表主业({e['t1']}/{e['t2']})同族候选",
+            })
+            seen_codes.add(e["code"])
+            if len(cands) >= 10:
+                break
+
     for c in cands:
         attrs = _ATTR_SCHEMA_MAP.get(c["level3"], [])
         c["allowed_attributes"] = [

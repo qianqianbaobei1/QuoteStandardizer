@@ -57,14 +57,26 @@ def render_fallback_sheet_image(ws, target_path: str, max_r: int = 100, max_c: i
         img = Image.new("RGB", (img_w, img_h), color=(255, 255, 255))
         draw = ImageDraw.Draw(img)
 
-        # 尝试加载中文字体
+        # 尝试加载跨平台中文字体 (兼容 macOS、Linux、Windows)
         font = None
-        for font_path in [
+        candidate_font_paths = [
+            # macOS
             "/System/Library/Fonts/PingFang.ttc",
             "/Library/Fonts/Songti.ttc",
             "/System/Library/Fonts/STHeiti Light.ttc",
-            "/Library/Fonts/Arial Unicode.ttf"
-        ]:
+            "/Library/Fonts/Arial Unicode.ttf",
+            # Linux (Debian / Ubuntu / CentOS / Alpine)
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+            # Windows
+            "C:/Windows/Fonts/msyh.ttc",
+            "C:/Windows/Fonts/msyh.ttf",
+            "C:/Windows/Fonts/simsun.ttc",
+            "C:/Windows/Fonts/simhei.ttf"
+        ]
+        for font_path in candidate_font_paths:
             if os.path.exists(font_path):
                 try:
                     font = ImageFont.truetype(font_path, 16)
@@ -142,22 +154,23 @@ def capture_excel_sheets(excel_path: str, output_dir: str) -> Dict[str, str]:
             temp_wb.save(temp_file)
 
             success = False
-            # 优先调用 macOS 原生 QuickLook 以 3000px 渲染
-            try:
-                res = subprocess.run(
-                    ['qlmanage', '-t', '-s', '3000', '-o', tmpdir, temp_file],
-                    capture_output=True, text=True, timeout=20
-                )
-                if res.returncode == 0:
-                    pngs = [f for f in os.listdir(tmpdir) if f.endswith('.png')]
-                    if pngs:
-                        src_png = os.path.join(tmpdir, pngs[0])
-                        shutil.copy2(src_png, target_path)
-                        generate_retina_thumbnail(target_path, thumb_path)
-                        mapping[sname] = target_fn
-                        success = True
-            except Exception as e:
-                print(f"[SheetScreenshot] qlmanage 渲染异常 [{sname}]: {e}")
+            # 若在 macOS 环境且具备 qlmanage 工具，优先调用原生渲染以 3000px 渲染
+            if shutil.which('qlmanage'):
+                try:
+                    res = subprocess.run(
+                        ['qlmanage', '-t', '-s', '3000', '-o', tmpdir, temp_file],
+                        capture_output=True, text=True, timeout=20
+                    )
+                    if res.returncode == 0:
+                        pngs = [f for f in os.listdir(tmpdir) if f.endswith('.png')]
+                        if pngs:
+                            src_png = os.path.join(tmpdir, pngs[0])
+                            shutil.copy2(src_png, target_path)
+                            generate_retina_thumbnail(target_path, thumb_path)
+                            mapping[sname] = target_fn
+                            success = True
+                except Exception as e:
+                    print(f"[SheetScreenshot] qlmanage 渲染异常 [{sname}]: {e}")
 
             # 兜底：若 qlmanage 失败，使用高清晰度网格引擎绘制
             if not success:

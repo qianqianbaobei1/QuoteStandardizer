@@ -15,7 +15,7 @@ import zipfile
 import traceback
 from pathlib import Path
 
-from main import process_excel, process_pdf, _field_value_problems
+from main import process_excel, process_pdf, _field_value_problems, COMPANY_RE
 from terms_extractor import find_terms_image, TermsExtractor
 from config import DEFAULT_TEMPLATE_PATH
 
@@ -180,19 +180,20 @@ def run_single_vendor(vendor_dir: Path, output_dir: Path) -> dict:
             except Exception as e:
                 print(f"[{vname}] 商务条款提取跳过/异常: {e}")
 
-        # 目录名是人工维护的供应商名，最可靠：拿它当主体，公章识别只作旁证
-        # (否则文件名无公司名时，公章里读到的别家名字会直接变成交付件文件名)
+        # 仅当目录名确实符合企业全称规范 (如“xx有限公司/股份有限公司/厂/经营部”) 时，才允许作为供应商候选；
+        # 若目录名仅为批次名或普通编号（如“2026年11月询价批次”、“图1”），严禁覆盖公章和表内识别出的合法企业名称！
         dir_supplier = re.sub(r'^\d+[\._、\s]*', '', vendor_dir.name).strip()
         terms_dict = dict(terms_dict or {})
-        if dir_supplier and terms_dict.get('_source') != 'manual':
-            detected = terms_dict.get('supplier')
-            terms_dict['supplier'] = dir_supplier
-            # 必须强制改标为 dir：TermsExtractor 会写 _source='vision'，
-            # 那样下面 verify_terms_supplier 就会拿文件名当旁证把目录名也否掉
-            terms_dict['_source'] = 'dir'
-            if detected and str(detected).strip() != dir_supplier:
-                terms_dict['_supplier_note'] = f"公章识别为“{detected}”，以源目录名“{dir_supplier}”为准"
-                print(f"[{vname}] 公章“{detected}”与目录名不符，采用目录名")
+        detected = terms_dict.get('supplier')
+        m_comp = COMPANY_RE.search(dir_supplier)
+        if m_comp and terms_dict.get('_source') != 'manual':
+            valid_dir_company = m_comp.group(1).strip()
+            if not detected:
+                terms_dict['supplier'] = valid_dir_company
+                terms_dict['_source'] = 'dir'
+            elif detected != valid_dir_company:
+                terms_dict['_supplier_note'] = f"公章/表内识别为“{detected}”，源目录名为“{valid_dir_company}”"
+                print(f"[{vname}] 公章识别为“{detected}”，与目录名“{valid_dir_company}”对照留存旁证")
 
         output_dir.mkdir(parents=True, exist_ok=True)
         

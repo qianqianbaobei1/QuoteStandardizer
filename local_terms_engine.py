@@ -8,10 +8,15 @@ import re
 import subprocess
 from typing import Dict, Any, Optional, List
 
+import shutil
+import platform
+
 CN_NUM = {'一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9}
 
 def run_macos_vision_ocr(image_path: str) -> str:
-    """调用 macOS 原生 Vision Framework 进行 OCR 识别"""
+    """调用 macOS 原生 Vision Framework 进行 OCR 识别（非 macOS 或未安装 swift 时自动静默降级）"""
+    if platform.system() != 'Darwin' or not shutil.which('swift'):
+        return ""
     if not os.path.exists(image_path):
         return ""
     swift_code = '''
@@ -108,8 +113,8 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
     full_text = " ".join(filtered_lines)
     
     terms = {
-        'is_tax_included': '是',
-        'tax_rate': 13,
+        'is_tax_included': '',
+        'tax_rate': None,
         'tax_desc': '',
         'is_freight_included': '',
         'freight_desc': '',
@@ -120,19 +125,19 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
         'quote_type': ''
     }
     
-    # 1. 税率与是否含税
-    m_tax = re.search(r'增值税税率\s*(\d+)%', full_text)
+    # 1. 税率与是否含税（未提取到坚决留空，绝不塞入 13% 假数据）
+    m_tax = re.search(r'(?:增值税税率|税率|加税)[：:\s]*(\d{1,2})%', full_text)
     if m_tax:
         terms['tax_rate'] = int(m_tax.group(1))
         terms['tax_desc'] = f"增值税税率{m_tax.group(1)}%"
 
-    if any(re.search(r'[☑√■\✓]\s*不含税金', l) for l in raw_lines):
+    if any(re.search(r'[☑√■\✓]\s*不含税', l) for l in raw_lines):
         terms['is_tax_included'] = '否'
-    elif any(re.search(r'[☑√■\✓]\s*含税金', l) for l in raw_lines):
+    elif any(re.search(r'[☑√■\✓]\s*含税', l) for l in raw_lines):
         terms['is_tax_included'] = '是'
-    elif '不含税金' in full_text and '含税金' not in full_text:
+    elif '不含税' in full_text and '含税' not in full_text:
         terms['is_tax_included'] = '否'
-    else:
+    elif any(w in full_text for w in ('含税价', '报价含税', '均含税', '价格已含税')):
         terms['is_tax_included'] = '是'
 
     # 2. 运费
@@ -145,10 +150,11 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
     elif is_freight_yes:
         terms['is_freight_included'] = '包含'
 
-    # 运费详细描述提取
+    # 通用运费描述提取：匹配包含运费、运输、送货、包邮、自提等通用物流语义的说明行（严禁绑定特定厂家原话）
     freight_desc_parts = []
+    FREIGHT_KEYWORDS = ('运费', '运输', '配送', '送货', '包运', '包邮', '自提', '货到', '车板交货')
     for l in filtered_lines:
-        if any(k in l for k in ['发货满', '包运', '包邮', '运费另算', '运费计算方式为', '按合同价格', '广东省不限行范围内含运费', '运费根据实际情况定']):
+        if any(k in l for k in FREIGHT_KEYWORDS):
             clean_l = re.sub(r'^[☑√■\✓口\s]+', '', l)
             clean_l = re.sub(r'\(.*?\)|（.*?）', '', clean_l).strip('，, ；;')
             if clean_l and clean_l not in freight_desc_parts:
@@ -156,19 +162,15 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
     if freight_desc_parts:
         terms['freight_desc'] = "；".join(freight_desc_parts)
 
-    # 3. 付款方式与报价说明
+    # 3. 付款方式与报价说明（通用提取，支持账期、付款方式、定尺、结算等商务条款）
     quote_parts = []
-    if '现款现结' in full_text:
-        quote_parts.append('现款现结')
-    if '不接受账期' in full_text:
-        quote_parts.append('不接受账期，详情再议')
     m_term = re.search(r'接受账期\s*(\d+)\s*个月[，,]?\s*价格上浮\s*([\d\.]+)%', full_text)
     if m_term:
         quote_parts.append(f"接受账期{m_term.group(1)}个月，价格上浮{m_term.group(2)}%")
 
-    # 追回供应商填写的特定文字（如“运费根据实际情况定无法统一标准”、“按合同价格”等）
+    COMMERCIAL_KEYWORDS = ('账期', '付款', '现款', '结算', '现结', '款到', '加价', '质保', '订货', '有效期')
     for l in filtered_lines:
-        if any(k in l for k in ['无法统一标准', '现款现结', '款到发货', '定尺加价', '详情再议']):
+        if any(k in l for k in COMMERCIAL_KEYWORDS):
             clean_l = re.sub(r'^[☑√■\✓口\s]+', '', l).strip('，, ；;')
             if clean_l and not any(clean_l in p for p in quote_parts) and clean_l not in terms['freight_desc']:
                 quote_parts.append(clean_l)

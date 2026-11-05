@@ -127,8 +127,8 @@ PROVINCE_ABBR_MAP = {
 # 视为“不限地区”的写法
 NATIONWIDE_TOKENS = {'全国', '全国范围', '不限', '全国通用'}
 
-# 全国/无地区报价是否按省市铺开成 31 行（人工标杆口径）；关闭则原样输出
-EXPAND_NATIONWIDE = os.getenv("EXPAND_NATIONWIDE", "1").strip().lower() in ("1", "true")
+# 全国/无地区报价是否按省市铺开成 31 行（特定评测口径，生产环境默认关闭以防数据膨胀；需开启时设 EXPAND_NATIONWIDE=1）
+EXPAND_NATIONWIDE = os.getenv("EXPAND_NATIONWIDE", "0").strip().lower() in ("1", "true")
 # 全国报价按省市铺开时使用的标准省市对（人工标杆口径）
 NATIONWIDE_REGIONS = [
     ('上海市', '上海市'),

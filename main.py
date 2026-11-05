@@ -534,31 +534,35 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue, hid_rows=frozenset(), hid_co
                     notes.append(f"价格 {price:g} 低于上一档({p_label:g})的 {p_price:g}，疑似识别错误或原件模糊")
             if label_num is not None:
                 prev[c] = (label_num, price)
-            # 精确拆解矩阵列标题中的 品名 与 型号/系列
-            # 例如 "暗杆闸阀 Z45T-16" -> 品名: 暗杆闸阀, 型号/系列: Z45T-16
+            # 矩阵行列标题通用泛化提取：
+            # 严禁将全天下所有矩阵表硬编码为“暗杆闸阀”或锁死为“规格型号/型号系列”
             clean_col = col_path.strip()
-            # 提取型号/系列（字母数字中划线组合）
-            m_model = re.search(r'([A-Za-z0-9\-]+(?:-[A-Za-z0-9]+)*)', clean_col)
-            model_str = m_model.group(1) if m_model else ""
-            # 如果末尾带 Q (球墨铸铁)，连同纳入
-            m_model_full = re.search(r'([A-Za-z0-9\-]+(?:-[A-Za-z0-9]+)*[A-Za-z0-9]*)', clean_col)
-            if m_model_full and len(m_model_full.group(1)) > len(model_str):
-                model_str = m_model_full.group(1)
-            name_str = clean_col.replace(model_str, '').strip() if model_str else clean_col
-            name_str = name_str or clean_col
-            
-            # 构造完整且无表标题的单物料规格参数：包含规格与型号/系列
-            series_str = model_str or clean_col
-            raw_spec_clean = f"规格型号:{label};型号/系列:{series_str}"
+            row_header = mx.get('label_header') or '规格'
+            table_title = mx.get('table_title') or ''
+
+            # 智能提取品名与型号特征（若列标题包含英文型号/系列则提取，否则保持原列头）
+            m_model = re.search(r'([A-Za-z0-9\-]+(?:-[A-Za-z0-9]+)*[A-Za-z0-9]*)', clean_col)
+            model_cand = m_model.group(1) if m_model else ""
+            extracted_name = clean_col.replace(model_cand, '').strip() if model_cand else clean_col
+
+            matrix_cells = {
+                row_header: label,
+                "规格型号": label,
+                "列标题": clean_col,
+                "单价": v
+            }
+            # 确定品名（整表大标题优先，或列标题中的品名特征）
+            base_name = table_title or extracted_name or clean_col
+            if base_name:
+                matrix_cells["品名"] = base_name
+            if model_cand:
+                matrix_cells["型号/系列"] = model_cand
+
+            raw_spec_clean = f"{row_header}:{label};列标题:{clean_col}"
 
             raw_rows.append({
                 "id": ref,
-                "raw_cells_dict": {
-                    "品名": name_str,
-                    "规格型号": label,
-                    "型号/系列": series_str,
-                    "单价": v
-                },
+                "raw_cells_dict": matrix_cells,
                 "raw_full_line": raw_line,
                 "raw_spec": raw_spec_clean,
                 "raw_price": price,
@@ -1007,20 +1011,15 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 if not std_name and l3:
                     std_name = l3
 
-                if "型号/系列" in item["raw_cells_dict"]:
-                    r_dict = item["raw_cells_dict"]
-                    std_name = r_dict.get("品名") or std_name
-                    structured_specs = {
-                        "规格型号": r_dict.get("规格型号", ""),
-                        "型号/系列": r_dict.get("型号/系列", "")
-                    }
-                    raw_spec_str = f"规格型号:{r_dict.get('规格型号', '')};型号/系列:{r_dict.get('型号/系列', '')}"
-                else:
-                    structured_specs = cleaned_res.get("structured_specs")
-                    if not isinstance(structured_specs, dict) or not structured_specs:
-                        structured_specs = {k: v for k, v in item["raw_cells_dict"].items()}
-                    structured_specs = {str(k): str(v) for k, v in structured_specs.items() if v not in (None, "")}
-                    raw_spec_str = cleaned_res.get("raw_spec") or item.get("raw_spec") or item["raw_full_line"]
+                # 结构化规格参数提炼：
+                # 优先采用大模型清洗提炼的标准属性；降级或未识别时保留原表真实行列属性键值，
+                # 绝不把电缆（标称截面/芯数）、板材（厚度/材质）、玻璃等矩阵表硬编码绑死为“规格型号/型号系列”
+                structured_specs = cleaned_res.get("structured_specs")
+                if not isinstance(structured_specs, dict) or not structured_specs:
+                    structured_specs = {k: v for k, v in item["raw_cells_dict"].items()
+                                        if k not in ("品名", "单价", "序号", "行号", "金额")}
+                structured_specs = {str(k): str(v) for k, v in structured_specs.items() if v not in (None, "")}
+                raw_spec_str = cleaned_res.get("raw_spec") or item.get("raw_spec") or item["raw_full_line"]
                 # 原文已是规范 “键:值;” 参数时原样采用 (不让模型改参数名/值，如 “厚度(mm):1.5”“是否曝露使用”)，模型结果只补充原文没有的键
                 verbatim = _verbatim_specs(item["raw_cells_dict"])
                 if verbatim:
