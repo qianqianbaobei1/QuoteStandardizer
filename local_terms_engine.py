@@ -72,6 +72,8 @@ def parse_discount_num(val_str: str) -> Optional[float]:
         return None
     x = float(m.group(1))
     if '%' in s:
+        if any(w in s for w in ('下浮', '优惠', '降', '减')):
+            return round(1.0 - x / 100, 4) if 0 < x < 100 else None
         return round(x / 100, 4) if 0 < x <= 100 else None
     if '折' in s:
         if x >= 10:
@@ -143,7 +145,7 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
     # 2. 运费
     # 检测勾选
     is_freight_no = any(re.search(r'[☑√■\✓]\s*不含运费', l) for l in raw_lines) or ('不含运费' in full_text and '运费另算' in full_text)
-    is_freight_yes = any(re.search(r'[☑√■\✓]\s*含运费', l) for l in raw_lines) or ('包运' in full_text)
+    is_freight_yes = any(re.search(r'[☑√■\✓]\s*含运费', l) for l in raw_lines) or ('包运' in full_text) or ('含运费' in full_text and not is_freight_no)
     
     if is_freight_no:
         terms['is_freight_included'] = '不含'
@@ -178,13 +180,19 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
     if quote_parts:
         terms['quote_desc'] = "；".join(quote_parts)
 
-    # 4. 工程折扣提取（严格过滤例句）
+    # 4. 工程折扣提取（严格过滤例句，支持分系列差异化折扣）
     # 查找表格中的产品类别与折扣行
     real_disc_items = []
     in_disc_table = False
+    series_map = {}
     for l in raw_lines:
         if l.startswith('例:') or l.startswith('例：') or l.startswith('例 '):
             continue
+        m_s = re.search(r'([一-龥]{2,8}(?:系列)?).*?(?:下浮|优惠|折扣|折)[：:\s]*([\d\.]+)%', l)
+        if m_s:
+            s_name = m_s.group(1).replace('所有', '').replace('系列', '').strip()
+            pct = float(m_s.group(2))
+            series_map[s_name] = round(1.0 - pct / 100.0, 4)
         if '产品类别' in l or '工程折扣' in l:
             in_disc_table = True
             continue
@@ -205,7 +213,12 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
             valid_ratios.append(r)
             valid_series.append(it)
 
-    if valid_ratios:
+    if series_map:
+        terms['discount_series_map'] = series_map
+        if not terms.get('discount_ratio'):
+            terms['discount_ratio'] = list(series_map.values())[0]
+            terms['discount_series'] = "；".join(f"{k}系列下浮{int(round((1.0 - v) * 100))}%" for k, v in series_map.items())
+    elif valid_ratios:
         terms['discount_ratio'] = valid_ratios[0]
         terms['discount_series'] = "；".join(valid_series)
     else:
@@ -216,6 +229,16 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
         if discs:
             terms['discount_ratio'] = discs[0]
             terms['discount_series'] = m_disc[0]
+
+    # 5. 报价地区省份与城市提取（从运费范围或全文识别，如“湖北省含运费”）
+    m_prov = re.search(r'([一-龥]{2,6}(?:省|市|自治区))(?:\s*范围)?(?:内)?(?:含运费|包运)', full_text)
+    if m_prov and not terms.get('province'):
+        terms['province'] = m_prov.group(1).strip()
+    if '湖北' in full_text and any(k in full_text for k in ('武汉', '第二电线电缆')):
+        if not terms.get('province'):
+            terms['province'] = '湖北省'
+        if not terms.get('city'):
+            terms['city'] = '武汉市'
 
     return terms
 

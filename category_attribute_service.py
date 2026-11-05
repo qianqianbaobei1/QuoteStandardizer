@@ -10,6 +10,7 @@ import json
 from collections import Counter
 from typing import Dict, List, Tuple, Optional, Any, Set
 import openpyxl
+import requests
 from config import CATEGORY_DICT_PATH, CATEGORY_ATTRS_API_URL
 
 # 全局动态全库属性枚举反向索引 (品种/类型/系列/型号/材质等属性枚举自动成为三级分类别名，严禁硬编码测试集字典)
@@ -401,6 +402,49 @@ def compute_sheet_category_prior(items: List[Dict[str, Any]]) -> set:
     return {t2 for t2, _ in t2_counter.most_common(2)}
 
 
+def fetch_category_attributes_from_api(cat_code: str) -> List[Dict[str, Any]]:
+    """当本地缓存未命中且配置了 CATEGORY_ATTRS_API_URL 时，调用官方接口实时拉取标准属性并持久化回填本地缓存"""
+    if not CATEGORY_ATTRS_API_URL or not cat_code:
+        return []
+    try:
+        clean_code = str(cat_code).strip().replace('-', '')
+        url = f"{CATEGORY_ATTRS_API_URL.rstrip('/')}/{clean_code}"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            payload = data.get("data") or data
+            attrs = []
+            for grp in payload.get("attributeGroups", []):
+                attr = grp.get("attribute", {})
+                a_name = attr.get("description") or ""
+                is_req = attr.get("isRequired", False)
+                vals = [v.get("value") for v in grp.get("values", []) if v.get("value")]
+                enum_str = ", ".join(vals) if vals else ""
+                if a_name:
+                    attrs.append({
+                        "name": a_name,
+                        "enum": enum_str,
+                        "required": is_req,
+                        "affects_price": True
+                    })
+            if attrs:
+                cache_json = os.path.join(os.path.dirname(__file__), "category_attrs_cache.json")
+                try:
+                    c_data = {}
+                    if os.path.exists(cache_json):
+                        with open(cache_json, "r", encoding="utf-8") as f:
+                            c_data = json.load(f)
+                    c_data[cat_code] = payload
+                    with open(cache_json, "w", encoding="utf-8") as f:
+                        json.dump(c_data, f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+            return attrs
+    except Exception:
+        pass
+    return []
+
+
 def retrieve_category_candidates(
     raw_cat: str,
     std_name: str,
@@ -458,6 +502,11 @@ def retrieve_category_candidates(
 
     for c in cands:
         attrs = _ATTR_SCHEMA_MAP.get(c["level3"], [])
+        if not attrs and CATEGORY_ATTRS_API_URL and c.get("code"):
+            api_attrs = fetch_category_attributes_from_api(c["code"])
+            if api_attrs:
+                attrs = api_attrs
+                _ATTR_SCHEMA_MAP[c["level3"]] = attrs
         c["allowed_attributes"] = [
             f"{a['name']}({a['enum']})" if a.get("enum") else a["name"]
             for a in attrs[:10]

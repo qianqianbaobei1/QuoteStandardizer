@@ -208,6 +208,45 @@ def extract_deterministic_kv(raw_spec_text: str, raw_cells_dict: Optional[dict] 
                 k, v = m_kv.group(1).strip(), m_kv.group(2).strip()
                 if k and v and k not in ("品名", "名称", "单价", "金额"):
                     out[k] = v
+
+    # 3. 针对工程常见复合规格表达式进行确定性维度解构（电线/电缆/板材/管材）
+    # 3.1 三维板材/块材尺寸：L*W*T (如 600*600*15, 600*600*15mm)
+    m_dim3 = re.search(r'(\d+(?:\.\d+)?)\s*[*×xX]\s*(\d+(?:\.\d+)?)\s*[*×xX]\s*(\d+(?:\.\d+)?)(?:mm)?', text)
+    if m_dim3:
+        out.setdefault("长度(mm)", m_dim3.group(1))
+        out.setdefault("宽度(mm)", m_dim3.group(2))
+        out.setdefault("厚度(mm)", m_dim3.group(3))
+
+    # 3.2 电线电缆多芯与截面：N*S 或 N×S (如 2*2.5, 3*4, 2×0.5)
+    m_cable = re.search(r'([1-9]\d?)\s*[*×xX]\s*(\d+(?:\.\d+)?)(?:mm2|mm²)?', text)
+    if m_cable and not m_dim3:
+        out.setdefault("芯数", m_cable.group(1))
+        out.setdefault("标称截面(mm²)", m_cable.group(2))
+
+    # 3.3 电线电缆单芯纯数字截面与多股结构 (如 "1.5", "2.5", "35", "JZ-BV(7芯)")
+    is_wire_context = any(w in text for w in ("电线", "电缆", "BV", "BVR", "BYJ", "RV", "JK", "护套", "架空", "铜芯", "铝芯"))
+    if not is_wire_context and raw_cells_dict:
+        is_wire_context = any(any(w in str(v) for w in ("电线", "电缆", "BV", "BVR", "BYJ", "RV", "JK", "护套")) for v in raw_cells_dict.values())
+    if is_wire_context and "标称截面(mm²)" not in out:
+        m_single = re.search(r'(?:^|[^\d\.])(\d+(?:\.\d+)?)\s*(?:mm2|mm²|平方)?(?:$|[^\d\.])', text)
+        if m_single:
+            val_num = float(m_single.group(1))
+            if 0.5 <= val_num <= 1000:
+                out.setdefault("标称截面(mm²)", m_single.group(1))
+                cores = "7" if any(w in text for w in ("7芯", "7股", "七芯", "七股")) else "1"
+                out.setdefault("芯数", cores)
+
+    # 3.4 额定电压提取 (如 1KV, 10kV, 450/750V)
+    m_volt = re.search(r'(\d+(?:\.\d+)?\s*(?:kV|kv|KV)|(?:450/750|300/500)\s*V?|\b\d+\s*V\b)', text, re.I)
+    if m_volt:
+        out.setdefault("额定电压", m_volt.group(1).strip())
+
+    # 若规格型号已被拆解为独立的芯数与标称截面，清除未拆开的复合键以防下游冗余混淆
+    if "标称截面(mm²)" in out and "芯数" in out:
+        for ambiguous_key in ("型号/规格", "规格型号", "型号规格"):
+            if ambiguous_key in out and out[ambiguous_key] in text:
+                del out[ambiguous_key]
+
     return out
 
 
@@ -420,28 +459,8 @@ def _pick_row_field(cells: dict, keys, exclude=()) -> str:
     return ''
 
 
-# 原表材料名称列常把型号写在品名前面（NLED4916 吊装线型灯 / LED LEDA45J球泡 / LED T806P灯管），型号不进名称规格
-# 模型段必须以数字结尾或含数字，所以 CPL覆膜钢质门、UPVC排水管、HDPE双壁波纹管 这类不会被误删
-_MODEL_PREFIX_RE = re.compile(r'^(?:[A-Z0-9]+[\s\-])*[A-Z0-9]*\d[A-Z0-9\-]*[\s　]*')
-_BRACKET_CODE_RE = re.compile(r'^[\[\【][A-Za-z0-9\-_]+[\]\】][\s　]*')
-
-
-def _strip_model_prefix(name: str) -> str:
-    """删掉品名前的型号编码与方括号编码（如 [572305]光纤收发器）；剥完只能是汉字或原样返回"""
-    orig = re.sub(r'\s+', ' ', str(name or '')).strip()
-    s = orig
-    # 1. 优先剥离方括号/中括号编码前缀 (如 [572305]、【FT-01】)
-    s_bracket = _BRACKET_CODE_RE.sub('', s).strip()
-    if s_bracket and re.search(r'[\u4e00-\u9fa5]', s_bracket):
-        s = s_bracket
-
-    # 2. 剥离标准字母数字型号前缀
-    for _ in range(2):
-        s2 = _MODEL_PREFIX_RE.sub('', s, count=1).strip()
-        if s2 == s:
-            break
-        s = s2
-    return s if re.search(r'[\u4e00-\u9fa5]', s) else orig
+# 品名归一化只有一处实现（name_norm.py），词表建库/在线查表/交付件清洗共用，避免两边规则漂移
+from name_norm import strip_model_prefix as _strip_model_prefix  # noqa: E402
 
 
 def _looks_like_brand(v) -> bool:
@@ -553,10 +572,19 @@ def _detect_matrix(ws, hid_rows=frozenset(), hid_cols=frozenset()):
                    and sum(1 for v in grid[r] if v) >= 2
                    and not (table_title and all(grid[r][c] == table_title for c in value_cols))]
 
+    # 针对横跨多列的型号（如 JKLYJ 横跨 1KV架空 和 10kV架空 两列），在表头行内向右横向延续
+    grid_headers = [[grid[r][c] for c in range(max_c)] for r in range(r0)]
+    for hr_idx in range(len(grid_headers)):
+        for c in range(1, max_c):
+            if not grid_headers[hr_idx][c] and grid_headers[hr_idx][c - 1]:
+                # 若下一行当前列有具体子分类/电压规格，则继承上一行的型号
+                if any(hr_sub < len(grid_headers) and grid_headers[hr_sub][c] for hr_sub in range(hr_idx + 1, len(grid_headers))):
+                    grid_headers[hr_idx][c] = grid_headers[hr_idx][c - 1]
+
     def path(c):
         parts = []
         for r in header_rows:
-            v = grid[r][c]
+            v = grid_headers[r][c]
             # 过滤产品图样、指导价等辅助行
             if v and v != table_title and not any(k in v for k in ['产品图样', '产品 图样', '指导价', '参考价', '面价']) and (not parts or parts[-1] != v):
                 parts.append(v)
@@ -613,25 +641,100 @@ def _cell_notes(cell_issue, sname, r, cols, headers_map=None, price_col=None):
 
 
 def _collect_matrix_rows(ws, sname, mx, cell_issue, hid_rows=frozenset(), hid_cols=frozenset()):
-    """矩阵表展开：每个“行标题 × 列标题”交叉格生成一条原始物料行"""
+    """矩阵表展开：每个“行标题 × 列标题”交叉格生成一条原始物料行，支持局部子表头重绑定 (Multi-Zone Matrix)"""
     raw_rows, records = [], []
     prev = {}  # 列 -> (行标题数值, 价格)：用于“容量越大价格越高”的单调性校验
+
+    # 动态跟踪各列当前的活跃列头路径、活跃规格标签列、活跃单位与子表大标题
+    active_col_paths = dict(mx['col_paths'])
+    active_label_cols = {c: mx['label_col'] for c in mx['value_cols']}
+    active_units = {c: mx['unit'] for c in mx['value_cols']}
+    active_titles = {c: mx.get('table_title') or '' for c in mx['value_cols']}
+    max_c = ws.max_column or 1
+
     for r in range(mx['data_start'], ws.max_row + 1):
         if r in hid_rows:
             continue
-        label = cell_str(ws.cell(r, mx['label_col']))
-        if not label:
-            continue
-        label_num = _leading_number(label)
-        for c in mx['value_cols']:
+
+        # 1. 检测行内局部子表头（一页多表、右侧嵌入子表、底部并排小表）
+        row_vals = {c: cell_str(ws.cell(r, c)) for c in range(1, max_c + 1) if c not in hid_cols}
+        sub_hdr_cols = [c for c, v in row_vals.items() if v in ("型号", "规格", "规格型号", "价格", "单价", "元/公里", "元/箱", "出厂价", "面价")]
+        sub_label_candidates = [c for c in sub_hdr_cols if row_vals[c] in ("型号", "规格", "规格型号")]
+
+        # 若上一行是型号、当前行是规格 (如 R14=型号, R15=规格)
+        if not sub_label_candidates and r > mx['data_start']:
+            prev_row_vals = {c: cell_str(ws.cell(r - 1, c)) for c in range(1, max_c + 1) if c not in hid_cols}
+            sub_label_candidates = [c for c, v in row_vals.items() if v in ("规格", "规格型号") and prev_row_vals.get(c) in ("型号", "品名")]
+
+        sub_zone_header_cells = set()
+        if sub_label_candidates:
+            next_row_vals = {c: cell_str(ws.cell(r + 1, c)) for c in range(1, max_c + 1) if c not in hid_cols} if r < ws.max_row else {}
+            for i, lbl_c in enumerate(sub_label_candidates):
+                next_lbl = sub_label_candidates[i + 1] if i + 1 < len(sub_label_candidates) else (max_c + 1)
+                sub_data_cols = [c for c in range(lbl_c + 1, next_lbl) if c not in hid_cols and (row_vals.get(c) or next_row_vals.get(c))]
+                if not sub_data_cols:
+                    continue
+                # 寻找子表大标题（向上逐行寻找）
+                sub_title = ""
+                for up_r in (r - 1, r - 2):
+                    if up_r >= 1:
+                        val = cell_str(ws.cell(up_r, lbl_c)) or cell_str(ws.cell(up_r, sub_data_cols[0]))
+                        if val and val not in ("型号", "规格", "价格", "单价"):
+                            sub_title = val
+                            break
+                for c in sub_data_cols:
+                    sub_zone_header_cells.add(c)
+                    sub_zone_header_cells.add(lbl_c)
+                    active_label_cols[c] = lbl_c
+                    h1 = row_vals.get(c, "")
+                    h2 = next_row_vals.get(c, "")
+                    parts = []
+                    if sub_title and sub_title not in parts:
+                        parts.append(sub_title)
+                    if h1 and h1 not in ("价格", "单价", "数值", "元") and h1 not in parts:
+                        parts.append(h1)
+                    if h2 and h2 not in ("价格", "单价", "数值", "元") and h2 not in parts:
+                        parts.append(h2)
+                    if parts:
+                        active_col_paths[c] = "-".join(parts)
+                    # 识别局部单位
+                    for txt in (h1, h2):
+                        if any(u in txt for u in ("元/公里", "元/km", "公里", "km")):
+                            active_units[c] = "km"
+                        elif any(u in txt for u in ("元/箱", "箱")):
+                            active_units[c] = "箱"
+                        elif any(u in txt for u in ("元/盘", "盘", "卷")):
+                            active_units[c] = "卷"
+                        elif any(u in txt for u in ("元/根", "元/支", "根", "支")):
+                            active_units[c] = "根"
+                        elif any(u in txt for u in ("元/米", "元/m", "米", "m")):
+                            active_units[c] = "米"
+                    if sub_title:
+                        active_titles[c] = sub_title
+                    if c not in mx['value_cols']:
+                        mx['value_cols'].append(c)
+
+        for c in list(mx['value_cols']):
             if c in hid_cols:
                 continue
+            if c in sub_zone_header_cells:
+                ref = f"{sname}!R{r}C{c}"
+                records.append(SourceRowRecord(source_ref=ref, sheet=sname, row=r, raw_text=f"子表头:{row_vals.get(c, '')}", raw_price=0.0, decision='局部子表头'))
+                continue
+
+            lbl_c = active_label_cols.get(c, mx['label_col'])
+            label = cell_str(ws.cell(r, lbl_c))
+            if not label or label in ("型号", "规格", "规格型号"):
+                continue
+            label_num = _leading_number(label)
+
             v = cell_str(ws.cell(r, c))
             if not v:
                 continue
             ref = f"{sname}!R{r}C{c}"
-            col_path = mx['col_paths'][c]
-            tt_part = ""
+            col_path = active_col_paths.get(c, mx['col_paths'].get(c, f"第{c}列"))
+            unit_val = active_units.get(c, mx['unit'])
+            table_title = active_titles.get(c, mx.get('table_title') or '')
             raw_line = f"{mx['label_header']}:{label} | 列:{col_path} | 价格:{v}"
             price = safe_clean_price(v) if _is_number_text(v) else 0.0
             decision = 'item' if price > 0 else f"矩阵单元格非数值: {v}"
@@ -641,7 +744,7 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue, hid_rows=frozenset(), hid_co
                                            decision=decision))
             if decision != 'item':
                 continue
-            notes = _cell_notes(cell_issue, sname, r, [c, mx['label_col']], price_col=c)
+            notes = _cell_notes(cell_issue, sname, r, [c, lbl_c], price_col=c)
             # 检查表头格是否有 cell_issue (F5)
             for hr in range(1, mx['data_start']):
                 h_issue = cell_issue.get((sname, hr, c))
@@ -658,12 +761,11 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue, hid_rows=frozenset(), hid_co
             # 严禁将全天下所有矩阵表硬编码为“暗杆闸阀”或锁死为“规格型号/型号系列”
             clean_col = col_path.strip()
             row_header = mx.get('label_header') or '规格'
-            table_title = mx.get('table_title') or ''
 
-            # 智能提取品名与型号特征（若列标题包含英文型号/系列则提取，否则保持原列头）
-            m_model = re.search(r'([A-Za-z0-9\-]+(?:-[A-Za-z0-9]+)*[A-Za-z0-9]*)', clean_col)
+            # 智能提取品名与型号特征（支持包含斜杠 /、横杠 -、破折号 —、以及括号 (7芯) 的型号）
+            m_model = re.search(r'([A-Za-z0-9]+(?:[/\-—][A-Za-z0-9]+)*(?:\(\d+[芯股]\)|（\d+[芯股]）)?)', clean_col)
             model_cand = m_model.group(1) if m_model else ""
-            extracted_name = clean_col.replace(model_cand, '').strip() if model_cand else clean_col
+            extracted_name = clean_col.replace(model_cand, '').strip(' -—/') if model_cand else clean_col
 
             matrix_cells = {
                 row_header: label,
@@ -686,7 +788,7 @@ def _collect_matrix_rows(ws, sname, mx, cell_issue, hid_rows=frozenset(), hid_co
                 "raw_full_line": raw_line,
                 "raw_spec": raw_spec_clean,
                 "raw_price": price,
-                "raw_unit": mx['unit'],
+                "raw_unit": unit_val,
                 "mpaths": [],
                 "file_page": sname,
                 "table_name": sname,
@@ -1102,17 +1204,22 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         batches = []
         for b_idx in range(0, len(raw_rows), batch_size):
             batch_slice = raw_rows[b_idx:b_idx + batch_size]
-            llm_input = [
-                {
+            llm_input = []
+            for item in batch_slice:
+                cands = item.get("candidate_categories", [])
+                cand_hints = []
+                for c in cands[:6]:
+                    attrs = c.get("allowed_attributes", [])
+                    attrs_hint = f" [标准属性:{','.join(attrs[:8])}]" if attrs else ""
+                    cand_hints.append(f"{c.get('code')}:{c.get('level3')}{attrs_hint}")
+                llm_input.append({
                     "id": item["id"],
                     "raw_cells": item["raw_cells_dict"],
                     "raw_text": item["raw_full_line"],
                     "raw_price": item["raw_price"],
                     "raw_unit": item["raw_unit"],
-                    "candidate_categories": item.get("candidate_categories", [])
-                }
-                for item in batch_slice
-            ]
+                    "candidate_categories": cand_hints if cand_hints else cands,
+                })
             batches.append((batch_slice, llm_input))
 
         def _clean_worker(args):
@@ -1288,6 +1395,18 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     b = extractor.extract_image_bytes(mp) if extractor else None
                     if b: img_bytes_list.append(b)
 
+                # 支持分系列差异化工程折扣（如电缆系列下浮15%，电线系列下浮12%）
+                row_disc_ratio = disc_ratio
+                row_disc_series = terms_info["discount_series"]
+                disc_map = terms_info.get("discount_series_map") or {}
+                if disc_map:
+                    item_context = f"{std_name} {item_brand} {spec_model} {raw_spec_str} {item.get('raw_full_line', '')}"
+                    for s_key, s_ratio in disc_map.items():
+                        if s_key in item_context:
+                            row_disc_ratio = s_ratio
+                            row_disc_series = f"{s_key}系列(下浮{int(round((1.0 - s_ratio) * 100))}%)"
+                            break
+
                 ci = CanonicalMaterialItem(
                     quote_id=f"{id_prefix}{seq:05d}",
                     supplier=supplier,
@@ -1299,9 +1418,9 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     file_page=item["file_page"],
                     unit=unit,
                     market_price=final_price,
-                    discount_ratio=disc_ratio,
-                    project_price=round(final_price * disc_ratio, 2) if disc_ratio is not None and final_price > 0 else None,
-                    discount_series=terms_info["discount_series"],
+                    discount_ratio=row_disc_ratio,
+                    project_price=round(final_price * row_disc_ratio, 2) if row_disc_ratio is not None and final_price > 0 else None,
+                    discount_series=row_disc_series,
                     is_freight_included=row_freight_inc,
                     freight_desc=row_freight_desc or terms_info["freight_desc"],
                     is_tax_included=row_tax_inc,

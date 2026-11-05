@@ -70,6 +70,8 @@ def parse_discount(val):
             return None
         x = float(m.group(1))
         if '%' in s:
+            if any(w in s for w in ('下浮', '优惠', '降', '减')):
+                return round(1.0 - x / 100, 4) if 0 < x < 100 else None
             return round(x / 100, 4) if 0 < x <= 100 else None
         if '折' in s:
             if x >= 10:  # 85折 → 8.5折
@@ -126,6 +128,20 @@ def normalize_terms(terms: dict) -> dict:
     out['discount_max'] = parse_discount(given.get('discount_max')) or ratio
     if out['discount_min'] is not None and out['discount_max'] is not None and out['discount_min'] > out['discount_max']:
         out['discount_min'], out['discount_max'] = out['discount_max'], out['discount_min']
+
+    # 提取分系列差异化折扣映射（如“所有电缆系列下浮15%；所有电线系列下浮12%”）
+    series_text = str(given.get('discount_series') or '')
+    if series_text:
+        s_map = {}
+        for m in re.finditer(r'([一-龥]{2,8}(?:系列)?).*?(?:下浮|优惠|折扣|折)[：:\s]*([\d\.]+)%', series_text):
+            s_name = m.group(1).replace('所有', '').replace('系列', '').strip()
+            pct = float(m.group(2))
+            s_map[s_name] = round(1.0 - pct / 100.0, 4)
+        if s_map:
+            out['discount_series_map'] = s_map
+            if ratio is None:
+                ratio = list(s_map.values())[0]
+                out['discount_ratio'] = ratio
 
     out['tax_rate'] = parse_tax_rate(given.get('tax_rate'))
     out['is_tax_included'] = _yes_no(given.get('is_tax_included'), '是', '否')

@@ -13,4 +13,5 @@ deliveries_backup_*/
 test_*.xlsx
 material_illustration_cache.json
 *.run.json
+*.db
 archive/
