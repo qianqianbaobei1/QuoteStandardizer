@@ -445,6 +445,46 @@ def fetch_category_attributes_from_api(cat_code: str) -> List[Dict[str, Any]]:
     return []
 
 
+# 当外部接口不可用或新分类未入缓存时，按二级/三级类关键词提供工料机国标通用属性模板兜底
+_FALLBACK_CATEGORY_ATTRS = [
+    (re.compile(r'(电线|电缆|导线|护套线|穿线|软线|光缆)'), ["型号", "芯数", "标称截面(mm²)", "额定电压(V)", "绝缘材质", "燃烧性能等级"]),
+    (re.compile(r'(板|砖|石材|玻璃|铝塑板|石膏板|夹芯板)'), ["材质", "长度(mm)", "宽度(mm)", "厚度(mm)", "表面处理", "品种"]),
+    (re.compile(r'(管|导管|套管|波纹管)'), ["品种", "公称直径DN(mm)", "外径(mm)", "壁厚(mm)", "公称压力(MPa)", "连接方式"]),
+    (re.compile(r'(阀|水嘴|龙头|冲洗阀)'), ["品种", "型号", "公称直径DN(mm)", "阀体材质", "连接形式"]),
+    (re.compile(r'(光模块|收发器|交换机|配线架|耦合器|跳线|尾纤)'), ["型号", "接口类型", "传输速率", "传输距离", "单模/多模", "长度(m)"]),
+]
+
+
+def fetch_category_attributes(level3_or_code: str) -> List[Dict[str, Any]]:
+    """优先查本地 Sheet2 与缓存 -> 其次实时调用 CATEGORY_ATTRS_API_URL 接口 -> 最后走国标大类属性模板兜底"""
+    _load_catalog()
+    key = str(level3_or_code or "").strip()
+    t3_name, cat_code = key, ""
+    if key in _CODE_MAP:
+        _, _, t3_name, cat_code = _CODE_MAP[key]
+    elif _format_cat_code(key) in _CODE_MAP:
+        _, _, t3_name, cat_code = _CODE_MAP[_format_cat_code(key)]
+    elif key in _EXACT_T3_MAP:
+        _, _, t3_name, cat_code = _EXACT_T3_MAP[key]
+
+    attrs = _ATTR_SCHEMA_MAP.get(t3_name, [])
+    if attrs:
+        return attrs
+
+    # 实时调用远端接口获取该分类编码的标准属性定义
+    if cat_code:
+        remote_attrs = fetch_category_attributes_from_api(cat_code)
+        if remote_attrs:
+            _ATTR_SCHEMA_MAP[t3_name] = remote_attrs
+            return remote_attrs
+
+    # 国标大类属性模板保底（确保大模型永远有标准属性名可对齐）
+    for pat, std_names in _FALLBACK_CATEGORY_ATTRS:
+        if pat.search(t3_name):
+            return [{"name": n, "enum": "", "required": False, "affects_price": True} for n in std_names]
+    return []
+
+
 def retrieve_category_candidates(
     raw_cat: str,
     std_name: str,
@@ -501,12 +541,7 @@ def retrieve_category_candidates(
                         break
 
     for c in cands:
-        attrs = _ATTR_SCHEMA_MAP.get(c["level3"], [])
-        if not attrs and CATEGORY_ATTRS_API_URL and c.get("code"):
-            api_attrs = fetch_category_attributes_from_api(c["code"])
-            if api_attrs:
-                attrs = api_attrs
-                _ATTR_SCHEMA_MAP[c["level3"]] = attrs
+        attrs = fetch_category_attributes(c.get("level3") or c.get("code"))
         c["allowed_attributes"] = [
             f"{a['name']}({a['enum']})" if a.get("enum") else a["name"]
             for a in attrs[:10]
@@ -550,11 +585,6 @@ def resolve_and_verify_category(
     return "", "", "", "", False, "未命中工料机分类字典"
 
 
-def fetch_category_attributes(level3_name: str) -> List[Dict[str, Any]]:
-    _load_catalog()
-    return _ATTR_SCHEMA_MAP.get(str(level3_name or "").strip(), [])
-
-
 def validate_and_normalize_specs(
     level3_name: str,
     specs: Dict[str, Any],
@@ -573,6 +603,8 @@ def validate_and_normalize_specs(
         if fmt_c in _CODE_MAP:
             lvl3 = _CODE_MAP[fmt_c][2]
     schema = _ATTR_SCHEMA_MAP.get(lvl3, [])
+    if not schema:
+        schema = fetch_category_attributes(lvl3)
     if not specs or not isinstance(specs, dict):
         specs = {}
     clean_specs: Dict[str, str] = {str(k).strip(): str(v).strip() for k, v in specs.items() if str(v or "").strip()}

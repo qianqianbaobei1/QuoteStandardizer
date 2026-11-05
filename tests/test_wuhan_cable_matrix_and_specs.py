@@ -15,8 +15,9 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 import openpyxl
-from main import extract_deterministic_kv, _collect_matrix_rows, _detect_matrix
+from main import extract_deterministic_kv, _collect_matrix_rows, _detect_matrix, _match_discount_rule
 from local_terms_engine import extract_terms_from_ocr_text, parse_discount_num
+from category_attribute_service import fetch_category_attributes
 
 
 class TestWuhanCableAndMatrixSpecs(unittest.TestCase):
@@ -108,6 +109,69 @@ class TestWuhanCableAndMatrixSpecs(unittest.TestCase):
         self.assertEqual(s_map.get('电缆'), 0.85)
         self.assertEqual(s_map.get('电线'), 0.88)
 
+    def test_fallback_category_attributes(self):
+        """测试国标大类通用属性兜底模板"""
+        cable_attrs = fetch_category_attributes("电力电缆")
+        cable_names = [a["name"] for a in cable_attrs]
+        self.assertIn("标称截面(mm²)", cable_names)
+        self.assertIn("芯数", cable_names)
+
+        pipe_attrs = fetch_category_attributes("热镀锌钢管")
+        pipe_names = [a["name"] for a in pipe_attrs]
+        self.assertIn("公称直径DN(mm)", pipe_names)
+        self.assertIn("壁厚(mm)", pipe_names)
+
+        board_attrs = fetch_category_attributes("铝单板")
+        board_names = [a["name"] for a in board_attrs]
+        self.assertIn("厚度(mm)", board_names)
+
+    def test_match_discount_rule_cable_vs_wire(self):
+        """测试分系列折扣匹配器区分电缆(0.85)与电线(0.88)"""
+        disc_map = {"所有电缆系列": 0.85, "所有电线系列": 0.88}
+
+        # 1. 架空电缆
+        r1, s1 = _match_discount_rule(
+            item_context="JKLYJ 10kV架空 50",
+            l2="电力电缆",
+            l3="架空绝缘电缆",
+            std_name="JKLYJ",
+            raw_full_line="JKLYJ 10kV架空",
+            disc_map=disc_map,
+            default_ratio=0.9,
+            default_series="普通折扣",
+        )
+        self.assertEqual(r1, 0.85)
+        self.assertIn("电缆系列", s1)
+
+        # 2. 布电线 BV
+        r2, s2 = _match_discount_rule(
+            item_context="BV 2.5",
+            l2="电线电缆",
+            l3="铜芯聚氯乙烯绝缘电线",
+            std_name="BV",
+            raw_full_line="BV 2.5",
+            disc_map=disc_map,
+            default_ratio=0.9,
+            default_series="普通折扣",
+        )
+        self.assertEqual(r2, 0.88)
+        self.assertIn("电线系列", s2)
+
+        # 3. 护套线 BLVVB
+        r3, s3 = _match_discount_rule(
+            item_context="BLVVB 铝芯护套 2*1.5",
+            l2="布电线",
+            l3="铝芯聚氯乙烯护套线",
+            std_name="BLVVB",
+            raw_full_line="BLVVB 2*1.5",
+            disc_map=disc_map,
+            default_ratio=0.9,
+            default_series="普通折扣",
+        )
+        self.assertEqual(r3, 0.88)
+        self.assertIn("电线系列", s3)
+
 
 if __name__ == '__main__':
     unittest.main()
+
