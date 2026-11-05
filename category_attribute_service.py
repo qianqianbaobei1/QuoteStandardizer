@@ -389,19 +389,41 @@ def _load_catalog() -> None:
 
 
 def compute_sheet_category_prior(items: List[Dict[str, Any]]) -> set:
-    """整表主业先验投票：扫描全表所有行，统计得分最高的 Top-2 二级类别"""
+    """整表主业先验投票：词表实盘分布 + 树检索两边一起投，统计 Top-2 二级类别
+
+    只查《工料机类别》树时，厂商俗称（“洗脸盆龙头”“白铁皮”）根本投不出票，
+    整表先验经常是空的；广材词表（category_lexicon.db）能直接给出二级归属，必须参与投票。
+    """
     _load_catalog()
-    if not _SEARCH_INDEX or not items:
+    if not items:
         return set()
+    try:
+        from jev_category_scorer import lexicon_candidates
+    except Exception:
+        lexicon_candidates = None
+
     t2_counter: Counter = Counter()
     for it in items:
         name = str(it.get("src_name") or it.get("raw_name") or "")
         spec = str(it.get("raw_spec") or "")
         cat = str(it.get("src_cat") or "")
-        cands = _SEARCH_INDEX.search(name, cat, spec, sheet_prior_t2=None, top_k=1)
-        if cands and cands[0]["score"] >= 15.0:
-            t2_counter[cands[0]["level2"]] += 1
-    return {t2 for t2, _ in t2_counter.most_common(2)}
+
+        # ① 词表实盘：按企业支持度加权（去重企业数，不是行数）
+        if lexicon_candidates and name:
+            try:
+                for lh in lexicon_candidates(name, limit=2):
+                    if lh.get("level2"):
+                        t2_counter[lh["level2"]] += 2.0 * float(lh.get("share", 0.5))
+            except Exception:
+                pass
+
+        # ② 树检索
+        if _SEARCH_INDEX:
+            cands = _SEARCH_INDEX.search(name, cat, spec, sheet_prior_t2=None, top_k=1)
+            if cands and cands[0]["score"] >= 15.0:
+                t2_counter[cands[0]["level2"]] += 1.0
+
+    return {t2 for t2, _ in t2_counter.most_common(2) if t2}
 
 
 def fetch_category_attributes_from_api(cat_code: str) -> List[Dict[str, Any]]:
@@ -500,36 +522,53 @@ def retrieve_category_candidates(
         return []
 
     # 1. 广材实盘词表 (category_lexicon.db) 先验召回（39.8万条企业真实报价分布）
+    #    不截断：1,222 个品名是一对多（“电线”对 9 个类别），截到 3 个等于直接丢掉 6 个正确答案
     lex_hits = []
     try:
         from jev_category_scorer import lexicon_candidates
-        lex_hits = lexicon_candidates(std_name, limit=3)
+        lex_hits = lexicon_candidates(std_name, limit=12)
     except Exception:
         pass
 
     # 2. 联合检索引擎（BM25 + Sheet2 枚举反查 + 整表先验投票）
     cands = _SEARCH_INDEX.search(std_name, raw_cat, raw_spec, sheet_prior_t2=sheet_prior, top_k=top_k)
 
-    # 3. 词表实盘先验置顶融合 (解决品名有同义词/特定行业叫法如“洗脸盆龙头”搜不到“水嘴”)
+    # 3. 词表实盘先验融合：静态企业占比打底，**整表主业先验与规格证据加权后重排**
+    #    只按静态占比置顶会让“输入模块”在任何表里都排消防（204001），报警表里永远排不出 570129
     if lex_hits:
+        spec_txt = f"{std_name} {raw_cat} {raw_spec}"
+
+        def _lex_score(lh: Dict[str, Any]) -> float:
+            score = 100.0 * lh.get("share", 1.0)                                   # 词表静态支持度
+            if sheet_prior and lh.get("level2") in sheet_prior:
+                score += 60.0                                                      # 与本表主业二级一致
+            elif sheet_prior and lh.get("level1") in {
+                    t1 for t1, t2, _t3, _c in _CATALOG_ROWS if t2 in sheet_prior}:
+                score += 25.0                                                      # 至少同一个一级大类
+            if lh.get("level3") and lh["level3"] in spec_txt:
+                score += 40.0                                                      # 规格里直接写了这个品类名
+            return score
+
         seen_codes = set()
         merged = []
         for lh in lex_hits:
-            if lh["code"] not in seen_codes:
-                merged.append({
-                    "level1": lh["level1"],
-                    "level2": lh["level2"],
-                    "level3": lh["level3"],
-                    "code": lh["code"],
-                    "score": round(150.0 * lh.get("share", 1.0), 2),
-                    "reason": lh.get("reason", "广材词表实盘先验"),
-                })
-                seen_codes.add(lh["code"])
+            if lh["code"] in seen_codes:
+                continue
+            merged.append({
+                "level1": lh["level1"],
+                "level2": lh["level2"],
+                "level3": lh["level3"],
+                "code": lh["code"],
+                "score": round(_lex_score(lh), 2),
+                "reason": lh.get("reason", "广材词表实盘先验"),
+            })
+            seen_codes.add(lh["code"])
         for c in cands:
             if c["code"] not in seen_codes:
                 merged.append(c)
                 seen_codes.add(c["code"])
-        cands = merged[:max(top_k, len(lex_hits))]
+        merged.sort(key=lambda c: -float(c.get("score") or 0))
+        cands = merged[:max(top_k, min(len(merged), 10))]
 
     # 同族展开分两轮：第一轮只补同二级大类（本表主业）的同族三级类；若不足 10 个，第二轮才按同一级大类补充
     # 彻底杜绝一级大类排在前面的几百个无关类目抢占名额的 Bug
@@ -610,7 +649,7 @@ def resolve_and_verify_category(
     # 2.5 检查广材实盘词表 (category_lexicon.db) 高置信度匹配
     try:
         from jev_category_scorer import lexicon_candidates
-        lex_hits = lexicon_candidates(std_name, limit=2)
+        lex_hits = lexicon_candidates(std_name, limit=12)   # 分布不截断；唯一性下面用 share/companies 判定
         if lex_hits:
             top_lex = lex_hits[0]
             if (len(lex_hits) == 1 or top_lex.get("share", 0) >= 0.75) and top_lex.get("companies", 0) >= 2:

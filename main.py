@@ -40,7 +40,7 @@ from category_attribute_service import (
     validate_and_normalize_specs,
 )
 from llm_agent import DeepSeekStandardizer, JevJudge, UNIT_PRICE_KEYS, TOTAL_PRICE_KEYS
-from config import STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE
+from config import STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE, CATEGORY_ENGINE, JEV_CATEGORY_GATE
 
 RULE_DECISION_TYPE = {'item': 'item', '分组标题行': 'title', '重复表头行': 'header', '合计/小计行': 'summary',
                       '无价格且有效属性不足2项': 'note'}
@@ -1332,6 +1332,34 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 top_k=5,
             )
 
+        # 双档位 Jev 分类判定：按**去重品名**一次批量请求（档位1 词表精排 → 档位2 一级大类全量展开）
+        # 命中且过门控才采纳；NONE/低分一律回退到下面的树检索+LLM 受限单选，绝不硬配
+        jev_cat_map: dict = {}
+        if CATEGORY_ENGINE in ('jev_tiered', 'jev', 'tiered'):
+            try:
+                from jev_category_scorer import score_items as _jev_score_items
+                uniq_items = {}
+                for it in raw_rows:
+                    nm = it.get("src_name") or ""
+                    if nm and nm not in uniq_items:
+                        uniq_items[nm] = {
+                            "key": nm,
+                            "name": nm,
+                            "raw_cat": it.get("src_cat") or "",
+                            "raw_spec": it.get("raw_spec") or it.get("raw_full_line", ""),
+                            "candidates": it.get("candidate_categories") or [],
+                        }
+                if uniq_items:
+                    jev_cat_map = _jev_score_items(
+                        list(uniq_items.values()), supplier=supplier, brand=brand,
+                        sheet_prior_t2=sheet_prior_t2) or {}
+                    t1n = sum(1 for v in jev_cat_map.values() if v.get("tier") == "tier1_lex_rerank")
+                    t2n = sum(1 for v in jev_cat_map.values() if v.get("tier") == "tier2_full_branch")
+                    print(f"    -> Jev 双档位判定: 去重品名 {len(uniq_items)} 个，"
+                          f"采纳 {len(jev_cat_map)} 个（档位1 {t1n} / 档位2 {t2n}）")
+            except Exception as jev_err:
+                print(f"    ! Jev 双档位判定异常，回退树检索+LLM: {jev_err}")
+
         # 分批调用 DeepSeek 提炼标准物料模型（并发线程池加速）
         batch_size = 30
         batches = []
@@ -1400,16 +1428,27 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 if not std_name:
                     notes.append("未识别出物料名称")
 
-                # 统一类别解析（BM25 + Sheet2 枚举反查 + 大模型受限单选 + 先验加成）
+                # 统一类别解析：双档位 Jev（词表先验+全分支展开）优先，未过门控再走树检索+LLM
                 selected_c = str(cleaned_res.get("selected_category_code") or cleaned_res.get("category_code") or "").strip()
-                l1, l2, l3, cat_code, cat_verified, cat_reason = resolve_and_verify_category(
-                    raw_cat=src_cat or str(cleaned_res.get("predicted_category") or "").strip(),
-                    std_name=std_name,
-                    raw_spec=item.get("raw_spec") or item.get("raw_full_line", ""),
-                    sheet_prior=sheet_prior_t2,
-                    selected_code=selected_c
-                )
-                if not cat_code:
+                _jh = jev_cat_map.get(std_name) or {}
+                # 原表自己写明了三级类别的，原表优先（L1），Jev 不覆盖它
+                if _jh and not src_cat and float(_jh.get("confidence") or 0) >= JEV_CATEGORY_GATE:
+                    l1, l2, l3 = _jh.get("level1", ""), _jh.get("level2", ""), _jh.get("level3", "")
+                    cat_code, cat_verified = _jh.get("code", ""), True
+                    cat_reason = f"Jev双档位判定({_jh.get('tier')}, p={_jh.get('prob')})"
+                    cat_src = "jev"
+                else:
+                    l1, l2, l3, cat_code, cat_verified, cat_reason = resolve_and_verify_category(
+                        raw_cat=src_cat or str(cleaned_res.get("predicted_category") or "").strip(),
+                        std_name=std_name,
+                        raw_spec=item.get("raw_spec") or item.get("raw_full_line", ""),
+                        sheet_prior=sheet_prior_t2,
+                        selected_code=selected_c
+                    )
+                    cat_src = None
+                if cat_src == "jev":
+                    pass          # 双档位 Jev 已定码，来源就是 jev
+                elif not cat_code:
                     cat_src = ""
                     notes.append("类别编码未确定" + ("" if CATEGORY_CODE_MAP else " (未配置标准编码库 CATEGORY_CODE_FILE)"))
                 elif src_cat:

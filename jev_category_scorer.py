@@ -6,6 +6,7 @@ jev_category_scorer.py
 import json
 import os
 import sqlite3
+from functools import lru_cache
 from typing import Dict, List, Any, Optional, Tuple, Set
 import requests
 
@@ -38,14 +39,10 @@ def catalog_by_t1() -> Dict[str, List[Dict[str, Any]]]:
     return out
 
 
-def lexicon_candidates(name: str, limit: int = 6) -> List[Dict[str, Any]]:
-    """查广材词表 (category_lexicon.db)：返回 (一级,二级,三级,企业支持度)；同一个品名可能对应多个类别（分布）"""
+@lru_cache(maxsize=8192)
+def _lex_rows(nk: str, limit: int) -> tuple:
     if not os.path.exists(LEXICON_DB):
-        return []
-    from name_norm import normalize_material_name
-    nk = normalize_material_name(name)
-    if not nk:
-        return []
+        return tuple(), 0
     con = sqlite3.connect(LEXICON_DB)
     try:
         rows = con.execute(
@@ -54,7 +51,29 @@ def lexicon_candidates(name: str, limit: int = 6) -> List[Dict[str, Any]]:
         total = con.execute("select sum(companies) from lex where nk=?", (nk,)).fetchone()[0] or 1
     finally:
         con.close()
-    code_of = {(t1, t2, t3): code for t1, t2, t3, code in _load_catalog()}
+    return tuple(rows), total
+
+
+_CODE_OF: Dict[Tuple[str, str, str], str] = {}
+
+
+def _code_of() -> Dict[Tuple[str, str, str], str]:
+    if not _CODE_OF:
+        for t1, t2, t3, code in _load_catalog():
+            _CODE_OF.setdefault((t1, t2, t3), code)
+    return _CODE_OF
+
+
+def lexicon_candidates(name: str, limit: int = 6) -> List[Dict[str, Any]]:
+    """查广材词表 (category_lexicon.db)：返回 (一级,二级,三级,企业支持度)；同一个品名可能对应多个类别（分布）"""
+    if not os.path.exists(LEXICON_DB):
+        return []
+    from name_norm import normalize_material_name
+    nk = normalize_material_name(name)
+    if not nk:
+        return []
+    rows, total = _lex_rows(nk, limit)
+    code_of = _code_of()
     out = []
     for t1, t2, t3, companies, nrows in rows:
         code = code_of.get((t1, t2, t3))
@@ -131,14 +150,14 @@ class JevCategoryScorer:
         self,
         items: List[Dict[str, Any]],
         sheet_context: Dict[str, Any],
-        catalog_by_t2: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+        catalog_t2_map: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """
         批量对整张表的物料进行 Jev 分类识别与打分。
         参数:
           - items: 每项含 {"key": 唯一键, "std_name": 品名, "raw_cat": 原表分类, "raw_spec": 规格, "candidates": 初步Top-K候选}
           - sheet_context: {"supplier": 供应商, "brand": 品牌, "dominant_t2": list(sheet_prior_t2), "sample_names": [...]}
-          - catalog_by_t2: {二级类别名: [该二级类下所有三级类别字典]}，用于第二档“词表未覆盖”时的全量展开兜底
+          - catalog_t2_map: {二级类别名: [该二级类下所有三级类别字典]}，用于第二档“词表未覆盖”时的全量展开兜底
         返回:
           {item_key: {"code": 选中编码, "level1": l1, "level2": l2, "level3": l3, "prob": 概率, "quality_score": 打分, "confidence": 综合置信度, "tier": "tier1/tier2/fallback"}}
         """
@@ -247,7 +266,8 @@ class JevCategoryScorer:
 
         # 4. 第二档：专门应对“词表数据还没给全”——将该表主流二级大类下的全部三级类别（<=200个）全量喂给 Jev 直选！
         if tier2_ukeys:
-            t2_catalog = catalog_by_t2()
+            # 注意：参数名不能叫 catalog_by_t2，否则会把模块级同名函数遮蔽掉（这里曾踩过）
+            t2_catalog = catalog_t2_map or catalog_by_t2()
             dom_t2_list = sheet_context.get("dominant_t2") or []
             full_branch_cands = []
             for t2_name in dom_t2_list:
