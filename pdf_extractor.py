@@ -101,6 +101,7 @@ class PDFTableExtractor:
         total_p = len(self.doc) if max_pages is None else min(max_pages, len(self.doc))
         use_vision = bool(VISION_API_KEY and VISION_BASE_URL and VISION_MODEL)
         print(f"[PDFTableExtractor] 正在还原 {total_p} 页表格 (扫描件识别: {VISION_MODEL if use_vision else '未配置视觉模型'})...")
+        last_known_header = None
         for p_idx in range(total_p):
             page = self.doc[p_idx]
             base = f"第{p_idx + 1}页"
@@ -124,6 +125,23 @@ class PDFTableExtractor:
             else:
                 raise RuntimeError(f"{base} 是扫描件，需要可用的视觉模型 (DEEPSEEK_* 或 VISION_*)")
             for t_idx, grid in enumerate(grids, 1):
+                # 跨页续表表头继承机制：多页 PDF 中，后续页面往往不重复打印表头，直接以数据行起始。
+                # 若当前页首行实质为数据行（含数字单价/序号且无表头关键词），而前序页面存在相同列数的表头，则自动补入前序表头
+                if grid and last_known_header and len(grid[0]) == len(last_known_header):
+                    first_row = grid[0]
+                    has_num = any(re.search(r'^\d+(\.\d+)?$', str(c or '').strip()) for c in first_row)
+                    has_hdr = any(any(k in str(c or '') for k in ('序号', '名称', '品名', '规格', '单价', '价格', '单位', '品牌')) for c in first_row)
+                    if has_num and not has_hdr:
+                        grid.insert(0, list(last_known_header))
+                        print(f"    [*] {base}: 跨页续表自动继承前序表头 ({len(last_known_header)} 列)")
+
+                # 更新 last_known_header 供后续跨页续表使用
+                if grid:
+                    for row in grid[:4]:
+                        if any(any(k in str(c or '') for k in ('单价', '价格', '材料名称', '物料名称', '规格型号', '规格参数')) for c in row):
+                            last_known_header = [str(c or '').strip() for c in row]
+                            break
+
                 # 一页多表时拆成 “第N页-表K”，存疑单元格记录的 key 同步改为最终 Sheet 名
                 sname = base if len(grids) == 1 else f"{base}-表{t_idx}"
                 for key in [k for k in self.cell_issue if k[0] == f"{base}#{t_idx}"]:
