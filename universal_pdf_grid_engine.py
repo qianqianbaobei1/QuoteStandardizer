@@ -207,23 +207,46 @@ def slice_dense_page_with_row_rulers(
 
 
 # ==============================================================================
-# 模块 3：全文档跨页同构表缝合 + 任意页表头广播 + 无表头列角色自推导
+# 模块 3：全文档跨页同构表缝合 + 任意页表头双向广播 + 无表头列角色自推导
 # ==============================================================================
-_HDR_KEYWORDS = ("材料名称", "属性项", "属性值", "品名", "规格", "单价", "含税价", "价格", "单位", "品牌", "类别", "税率", "运费", "序号")
+_HDR_KEYWORDS = ("材料名称", "物料名称", "属性项", "属性值", "品名", "规格", "规格型号", "规格参数", "单价", "含税价", "不含税价", "价格", "单位", "品牌", "类别", "税率", "运费", "序号", "编号")
 _UNIT_VAL_RE = re.compile(r'^(m2|m²|m3|m³|kg|t|吨|个|套|根|米|m|km|公里|樘|扇|片|块|张|卷|桶|箱|包|袋|台|只|对|条|元/.+)$', re.I)
 _PRICE_OR_DASH_RE = re.compile(r'^(\d+(?:\.\d+)?|[—\-－/]+)$')
-_KV_SPEC_RE = re.compile(r'(品种\s*[:：]|厚度\s*\(?mm\)?\s*[:：]|长度\s*\(?mm\)?\s*[:：]|材质\s*[:：]|规格\s*\(?mm\)?\s*[:：])', re.I)
+_KV_SPEC_RE = re.compile(r'(品种\s*[:：]|厚度\s*\(?mm\)?\s*[:：]|长度\s*\(?mm\)?\s*[:：]|材质\s*[:：]|规格\s*\(?mm\)?\s*[:：]|颜色\s*[:：]|系列\s*[:：])', re.I)
 
 
 def is_valid_table_header_row(row_cells: List[Any]) -> bool:
-    """判定某一行是否为真正的表头行（排除含 '品种:xxx'、'm²'、纯浮点数的数据行）"""
+    """
+    判定某一行是否为真正的表头行。
+    严格排除以下数据行伪装：
+    1. 规格列中包含 '规格(mm):800×800'、'品种:xxx' 等长键值对描述；
+    2. 包含 'm²'、'kg'、'卷' 等计量单位；
+    3. 包含浮点数金额（如 16.25、45.00）或单价破折号 '—'；
+    4. 单元格字符超长（> 16 字符）。
+    """
     texts = [str(c or "").strip() for c in (row_cells or []) if str(c or "").strip()]
     if not texts:
         return False
-    # 若该行已出现典型数据特征（如 m²、品种:xxx、长串键值对），绝不是表头行！
-    if any(_KV_SPEC_RE.search(t) or _UNIT_VAL_RE.match(t) or re.match(r'^\d+\.\d+$', t) for t in texts):
-        return False
-    kw_hits = sum(1 for t in texts if any(k in t for k in _HDR_KEYWORDS) and len(t) <= 12)
+
+    for t in texts:
+        # 排除包含规格参数冒号、分号的描述项
+        if _KV_SPEC_RE.search(t) or ':' in t or '：' in t or ';' in t or '；' in t:
+            return False
+        # 排除包含计量单位的行
+        if _UNIT_VAL_RE.match(t):
+            return False
+        # 排除包含金额浮点数的行
+        if re.match(r'^\d+\.\d+$', t):
+            return False
+        # 排除单价破折号占位符
+        if t in ('—', '-', '－', '/'):
+            return False
+        # 表头文字必须精简，单格文字过长必为参数数据
+        if len(t) > 16:
+            return False
+
+    # 表头行必须命中最少 2 个表头标准关键字（且单元格字数 <= 10）
+    kw_hits = sum(1 for t in texts if any(k in t for k in _HDR_KEYWORDS) and len(t) <= 10)
     return kw_hits >= 2
 
 
@@ -247,13 +270,13 @@ def infer_headers_from_data_columns(all_rows: List[List[Any]]) -> List[str]:
         price_ratio = sum(1 for v in col_vals if _PRICE_OR_DASH_RE.match(v)) / n
         kv_ratio = sum(1 for v in col_vals if _KV_SPEC_RE.search(v) or (':' in v or '：' in v or ';' in v)) / n
 
-        if unit_ratio >= 0.6 and unit_col is None:
+        if unit_ratio >= 0.5 and unit_col is None:
             unit_col = c
             inferred[c] = "单位"
-        elif kv_ratio >= 0.4 and spec_col is None:
+        elif kv_ratio >= 0.3 and spec_col is None:
             spec_col = c
             inferred[c] = "属性项属性值"
-        elif price_ratio >= 0.6 and any(re.match(r'^\d+(?:\.\d+)?$', v) for v in col_vals):
+        elif price_ratio >= 0.5 and any(re.match(r'^\d+(?:\.\d+)?$', v) for v in col_vals):
             price_col = c
             inferred[c] = "单价"
 
@@ -269,9 +292,9 @@ def infer_headers_from_data_columns(all_rows: List[List[Any]]) -> List[str]:
 
 def unify_and_broadcast_cross_page_headers(pages_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    系统性跨页表头对齐器：
+    系统性跨页表头对齐器（针对 dict 结构的 pages 列表）：
     1. 收集全文档所有页的表格，按列数 col_cnt 分组；
-    2. 无论表头在第 1 页（如广西未来新材）、还是在第 10 页（如东方雨虹），自动提取该组表头并广播给所有无表头的续表页；
+    2. 无论表头在第 1 页（如广西未来新材）、还是在第 10 页（如东方雨虹），自动提取该组表头并全文档双向广播；
     3. 若整份文档所有页都没有表头，调用 infer_headers_from_data_columns 从数据分布自动生成标准表头！
     """
     header_by_cols: Dict[int, List[str]] = {}
@@ -305,4 +328,49 @@ def unify_and_broadcast_cross_page_headers(pages_data: List[Dict[str, Any]]) -> 
                 tbl["cells"] = [list(header_by_cols[col_cnt])] + cells
 
     return pages_data
+
+
+def broadcast_headers_to_page_grids(
+    pages_records: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """
+    系统性跨页表头对齐器（针对 pdf_extractor.py 的内部数据记录）：
+    入参格式: [{"base": base, "grids": [grid1, grid2], "src": src}, ...]
+    1. 跨越所有页面双向扫描真正的表头（支持第 10 页倒序回填第 1~9 页）；
+    2. 对缺失表头的表格自动补齐；
+    3. 若全无表头，自动反推。
+    """
+    header_by_cols: Dict[int, List[str]] = {}
+    rows_by_cols: Dict[int, List[List[Any]]] = {}
+
+    for rec in pages_records:
+        for grid in rec.get("grids") or []:
+            if not grid:
+                continue
+            col_cnt = max(len(r) for r in grid)
+            for r_idx, row in enumerate(grid[:3]):
+                if is_valid_table_header_row(row):
+                    header_by_cols.setdefault(col_cnt, [str(x or "").strip() for x in row])
+                    break
+            for r_idx, row in enumerate(grid):
+                if not (r_idx < 3 and is_valid_table_header_row(row)):
+                    rows_by_cols.setdefault(col_cnt, []).append(row)
+
+    # 兜底反推
+    for col_cnt, data_rows in rows_by_cols.items():
+        if col_cnt not in header_by_cols and data_rows:
+            header_by_cols[col_cnt] = infer_headers_from_data_columns(data_rows)
+
+    # 双向补齐
+    for rec in pages_records:
+        for grid in rec.get("grids") or []:
+            if not grid:
+                continue
+            col_cnt = max(len(r) for r in grid)
+            if not is_valid_table_header_row(grid[0]) and col_cnt in header_by_cols:
+                hdr = list(header_by_cols[col_cnt])
+                grid.insert(0, hdr)
+                print(f"    [*] {rec.get('base')}: 成功对齐并注入跨页表头 ({len(hdr)} 列: {hdr[:3]}...)")
+
+    return pages_records
 

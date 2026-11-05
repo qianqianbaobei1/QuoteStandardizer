@@ -19,6 +19,7 @@ import openpyxl
 import requests
 
 from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_THINKING_BUDGET, LLM_MAX_RETRIES
+from universal_pdf_grid_engine import unify_and_broadcast_cross_page_headers
 
 try:
     from google import genai
@@ -282,6 +283,12 @@ class GeminiPDFTableExtractor:
             msg = f"模型只转录了 {len(pages)}/{self.total_pages} 页" + (f"，缺页 {missing[:10]}" if missing else "")
             print(f"    ! [Gemini] {msg}")
             self.failed_pages.append(("整篇", msg))
+
+        # 系统级全文档跨页表头双向广播与自推导（倒序表头回填、续表正向继承、全无表头反推）
+        try:
+            pages = unify_and_broadcast_cross_page_headers(pages)
+        except Exception as e:
+            print(f"    ! [Gemini] 跨页表头对齐跳过: {e}")
 
         for idx, page_info in enumerate(pages, 1):
             # Sheet 名用模型的自报页码，不能用 enumerate 序号：模型跳页时序号会把后面每页的页码全推错

@@ -18,6 +18,12 @@ import cv2
 import numpy as np
 from typing import Dict, Any, Optional, Tuple, List
 
+try:
+    from universal_pdf_grid_engine import auto_orient_page_upright
+except ImportError:
+    def auto_orient_page_upright(img):
+        return img
+
 
 class SealEnhancerService:
     def __init__(self, output_debug_dir: Optional[str] = None):
@@ -215,15 +221,19 @@ class SealEnhancerService:
 
     def balance_illumination_and_orient(self, bgr_img: np.ndarray) -> np.ndarray:
         """
-        杀手锏 5：手机翻拍图预处理（暗角光照均衡 + 自动摆正）
-        1. 大核高斯背景估计与除法：消除手机拍照左右明暗不均、手影、暗角，使表格线和小数点清晰显现；
-        2. 自动检测横竖摆正（若图像被横放拍，根据文本边缘投影自动旋转正立）。
+        杀手锏 5：手机翻拍图与扫描件预处理（自动摆正 + 暗角光照均衡）
+        1. 自动检测横竖摆正（消除 ±90°/180° 横向或倒置扫描，基于 RapidOrientation/形态学置信度自动旋转正立）；
+        2. 大核高斯背景估计与除法：消除手机拍照左右明暗不均、手影、暗角，使表格线和小数点清晰显现。
         """
         if bgr_img is None or bgr_img.size == 0:
             return bgr_img
         try:
-            h, w = bgr_img.shape[:2]
-            gray = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2GRAY)
+            # 步骤 1：物理方向摆正（通杀正反 ±90°、180° 倒置）
+            oriented = auto_orient_page_upright(bgr_img)
+
+            # 步骤 2：光照均衡与消除手影暗角
+            h, w = oriented.shape[:2]
+            gray = cv2.cvtColor(oriented, cv2.COLOR_BGR2GRAY)
             ksize = 51 if min(h, w) > 300 else 21
             bg = cv2.GaussianBlur(gray, (ksize, ksize), 0)
             balanced_gray = cv2.divide(gray, bg, scale=255)

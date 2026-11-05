@@ -26,6 +26,13 @@ import requests
 from config import (VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, VISION_DOUBLE_CHECK,
                     VISION_GAMMA, VISION_MAX_ROWS_PER_TILE, VISION_TILE_OVERLAP_ROWS, LLM_MAX_RETRIES)
 from seal_enhancer_service import SealEnhancerService
+from universal_pdf_grid_engine import (
+    auto_orient_page_upright,
+    detect_physical_table_row_bands,
+    slice_dense_page_with_row_rulers,
+    is_valid_table_header_row,
+    broadcast_headers_to_page_grids,
+)
 
 _SEAL_ENHANCER = SealEnhancerService()
 
@@ -101,7 +108,8 @@ class PDFTableExtractor:
         total_p = len(self.doc) if max_pages is None else min(max_pages, len(self.doc))
         use_vision = bool(VISION_API_KEY and VISION_BASE_URL and VISION_MODEL)
         print(f"[PDFTableExtractor] 正在还原 {total_p} 页表格 (扫描件识别: {VISION_MODEL if use_vision else '未配置视觉模型'})...")
-        last_known_header = None
+        
+        pages_records = []
         for p_idx in range(total_p):
             page = self.doc[p_idx]
             base = f"第{p_idx + 1}页"
@@ -124,24 +132,22 @@ class PDFTableExtractor:
                     continue
             else:
                 raise RuntimeError(f"{base} 是扫描件，需要可用的视觉模型 (DEEPSEEK_* 或 VISION_*)")
+
+            pages_records.append({
+                "base": base,
+                "grids": grids,
+                "src": src,
+            })
+
+        # 全文档跨页表头双向广播与自推导（支持第10页表头倒序回填第1~9页、续表正向继承、全无表头列角色推导）
+        pages_records = broadcast_headers_to_page_grids(pages_records)
+
+        # 写入 Workbook
+        for rec in pages_records:
+            base = rec["base"]
+            grids = rec["grids"]
+            src = rec["src"]
             for t_idx, grid in enumerate(grids, 1):
-                # 跨页续表表头继承机制：多页 PDF 中，后续页面往往不重复打印表头，直接以数据行起始。
-                # 若当前页首行实质为数据行（含数字单价/序号且无表头关键词），而前序页面存在相同列数的表头，则自动补入前序表头
-                if grid and last_known_header and len(grid[0]) == len(last_known_header):
-                    first_row = grid[0]
-                    has_num = any(re.search(r'^\d+(\.\d+)?$', str(c or '').strip()) for c in first_row)
-                    has_hdr = any(any(k in str(c or '') for k in ('序号', '名称', '品名', '规格', '单价', '价格', '单位', '品牌')) for c in first_row)
-                    if has_num and not has_hdr:
-                        grid.insert(0, list(last_known_header))
-                        print(f"    [*] {base}: 跨页续表自动继承前序表头 ({len(last_known_header)} 列)")
-
-                # 更新 last_known_header 供后续跨页续表使用
-                if grid:
-                    for row in grid[:4]:
-                        if any(any(k in str(c or '') for k in ('单价', '价格', '材料名称', '物料名称', '规格型号', '规格参数')) for c in row):
-                            last_known_header = [str(c or '').strip() for c in row]
-                            break
-
                 # 一页多表时拆成 “第N页-表K”，存疑单元格记录的 key 同步改为最终 Sheet 名
                 sname = base if len(grids) == 1 else f"{base}-表{t_idx}"
                 for key in [k for k in self.cell_issue if k[0] == f"{base}#{t_idx}"]:
@@ -167,6 +173,11 @@ class PDFTableExtractor:
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
         if enhanced:
             bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            # 系统级四向 5ms 极速自动摆正 (消灭 ±90°/180° 正反横扫、Landscape 横置)
+            try:
+                bgr = auto_orient_page_upright(bgr)
+            except Exception:
+                pass
             # 杀手锏 5：手机拍照与扫描件光照均衡 (去阴影暗角，增强细小数字与小数点对比度)
             try:
                 bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
@@ -180,6 +191,10 @@ class PDFTableExtractor:
             out = (255 * (gray / 255.0) ** VISION_GAMMA).astype(np.uint8)
         else:
             bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            try:
+                bgr = auto_orient_page_upright(bgr)
+            except Exception:
+                pass
             try:
                 bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
             except Exception:
@@ -268,6 +283,11 @@ class PDFTableExtractor:
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
         if enhanced:
             bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            # 系统级四向 5ms 极速自动摆正 (消灭 ±90°/180° 正反横扫、Landscape 横置)
+            try:
+                bgr = auto_orient_page_upright(bgr)
+            except Exception:
+                pass
             # 杀手锏 5：手机拍照与扫描件光照均衡 (去阴影暗角，增强细小数字与小数点对比度)
             try:
                 bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
@@ -281,6 +301,10 @@ class PDFTableExtractor:
             out = (255 * (gray / 255.0) ** VISION_GAMMA).astype(np.uint8)
         else:
             bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+            try:
+                bgr = auto_orient_page_upright(bgr)
+            except Exception:
+                pass
             try:
                 bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr)
             except Exception:
@@ -384,19 +408,36 @@ class PDFTableExtractor:
         return None
 
     def _grids_from_vision(self, page, base):
-        # 第一遍：增强图 (以此为准)；第二遍：原图 (预处理不同，错法不同，用于交叉校验)
-        first = self._vision_call(self._page_png_b64(page, enhanced=True))
-        if first and first.get("_truncated"):
-            tables = self._grids_from_tiles(page, base, num_tiles=3)
+        # 步骤 1：OpenCV 物理网格先验探测
+        pix = page.get_pixmap(dpi=VISION_DPI)
+        bgr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+        bgr = cv2.cvtColor(bgr, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+        bgr = auto_orient_page_upright(bgr)
+        phys_bands = detect_physical_table_row_bands(bgr)
+        phys_rows = len(phys_bands)
+
+        tables = None
+        first = None
+
+        # 当单页物理表格行数 > 20 行（如东方雨虹第 4 页 34 行，未来新材 24 行），
+        # 大模型极易发生同质行注意力滑移（Attention Skipping 漏行跳行），主动执行切片识别！
+        if phys_rows > 20:
+            num_tiles = 2 if phys_rows <= 32 else 3
+            print(f"    [*] {base}: 物理网格探测发现 {phys_rows} 行密集表格，主动执行 {num_tiles} 分块切片防跳行识别...")
+            tables = self._grids_from_tiles(page, base, num_tiles=num_tiles)
         else:
-            tables = self._normalize_tables(first)
-            # 行数超阈值：本实现不做行数驱动的切块（只在模型自报截断时切块），如实标注待复核
-            if tables and len(tables[0][0]) > VISION_MAX_ROWS_PER_TILE and len(tables[0][0]) >= 60:
-                n_rows = len(tables[0][0])
-                self.cell_issue[(f"{base}#1", 1, 1)] = (
-                    f"本页识别 {n_rows} 行，超过单块阈值 {VISION_MAX_ROWS_PER_TILE} 行，未做切块复查")
-                print(f"    [!] {base}: 页面行数 {n_rows} 超过阈值 {VISION_MAX_ROWS_PER_TILE}，"
-                      f"未做切块复查，已标注待复核")
+            # 第一遍：增强图 (以此为准)；第二遍：原图 (预处理不同，错法不同，用于交叉校验)
+            first = self._vision_call(self._page_png_b64(page, enhanced=True))
+            if first and first.get("_truncated"):
+                tables = self._grids_from_tiles(page, base, num_tiles=3)
+            else:
+                tables = self._normalize_tables(first)
+                if tables and len(tables[0][0]) > VISION_MAX_ROWS_PER_TILE and len(tables[0][0]) >= 60:
+                    n_rows = len(tables[0][0])
+                    self.cell_issue[(f"{base}#1", 1, 1)] = (
+                        f"本页识别 {n_rows} 行，超过单块阈值 {VISION_MAX_ROWS_PER_TILE} 行，未做切块复查")
+                    print(f"    [!] {base}: 页面行数 {n_rows} 超过阈值 {VISION_MAX_ROWS_PER_TILE}，"
+                          f"未做切块复查，已标注待复核")
 
         if not tables:
             # 切块重试一次 (num_tiles=3)
