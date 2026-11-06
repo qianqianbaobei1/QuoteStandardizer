@@ -327,7 +327,7 @@ def _row_status_map(diffs, all_rows=None):
         for label, st in rows.items():
             m_p = re.search(r'p(\d+)|第(\d+)页', label)
             p = int(m_p.group(1) or m_p.group(2)) if m_p else 1
-            if p in page_terms_fail_pages and st['L1'] == 'PASS':
+            if p in page_terms_fail_pages and st['L1'] != 'FAIL':
                 st['L1'] = 'FAIL'
                 st['fields'].append('商务条款(页级)=FAIL(L1-TERMS)')
 

@@ -303,8 +303,8 @@ def align(A, B):
         p = str(r.get('厂家报价文件页码') or '').strip()
         pr = canon_num(r.get('市场价'))
         sp = spec_sig(r.get('规格参数'))
-        if img and pr:
-            return ('img_pr', img, pr)
+        if img and pr and sp:
+            return ('img_pr_sp', img, pr, sp)
         if p and pr and sp:
             return ('page_pr_sp', p, pr, sp)
         return None
