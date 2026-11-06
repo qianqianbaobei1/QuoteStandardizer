@@ -12,6 +12,7 @@ import json
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Tuple, Optional, Any
 
 import cv2
@@ -20,7 +21,8 @@ import numpy as np
 import openpyxl
 import requests
 
-from config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_THINKING_BUDGET, LLM_MAX_RETRIES
+from config import (GEMINI_API_KEY, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, GEMINI_THINKING_BUDGET,
+                    GEMINI_BATCH_WORKERS, LLM_MAX_RETRIES)
 from universal_pdf_grid_engine import unify_and_broadcast_cross_page_headers, auto_orient_page_upright
 from seal_enhancer_service import SealEnhancerService
 
@@ -250,13 +252,18 @@ class GeminiPDFTableExtractor:
         all_pages: List[Dict[str, Any]] = []
         # 当总页数 > 4 时，按每 3 页一批进行分批打包与识别，杜绝长表注意力跳行与 Token 截断
         batch_size = 3 if self.total_pages > 4 else max(1, self.total_pages)
-
+        ranges = []
         for p_start in range(0, max(1, self.total_pages), batch_size):
             p_end = min(self.total_pages, p_start + batch_size) if self.total_pages > 0 else 1
-            if self.total_pages > 4:
-                print(f"    [*] [B轨分批] 正在执行第 {p_start + 1} ~ {p_end} 页预处理与识别 (共 {self.total_pages} 页)...")
+            ranges.append((p_start, p_end))
 
-            pdf_bytes = self._prepare_enhanced_pdf_bytes((p_start, p_end))
+        def _run_batch(p_range: Tuple[int, int]):
+            """单批预处理 + 识别（批次间页码独立，可多线路并发）"""
+            p_start, _p_end = p_range
+            if self.total_pages > 4:
+                print(f"    [*] [B轨分批] 正在执行第 {p_start + 1} ~ {_p_end} 页预处理与识别 (共 {self.total_pages} 页)...")
+
+            pdf_bytes = self._prepare_enhanced_pdf_bytes(p_range)
             raw_json = self._call_gemini_raw(client, pdf_bytes)
             try:
                 parsed = self._clean_and_parse_json(raw_json)
@@ -272,7 +279,19 @@ class GeminiPDFTableExtractor:
                     rel_pno = 1
                 if rel_pno <= batch_size and p_start > 0:
                     p_info["page_number"] = p_start + rel_pno
-                all_pages.append(p_info)
+            return p_start, batch_pages
+
+        # 多线路并发：10 页 = 4 个批次同时出去，不再一批一批干等
+        workers = max(1, min(len(ranges), GEMINI_BATCH_WORKERS))
+        if workers == 1:
+            ordered = [_run_batch(r) for r in ranges]
+        else:
+            print(f"    [*] [B轨并发] 已启用 {workers} 路批次并发（共 {len(ranges)} 个批次）")
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                ordered = list(pool.map(_run_batch, ranges))
+
+        for _p_start, batch_pages in sorted(ordered, key=lambda x: x[0]):
+            all_pages.extend(batch_pages)
 
         return self._build_workbook_from_gemini_json({"pages": all_pages})
 

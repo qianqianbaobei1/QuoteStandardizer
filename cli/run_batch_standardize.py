@@ -5,7 +5,8 @@ _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)
 """
 run_batch_standardize.py - 批量解析一个批次下的所有供应商原文件
 
-用法: python3 run_batch_standardize.py <源目录> <输出目录> [--label 批次名]
+用法: python3 run_batch_standardize.py <源目录> <输出目录> [--label 批次名] [--workers 4]
+      --workers 默认 4（也可用环境变量 BATCH_WORKERS），1 为串行
 """
 import os
 import sys
@@ -13,6 +14,7 @@ import re
 import time
 import zipfile
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from main import process_excel, process_pdf, _field_value_problems, COMPANY_RE
@@ -228,30 +230,61 @@ def run_single_vendor(vendor_dir: Path, output_dir: Path) -> dict:
         
     return res
 
-if __name__ == "__main__":
-    import argparse
-    ap = argparse.ArgumentParser(description="批量解析一个批次下所有供应商原文件")
-    ap.add_argument("src", help="批次源目录 (每家一个子目录)")
-    ap.add_argument("out", help="输出目录")
-    ap.add_argument("--label", default="", help="批次名，仅用于日志")
-    args = ap.parse_args()
 
-    src_root, out_root = Path(args.src), Path(args.out)
-    label = args.label or src_root.name
+def run_batch(src_root: Path, out_root: Path, label: str = "", workers: int = 4) -> list:
+    """多线路并发跑一整个批次：每家供应商自己一条流水线，互不等待"""
     print(f"\n==================== 开始批量自跑: {label} ====================")
     vdirs = sorted([d for d in src_root.iterdir() if d.is_dir() and not d.name.startswith(".")])
-    results = []
-    for idx, vd in enumerate(vdirs, 1):
-        print(f"\n[{idx}/{len(vdirs)}] 处理: {vd.name}...")
-        r = run_single_vendor(vd, out_root)
-        results.append(r)
-        print(f"    -> 结果: {r['status']} | 物料: {r['item_count']} 行 | 耗时: {r['duration']}s | 文件: {r['output_file']}")
+
+    # 先把分类字典与 BM25 索引在主线程预热完：并发首调会撞上 _CATALOG_LOADED 已置位但索引未建好的窗口，
+    # 那一瞬间 retrieve_category_candidates 会直接返回空候选，静默丢掉分类线索
+    try:
+        from category_attribute_service import _load_catalog
+        _load_catalog()
+    except Exception as preheat_err:
+        print(f"[Warning] 分类字典预热失败: {preheat_err}")
+
+    def _log_result(i, r):
+        print(f"[{i}/{len(vdirs)}] {r['vendor']} -> {r['status']} | 物料: {r['item_count']} 行 | "
+              f"耗时: {r['duration']}s | 文件: {r['output_file']}")
         if r["error_msg"]:
             print(f"    ! {r['error_msg']}")
+
+    workers = max(1, min(int(workers), len(vdirs) or 1))
+    results = [None] * len(vdirs)
+    if workers == 1:
+        for idx, vd in enumerate(vdirs, 1):
+            print(f"\n[{idx}/{len(vdirs)}] 处理: {vd.name}...")
+            results[idx - 1] = run_single_vendor(vd, out_root)
+            _log_result(idx, results[idx - 1])
+    else:
+        print(f"  [*] 多线路并发: {workers} 家供应商同时解析（共 {len(vdirs)} 家）")
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = {pool.submit(run_single_vendor, vd, out_root): i for i, vd in enumerate(vdirs)}
+            for fut in as_completed(futs):
+                i = futs[fut]
+                results[i] = fut.result()
+                _log_result(i + 1, results[i])
 
     passed = sum(1 for r in results if r["status"] == "PASS")
     print(f"\n批次 {label}: {passed}/{len(results)} PASS")
     for r in results:
         if r["status"] != "PASS":
             print(f"  ✗ {r['vendor']}: {r['error_msg']}")
+    return results
+
+
+if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(description="批量解析一个批次下所有供应商原文件")
+    ap.add_argument("src", help="批次源目录 (每家一个子目录)")
+    ap.add_argument("out", help="输出目录")
+    ap.add_argument("--label", default="", help="批次名，仅用于日志")
+    ap.add_argument("--workers", type=int, default=int(os.getenv("BATCH_WORKERS", "4")),
+                    help="同时解析几家供应商（默认 4，1 为串行）")
+    args = ap.parse_args()
+
+    src_root, out_root = Path(args.src), Path(args.out)
+    results = run_batch(src_root, out_root, args.label or src_root.name, args.workers)
+    passed = sum(1 for r in results if r["status"] == "PASS")
     sys.exit(0 if passed == len(results) else 2)

@@ -18,7 +18,9 @@ load_dotenv(os.path.join(CURRENT_DIR, ".env"))
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-# 扫描件 / 商务单图片识别用的多模态模型；未单独配置时使用 DeepSeek (deepseek-chat 支持图片输入)
+# 扫描件 / 商务单图片识别用的多模态模型；未单独配置时回落到 DeepSeek 端点。
+# 注意：DeepSeek 官方 deepseek-chat 并不保证支持图片输入，回落到它时可能拿到“看起来像表格”的幻觉结果，
+# 生产请在 .env 里显式指定 VISION_MODEL / VISION_BASE_URL（当前端点实测能读图，但换模型或换服务商就会静默变鬼）。
 VISION_API_KEY = os.getenv("VISION_API_KEY") or DEEPSEEK_API_KEY
 VISION_BASE_URL = os.getenv("VISION_BASE_URL") or DEEPSEEK_BASE_URL
 VISION_MODEL = os.getenv("VISION_MODEL") or DEEPSEEK_MODEL
@@ -26,6 +28,9 @@ VISION_MODEL = os.getenv("VISION_MODEL") or DEEPSEEK_MODEL
 VISION_DOUBLE_CHECK = os.getenv("VISION_DOUBLE_CHECK", "0").strip().lower() in ("1", "true")
 # 扫描件识别增强的 gamma (>1 压暗浅色笔画)
 VISION_GAMMA = float(os.getenv("VISION_GAMMA", "1.8"))
+# 页级 / 批次级并发线路数（各页、各批次彼此独立，串行等待纯属浪费）
+VISION_MAX_WORKERS = max(1, int(os.getenv("VISION_MAX_WORKERS", "4")))
+GEMINI_BATCH_WORKERS = max(1, int(os.getenv("GEMINI_BATCH_WORKERS", "4")))
 # 大页面切块识别配置
 VISION_MAX_ROWS_PER_TILE = int(os.getenv("VISION_MAX_ROWS_PER_TILE", "40"))
 VISION_TILE_OVERLAP_ROWS = int(os.getenv("VISION_TILE_OVERLAP_ROWS", "2"))
@@ -44,6 +49,12 @@ JEV_MIN_CONFIDENCE = float(os.getenv("JEV_MIN_CONFIDENCE", "0.5"))
 CATEGORY_ENGINE = os.getenv("CATEGORY_ENGINE", "jev_tiered").strip().lower()
 # Jev 判定的采纳门槛：低于此值回退到原路径（宁可不判，不许硬配）
 JEV_CATEGORY_GATE = float(os.getenv("JEV_CATEGORY_GATE", "0.65"))
+# 同构行指纹去重：同一(品名,规格骨架)只送 1 行给模型，其余套用键映射（0 可关）
+FINGERPRINT_DEDUPE = os.getenv("FINGERPRINT_DEDUPE", "1") not in ("0", "false", "False")
+# 单位量纲折算留痕（只写说明，不改市场价/单位）
+UNIT_CONVERT_NOTE = os.getenv("UNIT_CONVERT_NOTE", "1") not in ("0", "false", "False")
+# 跨行价格离群护栏（只提示，不改价）
+PRICE_GUARD = os.getenv("PRICE_GUARD", "1") not in ("0", "false", "False")
 # Jev 行类型每次请求带多少行
 JEV_ROW_BATCH = int(os.getenv("JEV_ROW_BATCH", "40"))
 # 注入清洗提示词的标准编码库条数上限 (库很大时逐批全量注入会显著推高 token 成本并引起延迟)

@@ -13,8 +13,10 @@ import base64
 import json
 import os
 import re
+import threading
 import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, List, Dict, Any, Tuple
 
 import cv2
@@ -24,7 +26,8 @@ import openpyxl
 import requests
 
 from config import (VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, VISION_DOUBLE_CHECK,
-                    VISION_GAMMA, VISION_MAX_ROWS_PER_TILE, VISION_TILE_OVERLAP_ROWS, LLM_MAX_RETRIES)
+                    VISION_GAMMA, VISION_MAX_ROWS_PER_TILE, VISION_TILE_OVERLAP_ROWS,
+                    VISION_MAX_WORKERS, LLM_MAX_RETRIES)
 from seal_enhancer_service import SealEnhancerService
 from universal_pdf_grid_engine import (
     auto_orient_page_upright,
@@ -109,34 +112,49 @@ class PDFTableExtractor:
         use_vision = bool(VISION_API_KEY and VISION_BASE_URL and VISION_MODEL)
         print(f"[PDFTableExtractor] 正在还原 {total_p} 页表格 (扫描件识别: {VISION_MODEL if use_vision else '未配置视觉模型'})...")
         
-        pages_records = []
-        for p_idx in range(total_p):
-            page = self.doc[p_idx]
+        def _extract_one(p_idx):
+            """单页还原（线程内各开一份 Document，页面之间互不共享状态）"""
+            page = self._thread_page(p_idx)
             base = f"第{p_idx + 1}页"
+            self._tl.title_sink = []
             if len(re.sub(r'\s', '', page.get_text())) >= 30:
-                grids = self._grids_from_text_layer(page)
-                src = 'text'
-            elif use_vision:
-                try:
-                    grids = self._grids_from_vision(page, base)
-                    src = 'vision'
-                except Exception as page_err:
-                    print(f"    ! [隔离] {base} 识别失败: {page_err}")
-                    if not hasattr(self, 'failed_pages'):
-                        self.failed_pages = []
-                    self.failed_pages.append((base, str(page_err)))
-                    # 失败页面留痕隔离 (不执行中断，确保后续页面被继续处理并如实对账)
-                    ws_err = wb.create_sheet(base)
-                    ws_err.cell(1, 1, value=f"异常:{base}识别失败({page_err})")
-                    self.text_source[base] = 'error'
-                    continue
-            else:
-                raise RuntimeError(f"{base} 是扫描件，需要可用的视觉模型 (DEEPSEEK_* 或 VISION_*)")
+                return {"base": base, "grids": self._grids_from_text_layer(page), "src": 'text'}
+            if not use_vision:
+                return {"base": base, "error": "no_vision"}
+            titles = self._tl.title_sink
+            try:
+                grids = self._grids_from_vision(page, base)
+                return {"base": base, "grids": grids, "src": "vision", "titles": titles}
+            except Exception as page_err:
+                return {"base": base, "error": str(page_err)}
 
+        # 多线路并发：各页彼此独立，串行等 API 纯属浪费（10 页从 10×T 降到 ~T）
+        workers = max(1, min(total_p, VISION_MAX_WORKERS))
+        if workers == 1:
+            results = [_extract_one(i) for i in range(total_p)]
+        else:
+            print(f"    [*] 已启用 {workers} 路线程并发页面识别")
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                results = list(pool.map(_extract_one, range(total_p)))
+
+        pages_records = []
+        for rec in results:                     # pool.map 保序，严格按页序汇总
+            base = rec["base"]
+            if rec.get("error") == "no_vision":
+                raise RuntimeError(f"{base} 是扫描件，需要可用的视觉模型 (DEEPSEEK_* 或 VISION_*)")
+            if rec.get("error"):
+                print(f"    ! [隔离] {base} 识别失败: {rec['error']}")
+                if not hasattr(self, 'failed_pages'):
+                    self.failed_pages = []
+                self.failed_pages.append((base, rec["error"]))
+                # 失败页占位保留在页序里，稍后按原位置建异常 Sheet（不执行中断，确保后续页面继续处理并如实对账）
+                pages_records.append({"base": base, "error": rec["error"]})
+                continue
+            self.page_titles.extend(rec.get("titles") or [])
             pages_records.append({
                 "base": base,
-                "grids": grids,
-                "src": src,
+                "grids": rec["grids"],
+                "src": rec["src"],
             })
 
         # 全文档跨页表头双向广播与自推导（支持第10页表头倒序回填第1~9页、续表正向继承、全无表头列角色推导）
@@ -145,6 +163,11 @@ class PDFTableExtractor:
         # 写入 Workbook
         for rec in pages_records:
             base = rec["base"]
+            if rec.get("error"):
+                ws_err = wb.create_sheet(base)
+                ws_err.cell(1, 1, value=f"异常:{base}识别失败({rec['error']})")
+                self.text_source[base] = 'error'
+                continue
             grids = rec["grids"]
             src = rec["src"]
             for t_idx, grid in enumerate(grids, 1):
@@ -206,7 +229,17 @@ class PDFTableExtractor:
         return base64.b64encode(cv2.imencode('.png', out)[1].tobytes()).decode()
 
     def _vision_call(self, b64):
-        """调用 OpenAI 兼容的多模态接口，返回解析后的 dict；失败返回 None"""
+        """调用 OpenAI 兼容的多模态接口，返回解析后的 dict；失败返回 None（带内容寻址缓存）"""
+        import cas_cache
+        _cas = cas_cache.get('vision_table', VISION_MODEL or '', b64 + '|' + VISION_TABLE_PROMPT)
+        if _cas:
+            try:
+                cached = json.loads(_cas)
+                if not validate_vision_payload(cached):
+                    print("    · 视觉识别命中 CAS 缓存")
+                    return cached
+            except Exception:
+                pass
         url = f"{VISION_BASE_URL.rstrip('/')}/chat/completions"
         headers = {"Authorization": f"Bearer {VISION_API_KEY}", "Content-Type": "application/json"}
         payload = {
@@ -244,6 +277,11 @@ class PDFTableExtractor:
                             print(f"[Vision Warning] 响应结构不合规（{bad}），整份作废")
                             last = f"结构不合规: {bad}"
                             continue
+                        try:
+                            cas_cache.put('vision_table', VISION_MODEL or '', b64 + '|' + VISION_TABLE_PROMPT,
+                                          json.dumps(parsed, ensure_ascii=False))
+                        except Exception:
+                            pass
                         return parsed
                     except Exception as json_err:
                         print(f"[Vision Warning] JSON解析失败(疑似截断): {json_err}")
@@ -407,6 +445,16 @@ class PDFTableExtractor:
                 time.sleep(2 ** attempt)
         return None
 
+    def _thread_page(self, p_idx):
+        """每线程独占一份 PyMuPDF Document —— Document 不是线程安全的，跨线程共享会读坏页面"""
+        tl = getattr(self, '_tl', None)
+        if tl is None:
+            self._tl = tl = threading.local()
+        doc = getattr(tl, 'doc', None)
+        if doc is None:
+            doc = tl.doc = fitz.open(self.pdf_path)
+        return doc[p_idx]
+
     def _grids_from_vision(self, page, base):
         # 步骤 1：OpenCV 物理网格先验探测
         pix = page.get_pixmap(dpi=VISION_DPI)
@@ -445,7 +493,9 @@ class PDFTableExtractor:
         if not tables:
             raise RuntimeError(f"{base}: 视觉模型未返回表格，请检查 VISION_* 配置或模型是否支持图片输入")
         if first and first.get("page_title"):
-            self.page_titles.append(str(first["page_title"]))
+            # 并发时各线程写各自的 title_sink，主线程再按页序收拢，避免页标题顺序被线程打乱
+            sink = getattr(getattr(self, '_tl', None), 'title_sink', None)
+            (sink if sink is not None else self.page_titles).append(str(first["page_title"]))
 
         second_tables = None
         if VISION_DOUBLE_CHECK:

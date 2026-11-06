@@ -7,6 +7,8 @@ import os
 import re
 import math
 import json
+import copy
+import threading
 from collections import Counter
 from typing import Dict, List, Tuple, Optional, Any, Set
 import openpyxl
@@ -29,6 +31,11 @@ _EXACT_T3_MAP: Dict[str, Tuple[str, str, str, str]] = {}
 _CODE_MAP: Dict[str, Tuple[str, str, str, str]] = {}
 _ATTR_SCHEMA_MAP: Dict[str, List[Dict[str, Any]]] = {}
 _SEARCH_INDEX: Optional["EnrichedCategoryIndex"] = None
+# 行间召回缓存：（品名, 原始类别, 规格, 整表主业先验, top_k）→ 候选列表
+# 同一张表里几十行“中国黑花岗岩”的检索结果完全一致，重新查库 + 跑 BM25 是纯浪费
+_CANDS_CACHE: Dict[tuple, List[Dict[str, Any]]] = {}
+_CANDS_LOCK = threading.Lock()
+_CANDS_CACHE_MAX = int(os.getenv("CATEGORY_CAND_CACHE_MAX", "4096"))
 
 
 def _finish(code: str, src: str, notes: list) -> Tuple[str, str, list]:
@@ -521,6 +528,13 @@ def retrieve_category_candidates(
     if not _SEARCH_INDEX:
         return []
 
+    cache_key = (raw_cat or "", std_name or "", raw_spec or "",
+                 frozenset(sheet_prior) if sheet_prior else None, int(top_k))
+    with _CANDS_LOCK:
+        cached = _CANDS_CACHE.get(cache_key)
+    if cached is not None:
+        return copy.deepcopy(cached)
+
     # 1. 广材实盘词表 (category_lexicon.db) 先验召回（39.8万条企业真实报价分布）
     #    不截断：1,222 个品名是一对多（“电线”对 9 个类别），截到 3 个等于直接丢掉 6 个正确答案
     lex_hits = []
@@ -618,7 +632,11 @@ def retrieve_category_candidates(
             f"{a['name']}({a['enum']})" if a.get("enum") else a["name"]
             for a in attrs[:10]
         ]
-    return cands
+    with _CANDS_LOCK:
+        if len(_CANDS_CACHE) >= _CANDS_CACHE_MAX:
+            _CANDS_CACHE.clear()
+        _CANDS_CACHE[cache_key] = cands
+    return copy.deepcopy(cands)
 
 
 def resolve_and_verify_category(
@@ -638,6 +656,23 @@ def resolve_and_verify_category(
     if norm_code and norm_code in _CODE_MAP:
         t1, t2, t3, code = _CODE_MAP[norm_code]
         return t1, t2, t3, code, True, f"候选池精准锁定({code})"
+
+    # 1.5 检查广材规格属性实盘词库精准直达 (category_lexicon.db -> spec_lex)
+    if raw_spec:
+        try:
+            from jev_category_scorer import spec_lexicon_lookup
+            spec_hit = spec_lexicon_lookup(raw_spec)
+            if spec_hit and spec_hit.get("code"):
+                return (
+                    spec_hit["level1"],
+                    spec_hit["level2"],
+                    spec_hit["level3"],
+                    spec_hit["code"],
+                    True,
+                    spec_hit.get("reason", "广材规格词库精准命中")
+                )
+        except Exception:
+            pass
 
     # 2. 检查精确名称映射
     for q in (raw_cat, std_name):
