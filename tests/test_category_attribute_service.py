@@ -102,6 +102,31 @@ class TestCategoryAttributeService(unittest.TestCase):
                     enum_content = attr_str[attr_str.index("(") + 1:-1]
                     self.assertLessEqual(len(enum_content), 50)
 
+    def test_guangcai_kb_geometric_and_pipe_backfill(self):
+        """测试广材双大库智能几何尺寸与管材参数脱壳回填"""
+        # 1. 板材/石材长宽高几何尺寸 600*600*20 自动回填
+        r1, _, _ = validate_and_normalize_specs(
+            "天然花岗石建筑板材", {}, raw_spec_text="芝麻白花岗岩 600*600*20"
+        )
+        self.assertEqual(r1.get("长度(mm)"), "600")
+        self.assertEqual(r1.get("宽度(mm)"), "600")
+        self.assertEqual(r1.get("厚度(mm)"), "20")
+
+        # 2. 管材外径*壁厚 De50*2.0mm 自动回填
+        r2, _, _ = validate_and_normalize_specs(
+            "给水用聚乙烯（PE）管材", {}, raw_spec_text="PE给水管 De50*2.0mm PN1.6MPa"
+        )
+        self.assertEqual(r2.get("外径(mm)"), "50")
+        self.assertEqual(r2.get("壁厚(mm)"), "2.0")
+        self.assertEqual(r2.get("公称压力(MPa)"), "1.6")
+
+    def test_guangcai_kb_product_recall(self):
+        """测试广材双大库 21,147 权威品名反查高置信召回"""
+        cands = retrieve_category_candidates(raw_cat="", std_name="仿石涂料", top_k=2)
+        self.assertTrue(len(cands) > 0)
+        self.assertEqual(cands[0]["level3"], "仿石涂料")
+        self.assertIn("广材双大库品名反查命中", cands[0]["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

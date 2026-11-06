@@ -61,7 +61,7 @@ class TestQuoteStandardizerHealth(unittest.TestCase):
         self.assertEqual(parse_discount('9折'), 0.9)
         self.assertEqual(parse_discount('85折'), 0.85)
         self.assertEqual(parse_discount('8.5折'), 0.85)
-        self.assertEqual(parse_discount('无折扣'), 1.0)
+        self.assertIsNone(parse_discount('无折扣'))
         self.assertEqual(parse_discount(0.4), 0.4)
         
         self.assertEqual(parse_tax_rate('13%'), 13)

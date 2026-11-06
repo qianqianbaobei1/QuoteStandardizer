@@ -27,8 +27,58 @@ STANDARD_HEADERS = [
     '折扣下限', '折扣上限', '折扣系列', '运费说明', '是否含运费', '税费说明', '增值税税率', '运费结算方式',
     '是否含增值税', '报价说明', '价格填报类型', '图片文件夹', '图片', '图片', '图片', '图片', '图片'
 ]
-CENTER_HEADERS = {'报价ID', '类别编码', '顺序号', '报价地区省', '报价地区市', '单位', '工程价折扣比例', '折扣下限',
-                  '折扣上限', '折扣系列', '是否含运费', '增值税税率', '运费结算方式', '是否含增值税', '价格填报类型'}
+
+# 标杆线上系统基础 27 列 (AA 列为 报价时间 锚点)
+BENCHMARK_PRE_ATTR_HEADERS = [
+    '报价id', '名称规格', '品牌', '厂家原始规格参数', '厂家报价文件页码', '厂家报价图片文件名',
+    '顺序号', '报价地区省', '报价地区市', '单位', '市场价', '工程价', '工程价折扣比例',
+    '折扣下限', '折扣上限', '折扣系列', '是否含运费', '运费说明', '是否含增值税', '税费说明',
+    '增值税税率%', '运费结算方式', '报价说明', '价格填报类型',
+    '项目类型', '工程用量', '报价时间'
+]
+BENCHMARK_TAIL_HEADERS = ['图片文件夹', '图片', '图片', '图片', '图片', '图片']
+
+def collect_dynamic_attribute_headers(items: list) -> list:
+    """
+    根据本批物料的分类与提取参数，召回广材官方三级品类标准属性，并动态编排一属性一列的表头序列
+    """
+    from category_attribute_service import get_category_standard_attr_names
+    ordered_attrs = []
+    seen = set()
+
+    # 1. 优先按官方 Schema 推荐顺序召回标准属性
+    for item in items:
+        cat_key = getattr(item, 'category_code', '') or getattr(item, 'category_name', '')
+        if cat_key:
+            std_names = get_category_standard_attr_names(cat_key)
+            for name in std_names:
+                n_clean = str(name).strip()
+                if n_clean and n_clean not in seen and not any(f in n_clean for f in FORBIDDEN_SPEC_KEYS):
+                    seen.add(n_clean)
+                    ordered_attrs.append(n_clean)
+
+    # 2. 补齐物料中已成功提取但未在首批 Schema 中的物理规格键
+    for item in items:
+        specs = getattr(item, 'structured_specs', {}) or {}
+        for k in specs.keys():
+            k_clean = str(k).strip()
+            if k_clean and k_clean not in seen and not any(f in k_clean for f in FORBIDDEN_SPEC_KEYS):
+                seen.add(k_clean)
+                ordered_attrs.append(k_clean)
+
+    # 3. 排序微调：确保 '品种' 排在属性最前，'产品描述' 或 '详细描述' 排在属性末尾
+    if '品种' in ordered_attrs:
+        ordered_attrs.remove('品种')
+        ordered_attrs.insert(0, '品种')
+    if '产品描述' in ordered_attrs:
+        ordered_attrs.remove('产品描述')
+        ordered_attrs.append('产品描述')
+
+    return ordered_attrs
+
+CENTER_HEADERS = {'报价ID', '报价id', '类别编码', '顺序号', '报价地区省', '报价地区市', '单位', '工程价折扣比例', '折扣下限',
+                  '折扣上限', '折扣系列', '是否含运费', '增值税税率', '增值税税率%', '运费结算方式', '是否含增值税',
+                  '价格填报类型', '项目类型', '报价时间'}
 PRICE_HEADERS = {'市场价', '工程价'}
 # 规格参数里不许出现的“参数名”关键词（基价/调价属于商务信息，产品编码/物料编码属于内部代码，严禁混入物理规格）
 FORBIDDEN_SPEC_KEYS = ('表头', '表标题', '基价', '单价', '总价', '金额', '指导价', '调价',
@@ -48,8 +98,10 @@ def safe_excel_val(val):
     return val
 
 class StandardizedWorkbookBuilder:
-    def __init__(self, template_path):
+    def __init__(self, template_path=None, auto_expand_attributes=False, split_by_category=False):
         self.template_path = template_path
+        self.auto_expand_attributes = auto_expand_attributes
+        self.split_by_category = split_by_category
         self._load_template()
 
     def _load_template(self):
@@ -154,6 +206,7 @@ class StandardizedWorkbookBuilder:
 
         return {
             '报价ID': str(item.quote_id),
+            '报价id': str(item.quote_id),
             '供应商名称': item.supplier or '',
             '名称规格': item.category_name or '',
             '类别编码': item.category_code or '',
@@ -177,11 +230,16 @@ class StandardizedWorkbookBuilder:
             '是否含运费': item.is_freight_included or '',
             '税费说明': item.tax_desc or '',
             '增值税税率': tax_val,
+            '增值税税率%': tax_val,
             '运费结算方式': item.freight_settle or '',
             '是否含增值税': item.is_tax_included or '',
             '报价说明': final_quote_desc or '',
             '价格填报类型': item.quote_type or '',
+            '项目类型': getattr(item, 'project_type', '') or '',
+            '工程用量': getattr(item, 'project_volume', '') or '',
+            '报价时间': getattr(item, 'quote_date', '') or '',
             '图片文件夹': folder_val,
+            '图片文件': folder_val,
             '_img1': img1,
             '_img2': img2,
             '_img3': img3,
@@ -189,52 +247,51 @@ class StandardizedWorkbookBuilder:
             '_img5': img5,
         }
 
-    def build_from_canonical_items(self, items: list, output_xlsx_path: str, img_dir: str, reconciliation: list = None,
-                                   structure_log: list = None):
+    def _render_material_sheet(self, ws_out, items: list, headers: list, dynamic_attr_columns: list,
+                               img_dir: str, _quote_img_cache: dict, thin_border):
         """
-        基于 CanonicalMaterialItem 统一物料模型进行企业级输出构建
+        渲染单个物料工作表：表头样式、斑马纹行、单元格格式化、缩略图内嵌与列宽自适应
+        返回: (embedded_img_count, list_of_uncertain_notes)
         """
-        if not items:
-            raise ValueError(f"物料列表为空，严禁生成或输出空的报价表格文件: {output_xlsx_path}")
-
-        # 图片目录按需延迟创建，杜绝在磁盘生成无用的空图片库文件夹
-        has_any_image = any(len(it.image_bytes_list) > 0 for it in items)
-        if has_any_image:
-            os.makedirs(img_dir, exist_ok=True)
-
-        wb_out = openpyxl.Workbook()
-        ws_out = wb_out.active
-        ws_out.title = '标准化报价'
         ws_out.views.sheetView[0].showGridLines = True
+        ws_out.row_dimensions[1].height = 36
 
-        # 表头：深蓝底白字，全宋体
         header_fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
         header_font = Font(name='宋体', size=11, bold=True, color='FFFFFF')
         header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-        thin_border = Border(
-            left=Side(style='thin', color='D9D9D9'),
-            right=Side(style='thin', color='D9D9D9'),
-            top=Side(style='thin', color='D9D9D9'),
-            bottom=Side(style='thin', color='D9D9D9')
-        )
+        header_time_fill = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')  # 浅绿
+        header_time_font = Font(name='宋体', size=11, bold=True, color='385723')
 
-        ws_out.row_dimensions[1].height = 36
+        header_attr_fill = PatternFill(start_color='C00000', end_color='C00000', fill_type='solid')  # 橙红
+        header_attr_font = Font(name='宋体', size=11, bold=True, color='FFFFFF')
 
-        for col_idx, h in enumerate(self.headers, 1):
+        header_desc_fill = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
+        header_desc_font = Font(name='宋体', size=11, bold=True, color='385723')
+
+        for col_idx, h in enumerate(headers, 1):
             c = ws_out.cell(row=1, column=col_idx, value=h)
-            c.fill = header_fill
-            c.font = header_font
-            c.alignment = header_align
             c.border = thin_border
+            c.alignment = header_align
+            if h == '报价时间':
+                c.fill = header_time_fill
+                c.font = header_time_font
+            elif h == '产品描述':
+                c.fill = header_desc_fill
+                c.font = header_desc_font
+            elif h in dynamic_attr_columns:
+                c.fill = header_attr_fill
+                c.font = header_attr_font
+            else:
+                c.fill = header_fill
+                c.font = header_font
 
-        # 正文严格全部统一为【宋体】
         body_font = Font(name='宋体', size=10)
-        warning_font = Font(name='宋体', size=10, color='C00000', bold=True) # 红色宋体警示
+        warning_font = Font(name='宋体', size=10, color='C00000', bold=True)
         center_align = Alignment(horizontal='center', vertical='center')
         multiline_left_align = Alignment(horizontal='left', vertical='center', wrap_text=True)
         right_align = Alignment(horizontal='right', vertical='center')
-        
+
         alt_fill = PatternFill(start_color='F9FAFC', end_color='F9FAFC', fill_type='solid')
         white_fill = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
         warning_fill = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
@@ -242,33 +299,27 @@ class StandardizedWorkbookBuilder:
         seq = 10
         row_num = 2
         total_imgs_embedded = 0
-        uncertain_items_for_audit = [] # 记录需在独立sheet中以红色字体展示的疑义与失败项
+        uncertain_items_for_audit = []
 
         quote_img_col_idx = None
-        for c_idx, h in enumerate(self.headers, 1):
+        for c_idx, h in enumerate(headers, 1):
             if h == '厂家报价图片文件名':
                 quote_img_col_idx = c_idx
                 break
 
-        _quote_img_cache = {}
-
         for item in items:
-            # 格式化多行结构化技术规格
             formatted_multiline_specs = item.format_multiline_specs()
-            # 净化矩阵物料展示：过滤产品/型号(表头)、表标题等内部冗余标签，保留规格与型号/系列
             clean_lines = []
             for l in formatted_multiline_specs.split('\n'):
-                # 严格业务规则：规格参数只能是物理规格，严禁混入基价、单价、税率、运费等非物料参数！
-                # 只看“参数名”这一侧，避免值里出现“单价”二字就把整行真参数删掉
                 spec_key = l.split(':', 1)[0].strip()
-                if any(k in spec_key for k in FORBIDDEN_SPEC_KEYS): continue
+                if any(k in spec_key for k in FORBIDDEN_SPEC_KEYS):
+                    continue
                 clean_lines.append(l)
             formatted_multiline_specs = '\n'.join(clean_lines) if clean_lines else ''
             line_count = max(1, formatted_multiline_specs.count('\n') + 1)
 
-            # 落地图片资产 (按需写入)
             saved_images = []
-            if item.image_bytes_list:
+            if item.image_bytes_list and img_dir:
                 os.makedirs(img_dir, exist_ok=True)
                 for idx, img_bytes in enumerate(item.image_bytes_list):
                     ext = self._detect_ext(img_bytes)
@@ -276,42 +327,42 @@ class StandardizedWorkbookBuilder:
                     suffix = f'_{idx+1}' if len(item.image_bytes_list) > 1 else ''
                     img_fn = f"{item.quote_id}_{safe_name}{suffix}{ext}"
                     img_dst = os.path.join(img_dir, img_fn)
-                    with open(img_dst, 'wb') as f_out:
-                        f_out.write(img_bytes)
+                    if not os.path.exists(img_dst):
+                        with open(img_dst, 'wb') as f_out:
+                            f_out.write(img_bytes)
                     saved_images.append((img_fn, img_dst))
 
-            first_img_name = saved_images[0][0] if saved_images else (item.image_filenames[0] if (hasattr(item, 'image_filenames') and item.image_filenames) else '')
-            # 只要存在图片引用、原件底稿截图或图片资产，就必须准确填入图片文件夹名称
-            has_img_ref = bool(saved_images or first_img_name or (hasattr(item, 'image_filenames') and item.image_filenames) or getattr(item, 'quote_image_filename', ''))
+            first_img_name = saved_images[0][0] if saved_images else (
+                item.image_filenames[0] if (hasattr(item, 'image_filenames') and item.image_filenames) else '')
+            has_img_ref = bool(
+                saved_images or first_img_name or (hasattr(item, 'image_filenames') and item.image_filenames) or getattr(
+                    item, 'quote_image_filename', ''))
             img_folder_name = os.path.basename(img_dir) if (has_img_ref and img_dir) else ''
-
-            # 严格业务准则：只解析客户原单真实提供的内容，未提供的绝不脑补，纯净留空！
-            # 报价说明只记录客户商务说明中的真实文字，绝不拼接系统内部的算法审计警告
             final_quote_desc = (item.quote_desc or '').strip()
 
             values = self._row_values(item, seq, formatted_multiline_specs, first_img_name,
                                       img_folder_name, final_quote_desc)
             values.update(self._dynamic_spec_values(item, values))
-            # 只有致命/严重才污染主表（红字+黄底+批注）；提示级只写报价说明与审计页，不打扰
             needs_human = item.worst_severity() in ('致命', '严重')
             row_fill = alt_fill if (row_num % 2 == 0) else white_fill
 
             img_col_counter = 1
-            for c_idx, header in enumerate(self.headers, 1):
+            for c_idx, header in enumerate(headers, 1):
                 if header == '图片':
                     val = values.get(f'_img{img_col_counter}', '')
                     img_col_counter += 1
                 elif header == '厂家报价图片文件名':
                     val = values.get('厂家报价图片文件名', '')
+                elif header in ('图片文件夹', '图片文件'):
+                    val = values.get('图片文件夹') or values.get('图片文件', '')
                 else:
                     val = values.get(header, '')
-                val = safe_excel_val(val)  # 安全清洗非法字符，保障无损坏
+                val = safe_excel_val(val)
                 cell = ws_out.cell(row=row_num, column=c_idx, value=val)
                 cell.font = body_font
                 cell.fill = row_fill
                 cell.border = thin_border
 
-                # 对齐与格式控制
                 if header in CENTER_HEADERS or header == '厂家报价图片文件名':
                     cell.alignment = center_align
                 elif header in PRICE_HEADERS:
@@ -320,18 +371,18 @@ class StandardizedWorkbookBuilder:
                         cell.number_format = '0.000'
                 else:
                     cell.alignment = multiline_left_align
-                # 图片列若为在线链接，设置超链接与超链接字体
-                if header == '图片' and isinstance(val, str) and (val.startswith('http://') or val.startswith('https://')):
+
+                if header == '图片' and isinstance(val, str) and (
+                        val.startswith('http://') or val.startswith('https://')):
                     cell.hyperlink = val
                     cell.font = Font(name='宋体', size=10, color='0563C1', underline='single')
-                # 致命/严重：整行红字 + 黄底（市场价额外写批注）
+
                 if needs_human:
                     cell.fill = warning_fill
                     cell.font = warning_font
                     if header == '市场价':
                         cell.comment = Comment(f"【{item.worst_severity()}】{item.uncertainty_note}", "造价审计员")
 
-            # 动态计算最适行高与原报价单截图内嵌（放图片，不要放文字）
             calc_text_height = max(30, line_count * 18 + 10)
             has_embedded_quote_img = False
 
@@ -368,7 +419,8 @@ class StandardizedWorkbookBuilder:
                                     w, h = target_w, target_h
                             except Exception:
                                 pass
-                        rel_link = f"{img_folder_name}/{os.path.basename(img_dst)}" if img_folder_name else os.path.basename(img_dst)
+                        rel_link = f"{img_folder_name}/{os.path.basename(img_dst)}" if img_folder_name else os.path.basename(
+                            img_dst)
                         _quote_img_cache[target_quote_img_fn] = (img_dst, retina_thumb_dst, w, h, rel_link)
                     else:
                         _quote_img_cache[target_quote_img_fn] = None
@@ -397,14 +449,13 @@ class StandardizedWorkbookBuilder:
             else:
                 ws_out.row_dimensions[row_num].height = calc_text_height
 
-            # 收集审计疑义与失败项 (逐条一条，按条分级)
             for note in item.note_list():
                 severity, group = classify_note(note)
                 uncertain_items_for_audit.append({
                     "quote_id": item.quote_id,
                     "severity": severity,
                     "group": group,
-                    "field": note_field(note, self.headers),
+                    "field": note_field(note, headers),
                     "model": item.structured_specs.get("型号") or item.category_name,
                     "source_ref": item.source_ref,
                     "page": item.file_page,
@@ -415,8 +466,7 @@ class StandardizedWorkbookBuilder:
             row_num += 1
             seq += 10
 
-        # 列宽按表头名称设置 (直接根据 headers 循环，避免 ws_out.columns 转置数万行拖慢性能)
-        for col_idx, header_val in enumerate(self.headers, 1):
+        for col_idx, header_val in enumerate(headers, 1):
             col_letter = get_column_letter(col_idx)
             header_val = str(header_val or '')
 
@@ -439,11 +489,97 @@ class StandardizedWorkbookBuilder:
             else:
                 ws_out.column_dimensions[col_letter].width = 13
 
+        return total_imgs_embedded, uncertain_items_for_audit
+
+    def build_from_canonical_items(self, items: list, output_xlsx_path: str, img_dir: str, reconciliation: list = None,
+                                   structure_log: list = None):
+        """
+        基于 CanonicalMaterialItem 统一物料模型进行企业级输出构建：
+        1. 保留【客户原始解析】原表全量对账页
+        2. 保留【标准化报价】全量汇总主表
+        3. 对于不同属性值的材料（不同三级分类编码），自动按分类拆分独立 Sheet 保存，每个 Sheet 专属展开各自的标准属性列
+        """
+        if not items:
+            raise ValueError(f"物料列表为空，严禁生成或输出空的报价表格文件: {output_xlsx_path}")
+
+        # 若启用自适应动态属性列且未传特定静态模板，按物料标准分类自动扩展一属性一列表头
+        active_headers = list(self.headers)
+        dynamic_attr_columns = []
+        if self.auto_expand_attributes and not self.template_path:
+            dynamic_attr_columns = collect_dynamic_attribute_headers(items)
+            active_headers = list(BENCHMARK_PRE_ATTR_HEADERS) + dynamic_attr_columns + list(BENCHMARK_TAIL_HEADERS)
+            self.headers = active_headers
+
+        # 图片目录按需延迟创建，杜绝在磁盘生成无用的空图片库文件夹
+        has_any_image = any(len(it.image_bytes_list) > 0 for it in items)
+        if has_any_image:
+            os.makedirs(img_dir, exist_ok=True)
+
+        wb_out = openpyxl.Workbook()
+        ws_out = wb_out.active
+        ws_out.title = '标准化报价'
+
+        thin_border = Border(
+            left=Side(style='thin', color='D9D9D9'),
+            right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'),
+            bottom=Side(style='thin', color='D9D9D9')
+        )
+
+        _quote_img_cache = {}
+
+        # 1. 渲染全量物料主表【标准化报价】
+        total_imgs_embedded, uncertain_items_for_audit = self._render_material_sheet(
+            ws_out, items, self.headers, dynamic_attr_columns, img_dir, _quote_img_cache, thin_border
+        )
+
+        # 2. 对于不同属性值的材料：按三级分类编码（或品名）拆分多个专属 Sheet
+        category_groups = {}
+        for it in items:
+            code = (getattr(it, 'category_code', '') or '').strip()
+            if not code:
+                code = (getattr(it, 'category_name', '') or '').strip() or '未分类'
+            category_groups.setdefault(code, []).append(it)
+
+        category_sheet_names = []
+        # 只要包含多种不同属性分类材料，或显式要求按品类分表时，自动生成独立分类 Sheet
+        if len(category_groups) > 1 or self.split_by_category:
+            for cat_code, cat_items in category_groups.items():
+                safe_title = re.sub(r'[\/\\:\*\?\[\]]', '_', str(cat_code)).strip() or '分类明细'
+                safe_title = safe_title[:31]
+                if safe_title in ('客户原始解析', '标准化报价'):
+                    safe_title = f"{safe_title}_明细"[:31]
+
+                base_title = safe_title
+                cnt = 1
+                while safe_title in wb_out.sheetnames:
+                    safe_title = f"{base_title[:28]}_{cnt}"
+                    cnt += 1
+
+                ws_cat = wb_out.create_sheet(title=safe_title)
+                # 分类 Sheet 专有属性列：只展开属于该分类的标准属性 Schema 与提取到的属性
+                cat_dyn_cols = collect_dynamic_attribute_headers(cat_items) if (
+                            self.auto_expand_attributes and not self.template_path) else []
+                cat_headers = (list(BENCHMARK_PRE_ATTR_HEADERS) + cat_dyn_cols + list(
+                    BENCHMARK_TAIL_HEADERS)) if cat_dyn_cols else list(self.headers)
+                cat_imgs, _ = self._render_material_sheet(
+                    ws_cat, cat_items, cat_headers, cat_dyn_cols, img_dir, _quote_img_cache, thin_border
+                )
+                total_imgs_embedded += cat_imgs
+                category_sheet_names.append(safe_title)
+
         # 真正兑现双 Sheet 标准交付架构：生成 Sheet 1【客户原始解析】
         ws_raw = wb_out.create_sheet(title='客户原始解析', index=0)
         ws_raw.views.sheetView[0].showGridLines = True
         raw_headers = ['序号', '工作表/页码', '原表行标识', '原表文本内容', '原表单价', '解析判定', '说明备注']
         ws_raw.row_dimensions[1].height = 32
+
+        body_font = Font(name='宋体', size=10)
+        center_align = Alignment(horizontal='center', vertical='center')
+        multiline_left_align = Alignment(horizontal='left', vertical='center', wrap_text=True)
+        right_align = Alignment(horizontal='right', vertical='center')
+        alt_fill = PatternFill(start_color='F9FAFC', end_color='F9FAFC', fill_type='solid')
+        white_fill = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
 
         raw_header_fill = PatternFill(start_color='203764', end_color='203764', fill_type='solid')
         raw_header_font = Font(name='宋体', size=11, bold=True, color='FFFFFF')
@@ -499,9 +635,10 @@ class StandardizedWorkbookBuilder:
         ws_raw.column_dimensions['F'].width = 18
         ws_raw.column_dimensions['G'].width = 30
 
-        # 交付规范：保留【客户原始解析】与【标准化报价】双 Sheet，仅清除多余的调试/临时对账 Sheet
+        # 交付规范：保留【客户原始解析】、【标准化报价】与分类专属 Sheet，清除多余的调试/临时对账 Sheet
+        allowed_sheets = {'客户原始解析', '标准化报价'} | set(category_sheet_names)
         for s in list(wb_out.sheetnames):
-            if s not in ('客户原始解析', '标准化报价'):
+            if s not in allowed_sheets:
                 wb_out.remove(wb_out[s])
 
         wb_out.save(output_xlsx_path)

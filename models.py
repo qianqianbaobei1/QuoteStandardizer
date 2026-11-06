@@ -98,6 +98,9 @@ class CanonicalMaterialItem:
     quote_desc: str = ""
 
     quote_type: str = ""               # 价格填报类型
+    project_type: str = ""             # 项目类型
+    project_volume: str = ""           # 工程用量
+    quote_date: str = ""               # 报价时间
     province: str = ""                 # 报价地区省
     city: str = ""                     # 报价地区市
     discount_min: Optional[float] = None

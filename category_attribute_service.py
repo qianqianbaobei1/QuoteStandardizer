@@ -8,6 +8,7 @@ import re
 import math
 import json
 import copy
+import sqlite3
 import threading
 from collections import Counter
 from typing import Dict, List, Tuple, Optional, Any, Set
@@ -17,6 +18,7 @@ from config import CATEGORY_DICT_PATH, CATEGORY_ATTRS_API_URL
 
 # 全局动态全库属性枚举反向索引 (品种/类型/系列/型号/材质等属性枚举自动成为三级分类别名，严禁硬编码测试集字典)
 _DYNAMIC_ENUM_ALIAS_MAP: Dict[str, Set[str]] = {}
+_GLOBAL_ATTR_CATALOG: Dict[str, Any] = {}
 
 _BRACKET_PREFIX_RE = re.compile(r'^[\[\【][A-Za-z0-9\-_]+[\]\】][\s　]*')
 _TOKEN_RE = re.compile(r'[A-Za-z0-9]+(?:[\-/\.][A-Za-z0-9]+)*|[\u4e00-\u9fff]+')
@@ -368,6 +370,49 @@ def _load_catalog() -> None:
         except Exception:
             pass
 
+    # 3.5 增强：融合 3657 万行广材双大库 category_attribute_schema 官方标准属性及样本枚举与全局属性字典
+    kb_db_path = os.path.join(os.path.dirname(__file__), "guangcai_knowledge_base.db")
+    if os.path.exists(kb_db_path):
+        try:
+            with sqlite3.connect(kb_db_path) as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT level3, attributes_json, sample_enums_json FROM category_attribute_schema")
+                for l3_name, attrs_raw, enums_raw in cur.fetchall():
+                    if not l3_name:
+                        continue
+                    attrs_list = json.loads(attrs_raw) if attrs_raw else []
+                    enums_dict = json.loads(enums_raw) if enums_raw else {}
+                    existing_names = {a["name"] for a in _ATTR_SCHEMA_MAP.get(l3_name, [])}
+                    for a in attrs_list:
+                        a_name = a.get("name")
+                        if not a_name:
+                            continue
+                        enum_vals = enums_dict.get(a_name, [])
+                        enum_str = ", ".join(enum_vals[:15]) if enum_vals else ""
+                        if a_name not in existing_names:
+                            _ATTR_SCHEMA_MAP.setdefault(l3_name, []).append({
+                                "name": a_name,
+                                "enum": enum_str,
+                                "required": False,
+                                "affects_price": True
+                            })
+                        else:
+                            # 若已有属性但枚举为空，用广材大库高频枚举补充
+                            for ex_a in _ATTR_SCHEMA_MAP[l3_name]:
+                                if ex_a["name"] == a_name and not ex_a.get("enum") and enum_str:
+                                    ex_a["enum"] = enum_str
+        except Exception:
+            pass
+
+    catalog_json_path = os.path.join(os.path.dirname(__file__), "data", "guangcai_attribute_catalog.json")
+    if os.path.exists(catalog_json_path):
+        try:
+            with open(catalog_json_path, "r", encoding="utf-8") as f:
+                global _GLOBAL_ATTR_CATALOG
+                _GLOBAL_ATTR_CATALOG = json.load(f)
+        except Exception:
+            pass
+
     # 4. 自动全库构建核心属性枚举反向索引 (仅从 品种/类型/系列/名称/品名 等核心分类属性的枚举值构建反查，排除材质/颜色等通用属性干扰)
     CORE_TYPE_ATTR_KEYS = ('品种', '类型', '系列', '名称', '品名')
     _DYNAMIC_ENUM_ALIAS_MAP.clear()
@@ -478,8 +523,11 @@ def fetch_category_attributes_from_api(cat_code: str) -> List[Dict[str, Any]]:
 
 # 当外部接口不可用或新分类未入缓存时，按二级/三级类关键词提供工料机国标通用属性模板兜底
 _FALLBACK_CATEGORY_ATTRS = [
+    (re.compile(r'(圆钢|圆棒|盘圆|螺纹钢|钢筋)'), ["品种", "直径(mm)", "牌号", "产品描述"]),
+    (re.compile(r'(型钢|工字钢|槽钢|角钢|H型钢|方钢|扁钢|钢材)'), ["品种", "牌号", "规格(mm)", "壁厚(mm)", "截面", "理论重量", "轧制方式", "表面处理", "产品描述"]),
+    (re.compile(r'(大理石|花岗石|花岗岩|石材|天然石材)'), ["品种", "厚度(mm)", "长度(mm)", "宽度(mm)", "表面处理", "产地", "规格(mm)"]),
     (re.compile(r'(电线|电缆|导线|护套线|穿线|软线|光缆)'), ["型号", "芯数", "标称截面(mm²)", "额定电压(V)", "绝缘材质", "燃烧性能等级"]),
-    (re.compile(r'(板|砖|石材|玻璃|铝塑板|石膏板|夹芯板)'), ["材质", "长度(mm)", "宽度(mm)", "厚度(mm)", "表面处理", "品种"]),
+    (re.compile(r'(板|砖|玻璃|铝塑板|石膏板|夹芯板)'), ["材质", "长度(mm)", "宽度(mm)", "厚度(mm)", "表面处理", "品种"]),
     (re.compile(r'(管|导管|套管|波纹管)'), ["品种", "公称直径DN(mm)", "外径(mm)", "壁厚(mm)", "公称压力(MPa)", "连接方式"]),
     (re.compile(r'(阀|水嘴|龙头|冲洗阀)'), ["品种", "型号", "公称直径DN(mm)", "阀体材质", "连接形式"]),
     (re.compile(r'(光模块|收发器|交换机|配线架|耦合器|跳线|尾纤)'), ["型号", "接口类型", "传输速率", "传输距离", "单模/多模", "长度(m)"]),
@@ -514,6 +562,17 @@ def fetch_category_attributes(level3_or_code: str) -> List[Dict[str, Any]]:
         if pat.search(t3_name):
             return [{"name": n, "enum": "", "required": False, "affects_price": True} for n in std_names]
     return []
+
+
+def get_category_standard_attr_names(level3_or_code: str) -> List[str]:
+    """根据材料三级类别名称或编码，获取官方标准的属性列名有序列表"""
+    attrs = fetch_category_attributes(level3_or_code)
+    names: List[str] = []
+    for a in attrs:
+        n = str(a.get("name") or "").strip()
+        if n and n not in names:
+            names.append(n)
+    return names
 
 
 # 工程造价领域常见【同义属性名】标准映射表（解决“口径->公称直径DN”、“壁厚->厚度”、“容重->密度”等字面不包含导致的 L3-ATTR-MISS）
@@ -619,6 +678,32 @@ def retrieve_category_candidates(
                 "reason": spec_lex_hit.get("reason", "广材377万规格词库精准命中"),
             })
             seen_codes.add(sc_code)
+
+    # 3.1b 广材双大库高置信品名反查召回 (基于 21,147 权威品名物料索引)
+    try:
+        from guangcai_kb_service import get_guangcai_kb_service
+        kb_srv = get_guangcai_kb_service()
+        for q_nm in dict.fromkeys([std_name, raw_cat]):
+            if q_nm and len(q_nm) >= 2:
+                kb_info = kb_srv.lookup_product_category(q_nm)
+                if kb_info and kb_info.get("level3"):
+                    l3_match = kb_info["level3"]
+                    if l3_match in _EXACT_T3_MAP:
+                        t1, t2, t3, code = _EXACT_T3_MAP[l3_match]
+                        if code not in seen_codes:
+                            kb_conf = float(kb_info.get("confidence", 0.8))
+                            kb_score = 175.0 if kb_conf >= 0.95 else 140.0
+                            if sheet_prior and t2 in sheet_prior:
+                                kb_score += 45.0
+                            merged.append({
+                                "level1": t1, "level2": t2, "level3": t3, "code": code,
+                                "score": kb_score,
+                                "reason": f"广材双大库品名反查命中({kb_info.get('query_name')})",
+                            })
+                            seen_codes.add(code)
+                            break
+    except Exception:
+        pass
 
     # 3.2 融合 39.8 万品名词表分布 + 整表主业先验 + BM25/Sheet2 规格证据
     if lex_hits:
@@ -843,6 +928,19 @@ def validate_and_normalize_specs(
     clean_specs: Dict[str, str] = {str(k).strip(): str(v).strip() for k, v in specs.items() if str(v or "").strip()}
     if not schema:
         return clean_specs, [], []
+
+    # 0. 调用广材大库智能几何/尺寸/管材脱壳引擎 (自动拆解 600*600*20、De50*2.0、DN50、2.5平方 等复合规格)
+    if raw_spec_text:
+        try:
+            from guangcai_kb_service import get_guangcai_kb_service
+            kb_srv = get_guangcai_kb_service()
+            if kb_srv.is_ready():
+                kb_filled = kb_srv.backfill_attributes(raw_spec_text, schema)
+                for kb_k, kb_v in kb_filled.items():
+                    if kb_k not in clean_specs and not any(_match_attr_key_to_schema(k, [{"name": kb_k}]) for k in clean_specs):
+                        clean_specs[kb_k] = kb_v
+        except Exception:
+            pass
 
     normalized: Dict[str, str] = {}
     used_schema_names = set()

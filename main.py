@@ -1719,6 +1719,9 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     freight_settle=terms_info["freight_settle"],
                     quote_desc=f"{terms_info['quote_desc']}；{cleaned_res['quote_desc_extra']}".strip('；') if cleaned_res.get('quote_desc_extra') else terms_info['quote_desc'],
                     quote_type=terms_info["quote_type"],
+                    project_type=terms_info.get("project_type", ""),
+                    project_volume=terms_info.get("project_volume", ""),
+                    quote_date=terms_info.get("quote_date", ""),
                     province=province,
                     city=city,
                     discount_min=terms_info["discount_min"],
@@ -2026,7 +2029,7 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
     except Exception as illust_err:
         print(f"[Warning] 材料配图服务执行异常: {illust_err}")
 
-    builder = StandardizedWorkbookBuilder(template_xlsx)
+    builder = StandardizedWorkbookBuilder(template_xlsx, auto_expand_attributes=True)
     builder.build_from_canonical_items(items, output_xlsx, img_dir, reconciliation=None,
                                        structure_log=None)
     # 单表由 builder 内部保证，此处不再重复读写一次（旧代码会二次 load/save，白费 IO）

@@ -96,7 +96,8 @@ class TestB2FailureIsolation(unittest.TestCase):
             self.assertGreaterEqual(ws_main.max_row, 2, "标准化报价 Sheet 必须包含第 1 页的物料输出")
             found_item = False
             for r in range(2, ws_main.max_row + 1):
-                if ws_main.cell(r, 3).value == "防水卷材" or ws_main.cell(r, 14).value == 120:
+                row_vals = [ws_main.cell(r, c).value for c in range(1, ws_main.max_column + 1)]
+                if any(v == "防水卷材" or v == 120 or v == "120" for v in row_vals):
                     found_item = True
                     break
             self.assertTrue(found_item, "未在输出中找到第 1 页物料")

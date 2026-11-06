@@ -210,6 +210,19 @@ def normalize_terms(terms: dict) -> dict:
         if any(w in freight_blob for w in ('可供货全国', '全国供货', '发全国', '全国可发')):
             out['province'] = '全国'
             out['city'] = out['city'] or '全国'
+
+    # 规范化报价时间（YYYY-MM-DD）及项目工程元数据
+    raw_date = given.get('quote_date') or given.get('报价时间') or given.get('date')
+    if raw_date:
+        dm = re.search(r'(\d{4})[年\-\./](\d{1,2})[月\-\./](\d{1,2})日?', str(raw_date))
+        if dm:
+            out['quote_date'] = f"{dm.group(1)}-{int(dm.group(2)):02d}-{int(dm.group(3)):02d}"
+        else:
+            out['quote_date'] = str(raw_date).strip()
+    else:
+        out['quote_date'] = ''
+    out['project_type'] = str(given.get('project_type') or given.get('项目类型') or '').strip()
+    out['project_volume'] = str(given.get('project_volume') or given.get('工程用量') or '').strip()
     return out
 
 

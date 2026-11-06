@@ -508,7 +508,14 @@ def print_report(results, verdicts=None, vstats=None):
 
 
 def write_report(results, outdir, verdicts=None, vstats=None):
-    os.makedirs(outdir, exist_ok=True)
+    if outdir.endswith('.xlsx'):
+        path = outdir
+        parent_dir = os.path.dirname(outdir)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+    else:
+        os.makedirs(outdir, exist_ok=True)
+        path = os.path.join(outdir, '评差报告.xlsx')
     s = summarize(results)
     wb = openpyxl.Workbook()
 
@@ -563,7 +570,6 @@ def write_report(results, outdir, verdicts=None, vstats=None):
         for col, w in zip('ABC', [18, 14, 40]):
             ws5.column_dimensions[col].width = w
 
-    path = os.path.join(outdir, '评差报告.xlsx')
     wb.save(path)
     return path
 
