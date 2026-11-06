@@ -313,7 +313,11 @@ class TermsExtractor:
         img = self._prepare_vision_image()
         buf = io.BytesIO()
         img.save(buf, format='PNG')
-        img_bytes = buf.getvalue()
+        img_bytes, mime = buf.getvalue(), 'image/png'
+        if len(img_bytes) > 2_500_000:  # GIF/高分辨率扫描的 PNG 太大，易拖到模型超时，转高质量 JPEG
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG', quality=92)
+            img_bytes, mime = buf.getvalue(), 'image/jpeg'
 
         # 1. 优先使用 Gemini 原生全模态视觉
         if genai and GEMINI_API_KEY:
@@ -323,7 +327,7 @@ class TermsExtractor:
                 client_kwargs = {"api_key": GEMINI_API_KEY}
                 if http_opts: client_kwargs["http_options"] = http_opts
                 client = genai.Client(**client_kwargs)
-                part = types.Part.from_bytes(data=img_bytes, mime_type="image/png")
+                part = types.Part.from_bytes(data=img_bytes, mime_type=mime)
                 resp = client.models.generate_content(
                     model=GEMINI_MODEL,
                     contents=[part, SYSTEM_PROMPT_TERMS_VISION + "\n请严格以 JSON 格式输出识别到的条款："],
@@ -346,7 +350,7 @@ class TermsExtractor:
             {"role": "system", "content": SYSTEM_PROMPT_TERMS_VISION},
             {"role": "user", "content": [
                 {"type": "text", "text": "请提取这张商务单据中的全部商务条款，以 JSON 返回："},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
             ]}
         ]
         return self._chat(messages)
