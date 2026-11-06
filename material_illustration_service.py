@@ -107,8 +107,8 @@ class MaterialIllustrationService:
     def fetch_illustrations_batch(self,
                                   materials: List[Dict[str, Any]],
                                   company_name: str = "标准报价系统",
-                                  timeout: int = 15,
-                                  max_poll_seconds: int = 15,
+                                  timeout: int = 5,
+                                  max_poll_seconds: int = 5,
                                   download_bytes: bool = False) -> Dict[str, Dict[str, Any]]:
         """
         批量为材料检索配图并返回字典映射：
@@ -191,11 +191,11 @@ class MaterialIllustrationService:
                 if not task_id:
                     continue
 
-                # 【2】轮询任务结果
+                # 【2】轮询任务结果 (0.3s 高频快查，最长 5s)
                 start_time = time.time()
                 matched_pictures = []
                 while (time.time() - start_time) < max_poll_seconds:
-                    time.sleep(1.0)
+                    time.sleep(0.3)
                     query_url = f"{self.query_url}?taskId={task_id}"
                     q_req = urllib.request.Request(query_url, headers={"User-Agent": "QuoteStandardizer"})
                     try:

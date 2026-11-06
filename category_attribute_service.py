@@ -264,9 +264,37 @@ class EnrichedCategoryIndex:
 
 
 def _load_catalog() -> None:
-    global _CATALOG_LOADED, _CATALOG_ROWS, _EXACT_T3_MAP, _CODE_MAP, _ATTR_SCHEMA_MAP, _SEARCH_INDEX
+    global _CATALOG_LOADED, _CATALOG_ROWS, _EXACT_T3_MAP, _CODE_MAP, _ATTR_SCHEMA_MAP, _SEARCH_INDEX, _DYNAMIC_ENUM_ALIAS_MAP, _GLOBAL_ATTR_CATALOG
     if _CATALOG_LOADED:
         return
+
+    import pickle
+    cache_dir = os.path.join(os.path.dirname(__file__), ".cache")
+    cache_file = os.path.join(cache_dir, "catalog_index_v1.pkl")
+    src_files = [
+        CATEGORY_DICT_PATH or "工料机类别.xlsx",
+        os.path.join(os.path.dirname(__file__), "工料机类别.xlsx"),
+        os.path.join(os.path.dirname(__file__), "category_attrs_cache.json"),
+        os.path.join(os.path.dirname(__file__), "guangcai_knowledge_base.db"),
+        os.path.join(os.path.dirname(__file__), "data", "guangcai_attribute_catalog.json")
+    ]
+    max_src_mtime = max((os.path.getmtime(p) for p in src_files if os.path.exists(p)), default=0)
+    if os.path.exists(cache_file) and os.path.getmtime(cache_file) >= max_src_mtime:
+        try:
+            with open(cache_file, "rb") as f:
+                data = pickle.load(f)
+                _CATALOG_ROWS = data["rows"]
+                _EXACT_T3_MAP = data["exact_map"]
+                _CODE_MAP = data["code_map"]
+                _ATTR_SCHEMA_MAP = data["schema"]
+                _DYNAMIC_ENUM_ALIAS_MAP = data["dynamic_enums"]
+                _GLOBAL_ATTR_CATALOG = data.get("attr_catalog", {})
+                _SEARCH_INDEX = data["search_index"]
+                _CATALOG_LOADED = True
+                return
+        except Exception:
+            pass
+
     _CATALOG_LOADED = True
     dict_path = CATEGORY_DICT_PATH or "工料机类别.xlsx"
     if not os.path.exists(dict_path):
@@ -408,7 +436,6 @@ def _load_catalog() -> None:
     if os.path.exists(catalog_json_path):
         try:
             with open(catalog_json_path, "r", encoding="utf-8") as f:
-                global _GLOBAL_ATTR_CATALOG
                 _GLOBAL_ATTR_CATALOG = json.load(f)
         except Exception:
             pass
@@ -438,6 +465,21 @@ def _load_catalog() -> None:
                         _DYNAMIC_ENUM_ALIAS_MAP.setdefault(v_lower, set()).add(t3_clean)
 
     _SEARCH_INDEX = EnrichedCategoryIndex(_CATALOG_ROWS, _ATTR_SCHEMA_MAP)
+
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cache_file, "wb") as f:
+            pickle.dump({
+                "rows": _CATALOG_ROWS,
+                "exact_map": _EXACT_T3_MAP,
+                "code_map": _CODE_MAP,
+                "schema": _ATTR_SCHEMA_MAP,
+                "dynamic_enums": _DYNAMIC_ENUM_ALIAS_MAP,
+                "attr_catalog": _GLOBAL_ATTR_CATALOG,
+                "search_index": _SEARCH_INDEX,
+            }, f, protocol=pickle.HIGHEST_PROTOCOL)
+    except Exception:
+        pass
 
 
 def compute_sheet_category_prior(items: List[Dict[str, Any]]) -> set:

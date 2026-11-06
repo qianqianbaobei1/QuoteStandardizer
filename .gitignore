@@ -15,3 +15,4 @@ material_illustration_cache.json
 *.run.json
 *.db
 archive/
+.cache/

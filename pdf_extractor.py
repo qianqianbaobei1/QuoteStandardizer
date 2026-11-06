@@ -226,7 +226,7 @@ class PDFTableExtractor:
         scale = VISION_MAX_EDGE / max(out.shape[:2])
         if scale < 1:
             out = cv2.resize(out, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-        return base64.b64encode(cv2.imencode('.png', out)[1].tobytes()).decode()
+        return base64.b64encode(cv2.imencode('.jpg', out, [int(cv2.IMWRITE_JPEG_QUALITY), 88])[1].tobytes()).decode()
 
     def _vision_call(self, b64):
         """调用 OpenAI 兼容的多模态接口，返回解析后的 dict；失败返回 None（带内容寻址缓存）"""
@@ -249,7 +249,7 @@ class PDFTableExtractor:
                 {"role": "system", "content": VISION_TABLE_PROMPT},
                 {"role": "user", "content": [
                     {"type": "text", "text": "请转录这一页中的全部表格，返回 JSON。"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                 ]},
             ],
             "response_format": {"type": "json_object"},
@@ -257,7 +257,7 @@ class PDFTableExtractor:
         last = ""
         for attempt in range(min(LLM_MAX_RETRIES + 1, 2)):
             try:
-                resp = requests.post(url, headers=headers, json=payload, timeout=12)
+                resp = requests.post(url, headers=headers, json=payload, timeout=45)
                 if resp.status_code == 400 and "response_format" in payload:
                     # 部分模型不支持 response_format，去掉后重试
                     payload.pop("response_format")
@@ -359,7 +359,7 @@ class PDFTableExtractor:
             scale = VISION_MAX_EDGE / max(crop.shape[:2])
             if scale < 1:
                 crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-            b64_list.append(base64.b64encode(cv2.imencode('.png', crop)[1].tobytes()).decode())
+            b64_list.append(base64.b64encode(cv2.imencode('.jpg', crop, [int(cv2.IMWRITE_JPEG_QUALITY), 88])[1].tobytes()).decode())
         return b64_list
 
     def _grids_from_tiles(self, page, base, num_tiles=2):
@@ -367,14 +367,20 @@ class PDFTableExtractor:
         b64_tiles = self._slice_page_tiles(page, enhanced=True, num_tiles=num_tiles)
         merged_cells = []
         all_unc = []
-        known_headers = None
+
+        # 并发请求切片识别，消灭串行排队超时
+        def _fetch_tile(idx_b64):
+            idx, b64 = idx_b64
+            p_text = f"请转录切片图片中的全部表格，返回 JSON。这是第 {idx+1}/{num_tiles} 个垂直分块。"
+            return idx, self._vision_call_prompt(b64, p_text)
+
+        with ThreadPoolExecutor(max_workers=min(num_tiles, 3)) as pool:
+            tile_results = list(pool.map(_fetch_tile, enumerate(b64_tiles)))
+
+        tile_results.sort(key=lambda x: x[0])
         target_cols = None
 
-        for idx, b64 in enumerate(b64_tiles):
-            prompt = f"请转录切片图片中的全部表格，返回 JSON。这是第 {idx+1}/{num_tiles} 个垂直分块。"
-            if known_headers:
-                prompt += f" 表格列数必须为 {target_cols} 列，首块表头为: {known_headers}。"
-            res = self._vision_call_prompt(b64, prompt)
+        for idx, res in tile_results:
             tables = self._normalize_tables(res)
             if not tables or not tables[0][0]:
                 print(f"    ! [切片告警] {base} 第 {idx+1}/{num_tiles} 切片识别失败，插入异常标记行以防静默丢失")
@@ -384,7 +390,6 @@ class PDFTableExtractor:
                 continue
             grid, unc = tables[0]
             if idx == 0:
-                known_headers = grid[0]
                 target_cols = len(grid[0])
                 merged_cells.extend(grid)
             else:
@@ -392,7 +397,6 @@ class PDFTableExtractor:
                 start_r = 0
                 for r_i, row in enumerate(grid):
                     row_str = ''.join(str(c).strip() for c in row)
-                    # 检查是否已存在于已合并的最后5行
                     is_dup = False
                     for existing in merged_cells[-6:]:
                         ex_str = ''.join(str(c).strip() for c in existing)
@@ -403,7 +407,6 @@ class PDFTableExtractor:
                         start_r = r_i
                         break
                 for row in grid[start_r:]:
-                    # 列数对齐检查
                     if target_cols and len(row) != target_cols:
                         row = row + [''] * (target_cols - len(row)) if len(row) < target_cols else row[:target_cols]
                     merged_cells.append(row)
@@ -414,6 +417,15 @@ class PDFTableExtractor:
         return [(merged_cells, all_unc)]
 
     def _vision_call_prompt(self, b64, prompt_text):
+        import cas_cache
+        _cas = cas_cache.get('vision_table_tile', VISION_MODEL or '', b64 + '|' + prompt_text)
+        if _cas:
+            try:
+                cached = json.loads(_cas)
+                if not validate_vision_payload(cached):
+                    return cached
+            except Exception:
+                pass
         url = f"{VISION_BASE_URL.rstrip('/')}/chat/completions"
         headers = {"Authorization": f"Bearer {VISION_API_KEY}", "Content-Type": "application/json"}
         payload = {
@@ -423,14 +435,14 @@ class PDFTableExtractor:
                 {"role": "system", "content": VISION_TABLE_PROMPT},
                 {"role": "user", "content": [
                     {"type": "text", "text": prompt_text},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                 ]},
             ],
             "response_format": {"type": "json_object"},
         }
-        for attempt in range(LLM_MAX_RETRIES + 1):
+        for attempt in range(min(LLM_MAX_RETRIES + 1, 2)):
             try:
-                resp = requests.post(url, headers=headers, json=payload, timeout=180)
+                resp = requests.post(url, headers=headers, json=payload, timeout=45)
                 if resp.status_code == 200:
                     choice = resp.json()["choices"][0]
                     content = choice["message"]["content"]
@@ -438,11 +450,16 @@ class PDFTableExtractor:
                     bad = validate_vision_payload(parsed)
                     if bad:
                         raise ValueError(f"响应结构不合规: {bad}")
+                    try:
+                        cas_cache.put('vision_table_tile', VISION_MODEL or '', b64 + '|' + prompt_text,
+                                      json.dumps(parsed, ensure_ascii=False))
+                    except Exception:
+                        pass
                     return parsed
             except Exception:
                 pass
-            if attempt < LLM_MAX_RETRIES:
-                time.sleep(2 ** attempt)
+            if attempt < 1:
+                time.sleep(1)
         return None
 
     def _thread_page(self, p_idx):
@@ -571,10 +588,13 @@ class PDFTableExtractor:
         """识别扶正/展开后的公章图像中的企业名称"""
         if img_bgr is None:
             return None
-        # 1. 优先尝试本地 RapidOCR (若有安装)
+        # 1. 优先尝试本地 RapidOCR (复用全局单例，杜绝重复加载模型)
         try:
-            from rapidocr_onnxruntime import RapidOCR
-            ocr = RapidOCR()
+            from universal_pdf_grid_engine import _OCR_ENGINE
+            ocr = _OCR_ENGINE
+            if ocr is None:
+                from rapidocr_onnxruntime import RapidOCR
+                ocr = RapidOCR()
             result, _ = ocr(img_bgr)
             if result:
                 full_text = "".join(line[1] for line in result)

@@ -37,9 +37,6 @@ class GeminiClient:
     FALLBACK_MODELS = [
         "gemini-2.5-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-flash-lite-latest",
     ]
 
     _quota_exhausted = False
@@ -153,11 +150,13 @@ class GeminiClient:
                 print(f"[GeminiClient REST] 模型 {model} 响应 [{r.status_code}]: {r.text[:150]}")
                 return None, False
         except requests.exceptions.Timeout:
-            print(f"[GeminiClient REST] 模型 {model} 请求超时 ({timeout}s)，切换备选模型...")
+            GeminiClient._quota_exhausted = True
+            print(f"[GeminiClient REST] 模型 {model} 请求超时 ({timeout}s)，立即熔断保护并秒级直通备用通道...")
             return None, True
         except Exception as e:
-            print(f"[GeminiClient REST Error] 模型 {model} 请求异常: {e}")
-            return None, False
+            GeminiClient._quota_exhausted = True
+            print(f"[GeminiClient REST Error] 模型 {model} 请求异常: {e}，立即熔断...")
+            return None, True
 
     @staticmethod
     def _extract_json(text: str) -> Optional[Dict[str, Any]]:

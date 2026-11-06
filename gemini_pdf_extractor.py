@@ -151,34 +151,20 @@ class GeminiPDFTableExtractor:
             for attempt in range(1, LLM_MAX_RETRIES + 2):
                 cur_model = GEMINI_MODEL if attempt == 1 else (GEMINI_FALLBACK_MODEL or GEMINI_MODEL)
                 try:
-                    if hasattr(client, "interactions"):
-                        interaction = client.interactions.create(
-                            model=cur_model,
-                            input=[
-                                {
-                                    "type": "document",
-                                    "data": b64_data,
-                                    "mime_type": "application/pdf"
-                                },
-                                {"type": "text", "text": GEMINI_PDF_TRANSCRIPTION_PROMPT}
-                            ]
-                        )
-                        raw_json_str = getattr(interaction, "output_text", None)
-                    else:
-                        pdf_part = types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
-                        config_kwargs = {
-                            "response_mime_type": "application/json",
-                            "temperature": 0.0,
-                            "max_output_tokens": 65536,
-                        }
-                        if GEMINI_THINKING_BUDGET and hasattr(types, "ThinkingConfig"):
-                            config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET)
-                        response = client.models.generate_content(
-                            model=cur_model,
-                            contents=[pdf_part, GEMINI_PDF_TRANSCRIPTION_PROMPT],
-                            config=types.GenerateContentConfig(**config_kwargs)
-                        )
-                        raw_json_str = response.text
+                    pdf_part = types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
+                    config_kwargs = {
+                        "response_mime_type": "application/json",
+                        "temperature": 0.0,
+                        "max_output_tokens": 65536,
+                    }
+                    if GEMINI_THINKING_BUDGET is not None and hasattr(types, "ThinkingConfig"):
+                        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET)
+                    response = client.models.generate_content(
+                        model=cur_model,
+                        contents=[pdf_part, GEMINI_PDF_TRANSCRIPTION_PROMPT],
+                        config=types.GenerateContentConfig(**config_kwargs)
+                    )
+                    raw_json_str = response.text
                     if raw_json_str:
                         break
                 except Exception as e:
