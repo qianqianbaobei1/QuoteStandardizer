@@ -61,8 +61,8 @@ def parse_discount_num(val_str: str) -> Optional[float]:
     if not val_str:
         return None
     s = str(val_str).strip().replace(' ', '')
-    if any(k in s for k in ('无折扣', '不打折', '原价')):
-        return 1.0
+    if any(k in s for k in ('无折扣', '不打折', '原价', '见工程再议', '暂无折扣')):
+        return None
     cn = re.search(r'([一二两三四五六七八九])([一二三四五六七八九])?折', s)
     if cn and not re.search(r'\d', s):
         x = CN_NUM[cn.group(1)] + (CN_NUM[cn.group(2)] / 10 if cn.group(2) else 0)

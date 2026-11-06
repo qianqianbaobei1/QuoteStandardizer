@@ -34,14 +34,14 @@ SYSTEM_PROMPT_TERMS_VISION = """你是工程采购商务条款的转录员。请
 6. "tax_desc": 税费说明；
 7. "is_freight_included": 是否含运费 ("包含" 或 "不含")；
 8. "freight_desc": 运费约定；
-9. "discount_ratio": 工程折扣率浮点数 (9折填 0.9，明确写“无折扣”填 1.0)；若折扣只对某个具体系列/品类生效 (如“消防喷头 8.9折”)，此字段填 null，折扣只写进 discount_series；
+9. "discount_ratio": 工程折扣率浮点数 (9折填 0.9，明确写“无折扣/见工程再议”填 null，严禁臆测 1.0)；若折扣只对某个具体系列/品类生效 (如“消防喷头 8.9折”)，此字段填 null，折扣只写进 discount_series；
 10. "discount_series": 折扣适用系列与折扣描述，必须保留原文，包括“无折扣，见工程再议”这类无数字的声明，以及起订量/起订金额 (如“起订量:1000m²”“起订金额:10000元”)；
 11. "quote_desc": 付款条件与报价说明。
 
 【规则】
 - 只返回一个 JSON 对象；图片中没有、或看不清的字段一律填 null，严禁猜测或补默认值；
 - 以“例:”“例：”“例如”“示例”开头的行（如“例：全系列 8.5 折 起订量 1000 件”）是表格印刷示例，不是本供应商的条款，必须 100% 忽略，只提取表格里实际填写的折扣行；
-- 表格里写了“无折扣���见工程再议”这类不含数字的折扣行，绝不能丢弃：discount_ratio 填 1.0，原文照抄进 discount_series；
+- 表格里写了“无折扣，见工程再议”这类不含数字的折扣行，绝不能丢弃：discount_ratio 填 null，原文照抄进 discount_series；
 - 勾选框：☑/√/■ 表示选中，☒/□ 表示未选中；勾选标记可能被印章或手写签名遮盖，必须结合“横线填空处是否真的填了内容（如 13、含重庆市区运费、可供货全国、100公里）”确认哪一项生效；只有选中的选项才能写入；
 - freight_desc、tax_desc、quote_desc、discount_series 必须照抄原文中供应商实际填写/勾选的内容，不得改写、概括或补充；
 - 图片底部若附有系统自动扶正、去除黑字手签干扰并拉直放大后的公章特写，请结合原图公章与特写准确读出 supplier（含“有限公司/股份公司/集团”的完整企业名称）；
@@ -80,15 +80,15 @@ def _is_global_series(name: str) -> bool:
 
 
 def parse_discount(val):
-    """'4折'→0.4、'85折'→0.85、'8.5折'→0.85、'八五折'→0.85、'40%'→0.4、0.4→0.4、'无折扣'→1.0；无法解析返回 None"""
+    """'4折'→0.4、'85折'→0.85、'8.5折'→0.85、'八五折'→0.85、'40%'→0.4、0.4→0.4、'无折扣'/'见工程再议'→None；无法解析返回 None"""
     if val is None or val == '':
         return None
     if isinstance(val, (int, float)):
         x = float(val)
     else:
         s = str(val).strip().replace(' ', '')
-        if any(k in s for k in ('无折扣', '不打折', '原价')):
-            return 1.0
+        if any(k in s for k in ('无折扣', '不打折', '原价', '见工程再议', '暂无折扣')):
+            return None
         cn = re.search(r'([一二两三四五六七八九])([一二三四五六七八九])?折', s)
         if cn and not re.search(r'\d', s):
             x = CN_NUM[cn.group(1)] + (CN_NUM[cn.group(2)] / 10 if cn.group(2) else 0)

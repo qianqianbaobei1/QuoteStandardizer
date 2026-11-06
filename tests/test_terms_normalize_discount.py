@@ -21,9 +21,9 @@ def test_example_rows_are_ignored():
 
 
 def test_no_discount_text_is_kept():
-    """宁波/集实筑镀：“无折扣，见工程再议”不能因为解析不出数字就丢掉"""
+    """宁波/集实筑镀：“无折扣，见工程再议”不能因为解析不出数字就丢掉，无折扣时折扣率保持 None，严禁臆测 1.0"""
     t = normalize_terms({'discount_series': '全系列:无折扣见工程再议(起订量:1000m²)'})
-    assert t['discount_ratio'] == 1.0
+    assert t['discount_ratio'] is None
     assert '见工程再议' in t['discount_series']
     assert '1000m²' in t['discount_series']
 

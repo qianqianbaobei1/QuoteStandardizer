@@ -51,8 +51,8 @@ CATEGORY_ENGINE = os.getenv("CATEGORY_ENGINE", "jev_tiered").strip().lower()
 JEV_CATEGORY_GATE = float(os.getenv("JEV_CATEGORY_GATE", "0.65"))
 # 同构行指纹去重：同一(品名,规格骨架)只送 1 行给模型，其余套用键映射（0 可关）
 FINGERPRINT_DEDUPE = os.getenv("FINGERPRINT_DEDUPE", "1") not in ("0", "false", "False")
-# 单位量纲折算留痕（只写说明，不改市场价/单位）
-UNIT_CONVERT_NOTE = os.getenv("UNIT_CONVERT_NOTE", "1") not in ("0", "false", "False")
+# 严格遵循原文保真红线：默认关闭往报价说明中追加人工折算公式
+UNIT_CONVERT_NOTE = os.getenv("UNIT_CONVERT_NOTE", "0").strip().lower() in ("1", "true")
 # 跨行价格离群护栏（只提示，不改价）
 PRICE_GUARD = os.getenv("PRICE_GUARD", "1") not in ("0", "false", "False")
 # Jev 行类型每次请求带多少行

@@ -55,7 +55,10 @@ FILENAME_NOISE_RE = re.compile(r'标准化输出|标准解析|报价单|报价�
 COMPANY_SUFFIX_RE = re.compile(r'(股份有限公司|有限责任公司|有限公司|股份公司|集团|新材料|建筑材料|建筑装饰|建筑|新型建材|科技|材料|建材|实业|工程|设备|照明|电气|门业|金属|机电|防水|管业|技术|[（\(]).*$')
 REGION_PREFIX_RE = re.compile('^(' + '|'.join(sorted((k for k in PROVINCE_ABBR_MAP if len(k) >= 2), key=len, reverse=True)) + r')|^[\u4e00-\u9fa5]{2,3}市')
 SUMMARY_ROW_KEYS = ['合计', '小计', '总计', '总价合计']
-LIST_HEADER_RE = re.compile(r'^\s*(单价|合价|总价|金额|数量|序号|税率|单位|小计|报价|价格|市场价|出厂价|含税价|面价)')
+LIST_HEADER_RE = re.compile(
+    r'(单价|合价|总价|金额|数量|序号|税率|单位|小计|报价|价格|市场价|出厂价|含税价|含税单价|不含税价|面价|'
+    r'过磅价|理计价|过磅|理计|厚度|壁厚|长度|宽度|高度|外径|口径|直径|理论重量|理重|米重|支重|件重|重量|支数|件数|根数)'
+)
 # 矩阵表的行标题列是“规格/型号/档位”这类维度；表头像“名称/品名”时更可能是清单表
 MATRIX_LABEL_RE = re.compile(r'规格|型号|容量|档位|尺寸|功率|厚度|直径|层数|电压|电流|口径|通径|DN|kVA|kg', re.IGNORECASE)
 NUMBER_RE = re.compile(r'[¥￥]?\d{1,3}(?:,\d{3})+(?:\.\d+)?|[¥￥]?\d+(?:\.\d+)?')
@@ -212,13 +215,21 @@ def extract_deterministic_kv(raw_spec_text: str, raw_cells_dict: Optional[dict] 
                 if k and v and k not in ("品名", "名称", "单价", "金额"):
                     out[k] = v
 
-    # 3. 针对工程常见复合规格表达式进行确定性维度解构（电线/电缆/板材/管材）
-    # 3.1 三维板材/块材尺寸：L*W*T (如 600*600*15, 600*600*15mm)
+    # 3. 针对工程常见复合规格表达式进行确定性维度解构（电线/电缆/板材/管材/型钢）
+    # 3.1 三维板材/块材/型钢尺寸：L*W*T (如 600*600*15, 600*600*15mm, 100*100*3.5)
     m_dim3 = re.search(r'(\d+(?:\.\d+)?)\s*[*×xX]\s*(\d+(?:\.\d+)?)\s*[*×xX]\s*(\d+(?:\.\d+)?)(?:mm)?', text)
     if m_dim3:
-        out.setdefault("长度(mm)", m_dim3.group(1))
-        out.setdefault("宽度(mm)", m_dim3.group(2))
-        out.setdefault("厚度(mm)", m_dim3.group(3))
+        if any(k in text for k in ("管", "钢", "角钢", "槽钢", "工字钢", "方管", "矩形管")):
+            out.setdefault("规格(mm)", f"{m_dim3.group(1)}×{m_dim3.group(2)}×{m_dim3.group(3)}")
+            out.setdefault("壁厚(mm)", m_dim3.group(3))
+        elif any(k in text for k in ("钢板", "花纹板", "中厚板", "冷轧板", "热轧板")):
+            out.setdefault("厚度(mm)", m_dim3.group(1))
+            out.setdefault("宽度(mm)", m_dim3.group(2))
+            out.setdefault("长度(mm)", m_dim3.group(3))
+        else:
+            out.setdefault("长度(mm)", m_dim3.group(1))
+            out.setdefault("宽度(mm)", m_dim3.group(2))
+            out.setdefault("厚度(mm)", m_dim3.group(3))
 
     # 3.2 电线电缆多芯与截面：N*S 或 N×S (如 2*2.5, 3*4, 2×0.5)
     m_cable = re.search(r'([1-9]\d?)\s*[*×xX]\s*(\d+(?:\.\d+)?)(?:mm2|mm²)?', text)
@@ -243,6 +254,22 @@ def extract_deterministic_kv(raw_spec_text: str, raw_cells_dict: Optional[dict] 
     m_volt = re.search(r'(\d+(?:\.\d+)?\s*(?:kV|kv|KV)|(?:450/750|300/500)\s*V?|\b\d+\s*V\b)', text, re.I)
     if m_volt:
         out.setdefault("额定电压", m_volt.group(1).strip())
+
+    # 3.5 型钢/方矩管/角钢/钢板专属材质牌号提取 (如 Q235B, Q355B, 304)
+    m_grade = re.search(r'\b(Q\d{3}[A-Z]?|HRB\d{3}[E]?|HPB\d{3}|SUS\d{3}|304|316L?)\b', text, re.I)
+    if m_grade:
+        out.setdefault("牌号", m_grade.group(1).upper())
+
+    # 3.6 钢板/花纹板/冷轧板/热轧板厚度提取 (如 "花纹板 4.5", "厚度: 3.0mm")
+    if any(k in text for k in ("钢板", "花纹板", "中厚板", "冷轧板", "热轧板")):
+        m_pt = re.search(r'(?:厚度|厚)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(?:mm)?', text)
+        if not m_pt:
+            cleaned = re.sub(r'\b(Q\d{3}[A-Z]?|HRB\d{3}[E]?|HPB\d{3}|SUS\d{3}|304|316L?)\b', '', text, flags=re.I)
+            m_pt = re.search(r'(?:^|[^\w\d\.])(\d+(?:\.\d+)?)\s*(?:mm)?', cleaned)
+        if m_pt:
+            val_t = float(m_pt.group(1))
+            if 0.1 <= val_t <= 200:
+                out.setdefault("厚度(mm)", m_pt.group(1))
 
     # 若规格型号已被拆解为独立的芯数与标称截面，清除未拆开的复合键以防下游冗余混淆
     if "标称截面(mm²)" in out and "芯数" in out:
@@ -668,9 +695,9 @@ def _detect_matrix(ws, hid_rows=frozenset(), hid_cols=frozenset()):
                 parts.append(v)
         return parts
 
-    # 任意一级表头是清单表字段 (单价/合价/数量…) 就不是矩阵表；单位注释格除外
+    # 任意一级表头是清单表字段 (单价/合价/数量/厚度/理重…) 就不是矩阵表；单位注释格除外
     for c in value_cols:
-        if any(LIST_HEADER_RE.match(p) and not UNIT_NOTE_RE.match(p) for p in path(c)):
+        if any(LIST_HEADER_RE.search(p) and not UNIT_NOTE_RE.match(p) for p in path(c)):
             return None
 
     # 行标题取“列标题路径的末级”：不能取第一行 —— 第一行常是整表大标题
@@ -1682,7 +1709,7 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                     unit=unit,
                     market_price=final_price,
                     discount_ratio=row_disc_ratio,
-                    project_price=round(final_price * row_disc_ratio, 2) if row_disc_ratio is not None and final_price > 0 else None,
+                    project_price=final_price if final_price > 0 else None,  # 遵循保真红线：工程价保持原表原价，绝不直接写折后价
                     discount_series=row_disc_series,
                     is_freight_included=row_freight_inc,
                     freight_desc=row_freight_desc or terms_info["freight_desc"],

@@ -34,7 +34,7 @@ PRICE_HEADERS = {'市场价', '工程价'}
 FORBIDDEN_SPEC_KEYS = ('表头', '表标题', '基价', '单价', '总价', '金额', '指导价', '调价',
                        '产品编码', '物料编码', '商品编码', '内部编码', '条形码', '编码', '条码', '代码',
                        '税号', '账号', '帐号', '开户行', '一级类别', '二级类别', '三级类别', '材料名称', '属性项属性值',
-                       '物料名称', '类别名称', '分类编码')
+                       '物料名称', '类别名称', '分类编码', '原始描述', '列标题', '行标题')
 
 def safe_excel_val(val):
     """确保单元格内容不含非法控制字符，统一换行符，杜绝乱码与损坏"""
@@ -168,7 +168,7 @@ class StandardizedWorkbookBuilder:
             '报价地区市': item.city or '',
             '单位': item.unit or '',
             '市场价': item.market_price,
-            '工程价': item.project_price if item.project_price is not None else item.market_price,
+            '工程价': item.market_price,  # 严格遵循红线规范：工程价保持原表原价绝对保真，折扣独立记录在折扣比例列，绝不直接写折后价！
             '工程价折扣比例': item.discount_ratio if item.discount_ratio is not None else None,
             '折扣下限': item.discount_min if item.discount_min is not None else item.discount_ratio,
             '折扣上限': item.discount_max if item.discount_max is not None else item.discount_ratio,
