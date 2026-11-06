@@ -380,6 +380,71 @@ class PDFTableExtractor:
         tile_results.sort(key=lambda x: x[0])
         target_cols = None
 
+        def _is_hdr(row):
+            t = ' '.join(str(c) for c in row)
+            return any(k in t for k in ('材料名称', '品名', '规格', '单价', '税率')) and ('序号' in t or '单位' in t)
+
+        def _row_keys(row):
+            seq = None
+            for c in row[:2]:
+                s = str(c).strip()
+                if re.fullmatch(r'\d+', s):
+                    seq = s
+                    break
+            spec = ''
+            for c in row:
+                s = str(c).strip()
+                if any(k in s for k in ('×', '*', 'mm', '#', 'DN', 'Q235', 'Q355')):
+                    spec = s
+                    break
+            return seq, spec
+
+        def _align_row_to_hdr(row, hdr):
+            if len(row) == len(hdr):
+                return row
+            slots = {}
+            r = [str(c).strip() for c in row if str(c).strip() != '']
+            if r and re.fullmatch(r'\d+', r[-1]) and int(r[-1]) in (0, 3, 6, 9, 13):
+                slots['税率'] = r.pop()
+            if r and r[-1] in ('是', '否', '含', '不含'):
+                slots['是否含税'] = r.pop()
+            if r and re.fullmatch(r'\d+(\.\d+)?', r[-1].replace(',', '')) and float(r[-1].replace(',', '')) > 50:
+                slots['单价'] = r.pop()
+            if r and r[-1] in ('t', 'm', 'kg', '套', '个', '吨', '米', '批'):
+                slots['单位'] = r.pop()
+            if r and re.fullmatch(r'\d+', r[0]):
+                slots['序号'] = r.pop(0)
+            if r:
+                slots['材料名称'] = r.pop(0)
+            if r and len(r) >= 2:
+                slots['品牌'] = r.pop(0)
+                slots['属性项属性值'] = ' '.join(r)
+            elif r:
+                slots['属性项属性值'] = r.pop(0)
+
+            aligned = []
+            for h in hdr:
+                h_clean = str(h or '').strip()
+                val = ''
+                if any(k in h_clean for k in ('序号', '编号', 'No')):
+                    val = slots.get('序号', '')
+                elif any(k in h_clean for k in ('材料名称', '品名', '名称')):
+                    val = slots.get('材料名称', '')
+                elif any(k in h_clean for k in ('品牌', '厂家', '生产厂')):
+                    val = slots.get('品牌', '')
+                elif any(k in h_clean for k in ('属性', '规格', '参数')):
+                    val = slots.get('属性项属性值', '')
+                elif any(k in h_clean for k in ('单价', '价格', '含税价', '不含税价')):
+                    val = slots.get('单价', '')
+                elif any(k in h_clean for k in ('单位', '计量单位')):
+                    val = slots.get('单位', 't')
+                elif any(k in h_clean for k in ('是否含税', '含税')):
+                    val = slots.get('是否含税', '是')
+                elif any(k in h_clean for k in ('税率', '增值税率')):
+                    val = slots.get('税率', '13')
+                aligned.append(val)
+            return aligned
+
         for idx, res in tile_results:
             tables = self._normalize_tables(res)
             if not tables or not tables[0][0]:
@@ -393,21 +458,47 @@ class PDFTableExtractor:
                 target_cols = len(grid[0])
                 merged_cells.extend(grid)
             else:
-                # 消除重叠区重复行 (按整行文本或去除空格匹配)
+                # 过滤后续切片顶部的重复表头
+                clean_grid = [r for r in grid if not (_is_hdr(r) and not clean_grid)] if grid else []
+                # 建立前密切片尾部最近 12 行指纹索引
+                tail_keys = []
+                for t_i, tr in enumerate(merged_cells[-12:]):
+                    t_abs = len(merged_cells) - 12 + t_i if len(merged_cells) >= 12 else t_i
+                    s, sp = _row_keys(tr)
+                    tail_keys.append((t_abs, s, sp, tr))
+
+                hdr_row = merged_cells[0] if (merged_cells and _is_hdr(merged_cells[0])) else None
+
                 start_r = 0
-                for r_i, row in enumerate(grid):
-                    row_str = ''.join(str(c).strip() for c in row)
-                    is_dup = False
-                    for existing in merged_cells[-6:]:
-                        ex_str = ''.join(str(c).strip() for c in existing)
-                        if row_str and row_str == ex_str:
-                            is_dup = True
+                for r_i, row in enumerate(clean_grid):
+                    s2, sp2 = _row_keys(row)
+                    r_text = ''.join(str(c) for c in row)
+                    matched = None
+                    for t_abs, s1, sp1, r1 in tail_keys:
+                        if s2 and s1 and s2 == s1:
+                            matched = (t_abs, r1)
                             break
-                    if not is_dup:
+                        elif sp1 and sp2 and (sp1 == sp2 or (len(sp1) > 10 and len(sp2) > 10 and (sp1 in sp2 or sp2 in sp1))):
+                            matched = (t_abs, r1)
+                            break
+                    if matched:
+                        t_abs, r1 = matched
+                        if len(r_text) > len(''.join(str(c) for c in r1)):
+                            merged_cells[t_abs] = _align_row_to_hdr(row, hdr_row) if hdr_row else row
+                        start_r = r_i + 1
+                    else:
+                        # 检查切片交界处的碎片残留行
+                        if '品种' not in r_text and '规格' not in r_text and len(r_text) < 40 and r_i == 0:
+                            start_r = r_i + 1
+                            continue
                         start_r = r_i
                         break
-                for row in grid[start_r:]:
-                    if target_cols and len(row) != target_cols:
+
+                hdr_row = merged_cells[0] if (merged_cells and _is_hdr(merged_cells[0])) else None
+                for row in clean_grid[start_r:]:
+                    if hdr_row and len(row) != len(hdr_row):
+                        row = _align_row_to_hdr(row, hdr_row)
+                    elif target_cols and len(row) != target_cols:
                         row = row + [''] * (target_cols - len(row)) if len(row) < target_cols else row[:target_cols]
                     merged_cells.append(row)
             all_unc.extend(unc)

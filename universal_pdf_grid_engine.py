@@ -266,6 +266,13 @@ def infer_headers_from_data_columns(all_rows: List[List[Any]]) -> List[str]:
         if not col_vals:
             continue
         n = len(col_vals)
+
+        # 第 0 列递增纯整数优先判定为“序号”，绝不能误判为“单价”
+        is_seq = (c == 0) and all(re.match(r'^\d+$', v) and int(v) <= 5000 for v in col_vals)
+        if is_seq:
+            inferred[c] = "序号"
+            continue
+
         unit_ratio = sum(1 for v in col_vals if _UNIT_VAL_RE.match(v)) / n
         price_ratio = sum(1 for v in col_vals if _PRICE_OR_DASH_RE.match(v)) / n
         kv_ratio = sum(1 for v in col_vals if _KV_SPEC_RE.search(v) or (':' in v or '：' in v or ';' in v)) / n
@@ -276,7 +283,7 @@ def infer_headers_from_data_columns(all_rows: List[List[Any]]) -> List[str]:
         elif kv_ratio >= 0.3 and spec_col is None:
             spec_col = c
             inferred[c] = "属性项属性值"
-        elif price_ratio >= 0.5 and any(re.match(r'^\d+(?:\.\d+)?$', v) for v in col_vals):
+        elif price_ratio >= 0.5 and price_col is None and any(re.match(r'^\d+(?:\.\d+)?$', v) for v in col_vals):
             price_col = c
             inferred[c] = "单价"
 
@@ -312,10 +319,19 @@ def unify_and_broadcast_cross_page_headers(pages_data: List[Dict[str, Any]]) -> 
                 else:
                     rows_by_cols.setdefault(col_cnt, []).append(row)
 
-    # 对全文档均未找到显式表头的列数分组，基于全量数据分布反推表头
+    # 对全文档均未找到显式表头的列数分组，优先尝试从已有表头中压缩空列对齐，兜底才基于全量数据分布反推表头
     for col_cnt, data_rows in rows_by_cols.items():
         if col_cnt not in header_by_cols and data_rows:
-            header_by_cols[col_cnt] = infer_headers_from_data_columns(data_rows)
+            matched_hdr = None
+            for exist_cols, exist_hdr in header_by_cols.items():
+                stripped_hdr = [h for h in exist_hdr if h.strip()]
+                if len(stripped_hdr) == col_cnt:
+                    matched_hdr = stripped_hdr
+                    break
+            if matched_hdr:
+                header_by_cols[col_cnt] = matched_hdr
+            else:
+                header_by_cols[col_cnt] = infer_headers_from_data_columns(data_rows)
 
     # 将表头注入每一个首行是数据行的续表页（绝不吞掉续表页的第 1 行真实数据！）
     for p in pages_data:
@@ -356,10 +372,19 @@ def broadcast_headers_to_page_grids(
                 if not (r_idx < 3 and is_valid_table_header_row(row)):
                     rows_by_cols.setdefault(col_cnt, []).append(row)
 
-    # 兜底反推
+    # 兜底反推：优先从已有表头压缩空列对齐，无匹配时再反推
     for col_cnt, data_rows in rows_by_cols.items():
         if col_cnt not in header_by_cols and data_rows:
-            header_by_cols[col_cnt] = infer_headers_from_data_columns(data_rows)
+            matched_hdr = None
+            for exist_cols, exist_hdr in header_by_cols.items():
+                stripped_hdr = [h for h in exist_hdr if h.strip()]
+                if len(stripped_hdr) == col_cnt:
+                    matched_hdr = stripped_hdr
+                    break
+            if matched_hdr:
+                header_by_cols[col_cnt] = matched_hdr
+            else:
+                header_by_cols[col_cnt] = infer_headers_from_data_columns(data_rows)
 
     # 双向补齐
     for rec in pages_records:
