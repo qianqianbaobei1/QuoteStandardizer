@@ -648,6 +648,79 @@ class PDFTableExtractor:
         return [[[p for p in re.split(r'\s{2,}|\t', line.strip()) if p]
                  for line in page.get_text().split('\n') if line.strip()]]
 
+    def _grid_from_borderless_text(self, page):
+        """当没有矢量边框线 (find_tables 为空) 时，通过单词物理坐标聚类与表头列锚点还原规整无框表格"""
+        words = page.get_text('words')
+        if not words:
+            return None
+        # 按 y 坐标归并视觉文本行
+        lines = []
+        curr_line = []
+        curr_y = None
+        for w in sorted(words, key=lambda x: (round(x[1], 1), x[0])):
+            if curr_y is None or abs(w[1] - curr_y) <= 3.5:
+                curr_line.append(w)
+                curr_y = w[1] if curr_y is None else curr_y
+            else:
+                lines.append(curr_line)
+                curr_line = [w]
+                curr_y = w[1]
+        if curr_line:
+            lines.append(curr_line)
+
+        header_idx = None
+        header_keywords = ['类别', '名称', '品名', '规格', '属性', '单位', '单价', '报价', '品牌', '金额', '备注', '序号', '型号']
+        for idx, l in enumerate(lines[:15]):
+            line_text = ''.join(w[4] for w in l)
+            matched = sum(1 for kw in header_keywords if kw in line_text)
+            if matched >= 2:
+                header_idx = idx
+                break
+
+        if header_idx is None:
+            return None
+
+        header_line = lines[header_idx]
+        col_starts = [w[0] for w in header_line]
+        col_names = [w[4] for w in header_line]
+
+        col_intervals = []
+        for i in range(len(header_line)):
+            left = 0.0 if i == 0 else col_starts[i] - 2.0
+            right = 10000.0 if i == len(header_line) - 1 else col_starts[i + 1] - 2.0
+            col_intervals.append((left, right, col_names[i]))
+
+        data_lines = lines[header_idx + 1:]
+        grid_rows = [[c[2] for c in col_intervals]]
+        current_row = [''] * len(col_intervals)
+
+        # 查找单位/单价/品牌所在列索引作为行锚点
+        anchor_cols = [c_idx for c_idx, (_, _, name) in enumerate(col_intervals) if any(k in name for k in ['单位', '单价', '报价', '品牌', '金额'])]
+
+        for dl in data_lines:
+            dl_cols = {}
+            for w in dl:
+                wx = (w[0] + w[2]) / 2.0
+                for c_idx, (c_left, c_right, _) in enumerate(col_intervals):
+                    if c_left <= wx < c_right:
+                        dl_cols.setdefault(c_idx, []).append(w[4])
+                        break
+            has_anchor = any(c in dl_cols for c in anchor_cols) or len(dl_cols) >= max(2, len(col_intervals) // 2)
+            if not has_anchor:
+                for c_idx, wl in dl_cols.items():
+                    current_row[c_idx] += ''.join(wl)
+            else:
+                for c_idx, wl in dl_cols.items():
+                    sep = ' ' if c_idx not in anchor_cols else ''
+                    current_row[c_idx] = (current_row[c_idx] + sep + ' '.join(wl)).strip()
+                grid_rows.append(current_row)
+                current_row = [''] * len(col_intervals)
+
+        if len(grid_rows) >= 2:
+            self.page_titles.append(page.get_text()[:200])
+            return grid_rows
+        return None
+
     def _grids_from_text_layer(self, page):
         """一页可能有多张表，必须全部返回；原实现只取面积最大的一张，其余整张静默丢弃"""
         try:
@@ -655,6 +728,9 @@ class PDFTableExtractor:
         except Exception:
             tables = []
         if not tables:
+            borderless_grid = self._grid_from_borderless_text(page)
+            if borderless_grid and len(borderless_grid) > 1 and len(borderless_grid[0]) >= 3:
+                return [borderless_grid]
             return self._lines_from_text(page)
         cand = []
         for tb in sorted(tables, key=lambda t: (round(t.bbox[1] / 5), t.bbox[0])):

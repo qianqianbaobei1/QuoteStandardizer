@@ -116,8 +116,10 @@ def verify_terms_supplier(terms: dict, evidence_texts: list) -> dict:
     core = core_name(sup)
     evidence = re.sub(r'\s', '', ''.join(evidence_texts))
     if len(core) >= 2 and evidence and not _core_consistent(sup, core, evidence):
-        print(f"[Info] 商务单公章供应商“{sup}”与表内品牌/物料名称可能存在经销商与品牌差异，予以保留，提示复核")
-        terms['_supplier_note'] = f"商务单公章识别为“{sup}”，与表内文字存在差异，建议复核"
+        print(f"[Warning] 商务单识别供应商“{sup}”与表内品牌/物料/路径矛盾，不予采信，回退至路径/表内推导")
+        terms['_unverified_supplier'] = sup
+        terms['supplier'] = None
+        terms['_supplier_note'] = f"商务单公章/识别为“{sup}”，与表内及路径矛盾未予采信，已回退"
     return terms
 
 
@@ -1273,7 +1275,7 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
     missing = [m for m in missing_terms(terms_info) if m not in table_has_terms]
     if missing:
         global_notes = global_notes + [f"商务条款缺失: {'、'.join(missing)}"]
-    if disc_ratio is None:
+    if disc_ratio is None and not terms_info.get("discount_series_map"):
         global_notes = global_notes + ["未提供工程折扣，工程价留空"]
     sheet_stats = []   # 每个 Sheet 的“原表行数 → 产出条数”记账，空产出不能静默
 

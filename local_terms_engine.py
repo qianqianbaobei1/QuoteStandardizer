@@ -188,11 +188,18 @@ def extract_terms_from_ocr_text(ocr_text: str) -> Dict[str, Any]:
     for l in raw_lines:
         if l.startswith('例:') or l.startswith('例：') or l.startswith('例 '):
             continue
-        m_s = re.search(r'([一-龥]{2,8}(?:系列)?).*?(?:下浮|优惠|折扣|折)[：:\s]*([\d\.]+)%', l)
+        m_s = re.search(r'([一-龥]{2,8}(?:系列)?).*?(?:下浮|优惠|折扣)[：:\s]*([\d\.]+)%', l)
         if m_s:
             s_name = m_s.group(1).replace('所有', '').replace('系列', '').strip()
             pct = float(m_s.group(2))
             series_map[s_name] = round(1.0 - pct / 100.0, 4)
+        else:
+            # “全系列95折”这类打折口径 (非下浮百分比)
+            m_f = re.search(r'([一-龥]{2,8}(?:系列|品类)?)[^\d%]{0,6}?(\d+(?:\.\d+)?)\s*折', l)
+            r_f = parse_discount_num(m_f.group(2) + '折') if m_f else None
+            if r_f is not None:
+                s_name = m_f.group(1).replace('所有', '').replace('系列', '').strip()
+                series_map[s_name] = r_f
         if '产品类别' in l or '工程折扣' in l:
             in_disc_table = True
             continue

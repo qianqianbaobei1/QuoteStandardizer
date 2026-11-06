@@ -408,8 +408,18 @@ class DeepSeekStandardizer:
             raw_price = it.get('raw_price', 0.0)
             raw_unit = it.get('raw_unit', '')
             candidates = it.get('candidate_categories') or []
-            selected_code = candidates[0].get('code', '') if candidates else ''
-            predicted_cat = candidates[0].get('level3', '') if candidates else ''
+            selected_code = ''
+            predicted_cat = ''
+            if candidates:
+                first_cand = candidates[0]
+                if isinstance(first_cand, dict):
+                    selected_code = first_cand.get('code', '')
+                    predicted_cat = first_cand.get('level3', '')
+                elif isinstance(first_cand, str):
+                    # 格式为 "code:level3 [标准属性:...]"
+                    parts = first_cand.split(' [标准属性:')[0].split(':', 1)
+                    selected_code = parts[0].strip() if len(parts) > 0 else ''
+                    predicted_cat = parts[1].strip() if len(parts) > 1 else ''
 
             specs = {}
             name = ''

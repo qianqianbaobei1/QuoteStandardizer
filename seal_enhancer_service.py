@@ -31,16 +31,43 @@ class SealEnhancerService:
         if output_debug_dir and not os.path.exists(output_debug_dir):
             os.makedirs(output_debug_dir, exist_ok=True)
 
+    def extract_red_chroma(self, bgr_img: np.ndarray) -> np.ndarray:
+        """纯红度色差场 R - (G+B)/2：黑字/黑签名/灰底三通道相等故恒为 0，只有红印泥 > 0"""
+        b, g, r = cv2.split(bgr_img.astype(np.float32))
+        return np.clip(r - 0.5 * (g + b), 0, 255)
+
     def extract_red_mask(self, bgr_img: np.ndarray) -> np.ndarray:
-        """在 HSV 颜色空间精确提取红色公章印泥掩膜"""
+        """在 HSV 颜色空间精确提取红色公章印泥掩膜；HSV 无命中时回退到红度色差通道（浅淡/干涸印泥）"""
         hsv = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2HSV)
         mask1 = cv2.inRange(hsv, np.array([0, 50, 40]), np.array([12, 255, 255]))
         mask2 = cv2.inRange(hsv, np.array([155, 50, 40]), np.array([180, 255, 255]))
-        return cv2.bitwise_or(mask1, mask2)
+        mask = cv2.bitwise_or(mask1, mask2)
+        if cv2.countNonZero(mask) >= 50:
+            return mask
+        return self._faint_red_mask(bgr_img)
+
+    def _faint_red_mask(self, bgr_img: np.ndarray) -> np.ndarray:
+        """浅淡印泥掩膜：色度差 >= 12（人眼几乎看不见的粉红残墨也能进候选）"""
+        mask = (self.extract_red_chroma(bgr_img) >= 12).astype(np.uint8) * 255
+        return cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
 
     def locate_seal(self, bgr_img: np.ndarray) -> Optional[Dict[str, Any]]:
-        """定位公章位置、圆心、半径及外接裁剪框"""
-        red_mask = self.extract_red_mask(bgr_img)
+        """定位公章位置、圆心、半径及外接裁剪框（浓章走 HSV，浅章回退色度差）"""
+        info = self._locate_from_mask(bgr_img, self.extract_red_mask(bgr_img))
+        if info:
+            return info
+        # 回退：浅淡/残缺印泥。整页泛黄纸底色度差也 >0，故额外要求候选不得铺满外接圆（公章是圈+字，填充率低）
+        info = self._locate_from_mask(bgr_img, self._faint_red_mask(bgr_img))
+        if not info:
+            return None
+        circle_area = np.pi * info["radius"] ** 2
+        fill = cv2.countNonZero(info["red_mask"]) / circle_area if circle_area > 0 else 1.0
+        if info["radius"] > 0.35 * min(bgr_img.shape[:2]) or fill > 0.55:
+            return None
+        return info
+
+    def _locate_from_mask(self, bgr_img: np.ndarray, red_mask: np.ndarray) -> Optional[Dict[str, Any]]:
+        """由红色掩膜求圆心/半径/裁剪框"""
         contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         valid_cnts = [c for c in contours if cv2.contourArea(c) > 15]
         if not valid_cnts:
@@ -52,6 +79,9 @@ class SealEnhancerService:
         cx, cy, radius = int(cx), int(cy), int(radius)
 
         if radius < 20:  # 过小并非公章
+            return None
+        h, w = bgr_img.shape[:2]
+        if radius > 0.35 * min(h, w):  # 报价单整页上公章只占 10% 左右；过大多为红色表头/logo/红框被合并成大圆
             return None
 
         h, w = bgr_img.shape[:2]
@@ -130,19 +160,15 @@ class SealEnhancerService:
         """
         cx, cy = center_in_crop
         max_r = int(radius * 1.15)
-        polar_w = int(2 * np.pi * max_r)
-        polar_h = max_r
-
-        polar = cv2.warpPolar(seal_crop, (polar_w, polar_h), (cx, cy), max_r, cv2.WARP_POLAR_LINEAR)
-        # 旋转 90 度使角度沿水平展开
-        polar_horizontal = cv2.rotate(polar, cv2.ROTATE_90_COUNTERCLOCKWISE)
-
-        # 截取外圈文字主要所在环带 (0.55 * R ~ 1.05 * R)
-        h_strip = polar_horizontal.shape[0]
-        y_start = int(h_strip * 0.45)
-        y_end = int(h_strip * 0.98)
-        text_strip = polar_horizontal[y_start:y_end, :]
-        return text_strip
+        # dsize=(宽, 高) = (半径轴, 角度轴)：半径轴给 max_r 个采样即可，角度轴必须给足 2πR，否则环形字被欠采样糊成一团
+        polar = cv2.warpPolar(seal_crop, (max_r, int(2 * np.pi * max_r)), (cx, cy), max_r, cv2.WARP_POLAR_LINEAR)
+        # 逆时针旋转 90° 让角度轴水平、字头正立；旋转后行号 0 = 最大半径，故按半径反推行区间
+        band = cv2.rotate(polar, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        h_band = band.shape[0]
+        r_in, r_out = 0.52 * radius / max_r, 0.99 * radius / max_r
+        y0 = max(0, int(h_band * (1 - r_out)))
+        y1 = min(h_band, int(h_band * (1 - r_in)))
+        return band[y0:y1, :]
 
     def penetrate_and_enhance_text(self, bgr_img: np.ndarray) -> np.ndarray:
         """
@@ -206,7 +232,9 @@ class SealEnhancerService:
                 "upright_seal_img": upright_seal,
                 "polar_strip_img": polar_strip,
                 "rotation_angle": rot_angle,
-                "seal_bbox": seal_info["crop_bbox"]
+                "seal_bbox": seal_info["crop_bbox"],
+                "center_in_crop": center,
+                "radius": radius
             })
 
             if self.output_debug_dir:
@@ -218,6 +246,62 @@ class SealEnhancerService:
 
     # 别名兼容
     process_document_image = process_image
+
+    def amplify_faint_red_seal_and_remove_black(self, bgr_crop: np.ndarray) -> np.ndarray:
+        """
+        【去黑显红光学通道】：
+        红度色差 R-0.5(G+B) 上，盖在公章上的黑色印刷字（“公司盖章：”）、黑色表格线、粗黑手写签名
+        与白纸背景的色差都恒为 0 → 全部物理剥离；再对极浅残缺印泥做分位数拉伸 + Gamma(0.45) 增益，
+        输出白底黑字的高对比度显影图，便于 VLM/OCR 读出公司全称。
+        """
+        if bgr_crop is None or bgr_crop.size == 0:
+            return bgr_crop
+        chroma = self.extract_red_chroma(bgr_crop)
+        chroma[chroma < 6.0] = 0.0
+        peak = max(float(np.percentile(chroma, 99.5)), 10.0)
+        norm = np.clip(chroma / peak, 0.0, 1.0)
+        # 抬底：纸张泛黄/印泥晕开的低幅底噪统一归零，只留笔画
+        norm = np.clip((norm - 0.18) / 0.82, 0.0, 1.0)
+        ink_dark_on_white = (255.0 - (norm ** 0.75) * 255.0).astype(np.uint8)
+        return cv2.cvtColor(cv2.medianBlur(ink_dark_on_white, 3), cv2.COLOR_GRAY2BGR)
+
+    def build_seal_enhancement_banner(self, full_bgr: np.ndarray) -> Optional[np.ndarray]:
+        """
+        生成认章拼图条：[左 扶正原色章] + [右 去黑签字/浅印泥显影章]，下方再拼极坐标拉直的公司名条带。
+        页面无公章时返回 None。
+        """
+        if full_bgr is None or full_bgr.size == 0:
+            return None
+        res = self.process_document_image(full_bgr)
+        upright = res.get("upright_seal_img")
+        if not res.get("has_seal") or upright is None:
+            return None
+
+        amplified = self.amplify_faint_red_seal_and_remove_black(upright)
+        h_s, w_s = upright.shape[:2]
+        if h_s > 360:  # 控制拼图体积，避免主图被压缩到看不清
+            scale = 360.0 / h_s
+            size = (max(1, int(w_s * scale)), 360)
+            upright = cv2.resize(upright, size, interpolation=cv2.INTER_AREA)
+            amplified = cv2.resize(amplified, size, interpolation=cv2.INTER_AREA)
+        side_by_side = np.hstack([upright, amplified])
+
+        center = res.get("center_in_crop") or (w_s // 2, h_s // 2)
+        radius = int(res.get("radius") or min(w_s, h_s) // 2)
+        if int(res.get("radius") or 0) < 100:
+            return side_by_side  # 小章极坐标采样不足，拉直条只会是一堆噪点，不如不给
+        if h_s != upright.shape[0]:
+            k = upright.shape[0] / float(h_s)
+            center = (int(center[0] * k), int(center[1] * k))
+            radius = max(8, int(radius * k))
+        clean_polar = self.unwrap_seal_polar(amplified, center, radius)
+        if clean_polar is None or clean_polar.size == 0:
+            return side_by_side
+        target_w = max(side_by_side.shape[1], clean_polar.shape[1])
+        panels = cv2.resize(side_by_side, (target_w, max(120, int(side_by_side.shape[0] * target_w / side_by_side.shape[1]))), interpolation=cv2.INTER_CUBIC)
+        target_h = max(40, int(clean_polar.shape[0] * target_w / max(clean_polar.shape[1], 1)))
+        polar_resized = cv2.resize(clean_polar, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
+        return np.vstack([panels, polar_resized])
 
     def balance_illumination_and_orient(self, bgr_img: np.ndarray, do_orient: bool = True) -> np.ndarray:
         """
