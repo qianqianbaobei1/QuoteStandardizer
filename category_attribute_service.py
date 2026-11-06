@@ -516,6 +516,46 @@ def fetch_category_attributes(level3_or_code: str) -> List[Dict[str, Any]]:
     return []
 
 
+# 工程造价领域常见【同义属性名】标准映射表（解决“口径->公称直径DN”、“壁厚->厚度”、“容重->密度”等字面不包含导致的 L3-ATTR-MISS）
+_ATTR_NAME_SYNONYMS: Dict[str, Tuple[str, ...]] = {
+    "公称直径": ("口径", "通径", "管径", "公称通径", "公称口径", "直径dn", "dn"),
+    "外径": ("公称外径", "管外径", "外径de", "de", "φ", "Φ"),
+    "壁厚": ("厚度", "管壁厚", "板厚", "δ"),
+    "厚度": ("壁厚", "板厚", "层厚", "δ"),
+    "长度": ("长", "定尺", "定尺长度", "长边"),
+    "宽度": ("宽", "幅宽", "短边"),
+    "高度": ("高", "H"),
+    "标称截面": ("截面", "截面积", "平方", "平方数", "线径", "导线截面"),
+    "芯数": ("芯", "几芯", "股数"),
+    "额定电压": ("电压", "电压等级", "耐压"),
+    "材质": ("材料", "阀体材质", "管材材质", "板材材质", "主材质", "基材", "胎基", "胎基材料"),
+    "表面处理": ("表面工艺", "防腐工艺", "涂层", "镀层", "饰面", "覆面", "覆面材料"),
+    "品种": ("类型", "产品品种", "款式", "结构形式", "形式"),
+    "型号": ("规格型号", "产品型号", "系列", "型号/系列"),
+    "密度": ("容重", "克重", "表观密度"),
+    "燃烧性能": ("防火等级", "阻燃等级", "燃烧等级", "耐火等级"),
+    "连接方式": ("连接形式", "接口方式", "接口形式", "连接"),
+    "公称压力": ("压力", "压力等级", "工作压力", "额定压力", "pn"),
+}
+
+_GENERIC_ENUM_STOPWORDS = {
+    "其他", "其它", "普通", "通用", "无", "有", "是", "否",
+    "标配", "标准", "定制", "进口", "国产", "一级", "二级", "三级", "特级", "默认"
+}
+
+
+def _is_specific_attr_enum(ev: str) -> bool:
+    """属性枚举反向认领安全校验：过滤过短字符、纯数字和通用无指向泛词"""
+    s = str(ev or "").strip()
+    if len(s) < 2:
+        return False
+    if s in _GENERIC_ENUM_STOPWORDS:
+        return False
+    if re.fullmatch(r'\d+', s):
+        return False
+    return True
+
+
 def retrieve_category_candidates(
     raw_cat: str,
     std_name: str,
@@ -523,7 +563,7 @@ def retrieve_category_candidates(
     sheet_prior: Optional[set] = None,
     top_k: int = 5,
 ) -> List[Dict[str, Any]]:
-    """召回 Top-K 标准类别候选及其 Sheet2 标准属性列表，供 LLM 做受限单选题"""
+    """召回 Top-K 标准类别候选及其 Sheet2 标准属性列表（融合 39.8万品名词表 + 377万规格词库 + BM25 + 整表先验）"""
     _load_catalog()
     if not _SEARCH_INDEX:
         return []
@@ -535,103 +575,126 @@ def retrieve_category_candidates(
     if cached is not None:
         return copy.deepcopy(cached)
 
-    # 1. 广材实盘词表 (category_lexicon.db) 先验召回（39.8万条企业真实报价分布）
-    #    不截断：1,222 个品名是一对多（“电线”对 9 个类别），截到 3 个等于直接丢掉 6 个正确答案
+    # 0. 377万条广材规格词库精准召回（前置到候选召回阶段，绝不在后面被短路！）
+    spec_lex_hit = None
+    if raw_spec:
+        try:
+            from jev_category_scorer import spec_lexicon_lookup
+            spec_lex_hit = spec_lexicon_lookup(raw_spec)
+        except Exception:
+            pass
+
+    # 1. 39.8万条广材实盘品名词表召回（同时查 std_name 与 raw_cat，保留 limit=12 完整一对多分布）
     lex_hits = []
     try:
         from jev_category_scorer import lexicon_candidates
-        lex_hits = lexicon_candidates(std_name, limit=12)
+        for q_name in dict.fromkeys([std_name, raw_cat]):
+            if q_name:
+                for h in lexicon_candidates(q_name, limit=12):
+                    if not any(x.get("code") == h.get("code") for x in lex_hits):
+                        lex_hits.append(h)
     except Exception:
         pass
 
     # 2. 联合检索引擎（BM25 + Sheet2 枚举反查 + 整表先验投票）
-    cands = _SEARCH_INDEX.search(std_name, raw_cat, raw_spec, sheet_prior_t2=sheet_prior, top_k=top_k)
+    cands = _SEARCH_INDEX.search(std_name, raw_cat, raw_spec, sheet_prior_t2=sheet_prior, top_k=max(top_k, 8))
+    bm25_by_code = {c["code"]: c for c in cands if c.get("code")}
 
-    # 3. 词表实盘先验融合：静态企业占比打底，**整表主业先验与规格证据加权后重排**
-    #    只按静态占比置顶会让“输入模块”在任何表里都排消防（204001），报警表里永远排不出 570129
+    # 3. 多源历史证据融合打分与重排
+    spec_txt = f"{std_name} {raw_cat} {raw_spec}"
+    seen_codes = set()
+    merged = []
+
+    # 3.1 若 377 万规格词库直接命中，赋予最高先验分置顶进入候选池
+    if spec_lex_hit and spec_lex_hit.get("code"):
+        sc_code = _format_cat_code(spec_lex_hit["code"])
+        if sc_code in _CODE_MAP:
+            t1, t2, t3, sc_code = _CODE_MAP[sc_code]
+            sp_score = 185.0
+            if sheet_prior and t2 in sheet_prior:
+                sp_score += 50.0
+            merged.append({
+                "level1": t1, "level2": t2, "level3": t3, "code": sc_code,
+                "score": sp_score,
+                "reason": spec_lex_hit.get("reason", "广材377万规格词库精准命中"),
+            })
+            seen_codes.add(sc_code)
+
+    # 3.2 融合 39.8 万品名词表分布 + 整表主业先验 + BM25/Sheet2 规格证据
     if lex_hits:
-        spec_txt = f"{std_name} {raw_cat} {raw_spec}"
-
         def _lex_score(lh: Dict[str, Any]) -> float:
-            score = 100.0 * lh.get("share", 1.0)                                   # 词表静态支持度
+            score = 100.0 * float(lh.get("share", 0.5))
             if sheet_prior and lh.get("level2") in sheet_prior:
-                score += 60.0                                                      # 与本表主业二级一致
-            elif sheet_prior and lh.get("level1") in {
-                    t1 for t1, t2, _t3, _c in _CATALOG_ROWS if t2 in sheet_prior}:
-                score += 25.0                                                      # 至少同一个一级大类
+                score += 65.0
+            elif sheet_prior and lh.get("level1") in {t1 for t1, t2, _t3, _c in _CATALOG_ROWS if t2 in sheet_prior}:
+                score += 25.0
             if lh.get("level3") and lh["level3"] in spec_txt:
-                score += 40.0                                                      # 规格里直接写了这个品类名
+                score += 40.0
+            # 叠加 BM25 规格枚举匹配分（用于区分“电线”等一对多品名下的细分品类）
+            bm_c = bm25_by_code.get(lh.get("code", ""))
+            if bm_c:
+                score += float(bm_c.get("score", 0.0)) * 0.45
             return score
 
-        seen_codes = set()
-        merged = []
         for lh in lex_hits:
-            if lh["code"] in seen_codes:
+            c_code = _format_cat_code(lh.get("code", ""))
+            if not c_code or c_code in seen_codes:
                 continue
             merged.append({
                 "level1": lh["level1"],
                 "level2": lh["level2"],
                 "level3": lh["level3"],
-                "code": lh["code"],
+                "code": c_code,
                 "score": round(_lex_score(lh), 2),
                 "reason": lh.get("reason", "广材词表实盘先验"),
             })
-            seen_codes.add(lh["code"])
-        for c in cands:
-            if c["code"] not in seen_codes:
-                merged.append(c)
-                seen_codes.add(c["code"])
-        merged.sort(key=lambda c: -float(c.get("score") or 0))
-        cands = merged[:max(top_k, min(len(merged), 10))]
+            seen_codes.add(c_code)
 
-    # 同族展开分两轮：第一轮只补同二级大类（本表主业）的同族三级类；若不足 10 个，第二轮才按同一级大类补充
-    # 彻底杜绝一级大类排在前面的几百个无关类目抢占名额的 Bug
+    for c in cands:
+        if c["code"] not in seen_codes:
+            merged.append(c)
+            seen_codes.add(c["code"])
+
+    merged.sort(key=lambda c: -float(c.get("score") or 0))
+    cands = merged[:max(top_k, min(len(merged), 10))]
+
+    # 4. 同族两轮展开（先补本表二级类别，不足再补同一级大类）
     if sheet_prior and len(cands) < 10:
         seen_codes = {c["code"] for c in cands}
         floor_score = min([c["score"] for c in cands], default=1.0) * 0.5
-
-        # 第一轮：绝对优先填充本表二级类别 (sheet_prior) 下的同族三级类
         for e in _SEARCH_INDEX.entries:
-            if e["code"] in seen_codes:
-                continue
-            if e["t2"] in sheet_prior:
+            if e["code"] not in seen_codes and e["t2"] in sheet_prior:
                 cands.append({
-                    "level1": e["t1"],
-                    "level2": e["t2"],
-                    "level3": e["t3"],
-                    "code": e["code"],
-                    "score": round(floor_score, 2),
-                    "reason": f"同表主业二级类({e['t2']})同族候选",
+                    "level1": e["t1"], "level2": e["t2"], "level3": e["t3"], "code": e["code"],
+                    "score": round(floor_score, 2), "reason": f"同表主业二级类({e['t2']})同族候选",
                 })
                 seen_codes.add(e["code"])
                 if len(cands) >= 10:
                     break
-
-        # 第二轮：若二级分类全部补完后仍不足 10 个，才允许同一级大类 (prior_t1) 兜底补充
         if len(cands) < 10:
             prior_t1 = {t1 for t1, t2, _t3, _c in _CATALOG_ROWS if t2 in sheet_prior}
             for e in _SEARCH_INDEX.entries:
-                if e["code"] in seen_codes:
-                    continue
-                if e["t1"] in prior_t1:
+                if e["code"] not in seen_codes and e["t1"] in prior_t1:
                     cands.append({
-                        "level1": e["t1"],
-                        "level2": e["t2"],
-                        "level3": e["t3"],
-                        "code": e["code"],
-                        "score": round(floor_score * 0.8, 2),
-                        "reason": f"同表一级大类({e['t1']})同族候选",
+                        "level1": e["t1"], "level2": e["t2"], "level3": e["t3"], "code": e["code"],
+                        "score": round(floor_score * 0.8, 2), "reason": f"同表一级大类({e['t1']})同族候选",
                     })
                     seen_codes.add(e["code"])
                     if len(cands) >= 10:
                         break
 
+    # 5. 挂载标准属性（对超长枚举截断至前 45 字符，防止撑爆 Batch Prompt Token）
     for c in cands:
         attrs = fetch_category_attributes(c.get("level3") or c.get("code"))
-        c["allowed_attributes"] = [
-            f"{a['name']}({a['enum']})" if a.get("enum") else a["name"]
-            for a in attrs[:10]
-        ]
+        allowed = []
+        for a in attrs[:10]:
+            if a.get("enum"):
+                enum_preview = str(a["enum"])[:45] + ("..." if len(str(a["enum"])) > 45 else "")
+                allowed.append(f"{a['name']}({enum_preview})")
+            else:
+                allowed.append(a["name"])
+        c["allowed_attributes"] = allowed
+
     with _CANDS_LOCK:
         if len(_CANDS_CACHE) >= _CANDS_CACHE_MAX:
             _CANDS_CACHE.clear()
@@ -648,72 +711,125 @@ def resolve_and_verify_category(
 ) -> Tuple[str, str, str, str, bool, str]:
     """
     返回: (level1, level2, level3, category_code, is_verified, match_reason)
-    优先采信 LLM 从候选池中选出的合法编码 selected_code，否则走联合检索引擎
     """
     _load_catalog()
-    # 1. 若 LLM 已经从 Top-5 候选中选出了合法的分类编码，直接精确锁定
-    norm_code = _format_cat_code(selected_code)
-    if norm_code and norm_code in _CODE_MAP:
-        t1, t2, t3, code = _CODE_MAP[norm_code]
-        return t1, t2, t3, code, True, f"候选池精准锁定({code})"
 
-    # 1.5 检查广材规格属性实盘词库精准直达 (category_lexicon.db -> spec_lex)
+    # 1. 优先检查 377 万条广材规格属性实盘词库精准直达（若规格特征唯一且与本表主业不冲突，优先级最高）
     if raw_spec:
         try:
             from jev_category_scorer import spec_lexicon_lookup
             spec_hit = spec_lexicon_lookup(raw_spec)
             if spec_hit and spec_hit.get("code"):
-                return (
-                    spec_hit["level1"],
-                    spec_hit["level2"],
-                    spec_hit["level3"],
-                    spec_hit["code"],
-                    True,
-                    spec_hit.get("reason", "广材规格词库精准命中")
-                )
+                sc = _format_cat_code(spec_hit["code"])
+                if sc in _CODE_MAP and (not sheet_prior or spec_hit.get("level2") in sheet_prior):
+                    t1, t2, t3, code = _CODE_MAP[sc]
+                    return t1, t2, t3, code, True, spec_hit.get("reason", "广材规格词库精准命中")
         except Exception:
             pass
 
-    # 2. 检查精确名称映射
+    # 2. 若 LLM/Jev 已经从候选池中选出了合法分类编码，锁定返回
+    norm_code = _format_cat_code(selected_code)
+    if norm_code and norm_code in _CODE_MAP:
+        t1, t2, t3, code = _CODE_MAP[norm_code]
+        return t1, t2, t3, code, True, f"候选池精准锁定({code})"
+
+    # 3. 检查字典精确名称映射
     for q in (raw_cat, std_name):
         q_clean = _BRACKET_PREFIX_RE.sub('', str(q or '').strip())
         if q_clean in _EXACT_T3_MAP:
             t1, t2, t3, code = _EXACT_T3_MAP[q_clean]
             return t1, t2, t3, code, True, f"字典精确匹配:{t3}"
 
-    # 2.5 检查广材实盘词表 (category_lexicon.db) 高置信度匹配
-    try:
-        from jev_category_scorer import lexicon_candidates
-        lex_hits = lexicon_candidates(std_name, limit=12)   # 分布不截断；唯一性下面用 share/companies 判定
-        if lex_hits:
-            top_lex = lex_hits[0]
-            if (len(lex_hits) == 1 or top_lex.get("share", 0) >= 0.75) and top_lex.get("companies", 0) >= 2:
-                if not sheet_prior or top_lex["level2"] in sheet_prior:
-                    return top_lex["level1"], top_lex["level2"], top_lex["level3"], top_lex["code"], True, f"广材词表实盘命中({top_lex['reason']})"
-    except Exception:
-        pass
-
-    # 3. 走 BM25 + Sheet2 枚举 + 整表先验联合检索
-    if _SEARCH_INDEX:
-        cands = _SEARCH_INDEX.search(std_name, raw_cat, raw_spec, sheet_prior_t2=sheet_prior, top_k=1)
-        if cands:
-            best = cands[0]
-            is_ok = best["score"] >= 12.0
-            return best["level1"], best["level2"], best["level3"], best["code"], is_ok, best["reason"]
+    # 4. 使用融合了广材词表 + 整表先验 + Sheet2 枚举的联合候选排序第一名
+    cands = retrieve_category_candidates(raw_cat, std_name, raw_spec, sheet_prior=sheet_prior, top_k=1)
+    if cands:
+        best = cands[0]
+        is_ok = float(best.get("score") or 0.0) >= 12.0
+        return best["level1"], best["level2"], best["level3"], best["code"], is_ok, best["reason"]
 
     return "", "", "", "", False, "未命中工料机分类字典"
+
+
+def _match_attr_key_to_schema(raw_k: str, schema: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """利用双向包含 + 工程同义属性词表，将原表属性键名精准对齐到标准模板属性"""
+    raw_k_base = re.sub(r'[（(].*?[)）]', '', raw_k).strip().lower()
+    if not raw_k_base:
+        return None
+    # 1. 精确匹配
+    for attr in schema:
+        std_k = attr["name"]
+        std_k_base = re.sub(r'[（(].*?[)）]', '', std_k).strip().lower()
+        if raw_k.lower() == std_k.lower() or raw_k_base == std_k_base:
+            return attr
+    # 2. 工程同义词匹配（如 口径/通径 -> 公称直径DN(mm)，壁厚 -> 厚度(mm)）
+    for attr in schema:
+        std_k_base = re.sub(r'[（(].*?[)）]', '', attr["name"]).strip().lower()
+        for std_root, syn_list in _ATTR_NAME_SYNONYMS.items():
+            if std_root in std_k_base or std_k_base in std_root:
+                if raw_k_base == std_root or any(raw_k_base == s or s in raw_k_base for s in syn_list):
+                    return attr
+    # 3. 双向子串包含匹配
+    for attr in schema:
+        std_k_base = re.sub(r'[（(].*?[)）]', '', attr["name"]).strip().lower()
+        if len(raw_k_base) >= 2 and len(std_k_base) >= 2 and (raw_k_base in std_k_base or std_k_base in raw_k_base):
+            return attr
+    return None
+
+
+def _normalize_attr_value_with_enum(std_attr_name: str, raw_val: str, enum_str: str) -> Tuple[str, Optional[str]]:
+    """
+    用历史标准枚举值与属性单位规范化属性值：
+    1. 若标准属性名自带单位括号如 '厚度(mm)'、'长度(mm)'、'标称截面(mm²)'，自动剥离值末尾重复的单位（'1.5mm' -> '1.5'）；
+    2. 若该属性有标准枚举值列表（如 '304不锈钢, 316L不锈钢'），当原值为简称（如 '304' 或 'SUS304'）且唯一命中某标准枚举时，自动对齐为标准枚举值。
+    """
+    val = str(raw_val or "").strip()
+    if not val:
+        return val, None
+
+    # 1. 数值型带单位属性自动脱壳（防止出现 "厚度(mm): 1.5mm" 与标准答案 "厚度(mm): 1.5" 不一致）
+    m_unit_in_key = re.search(r'[（(](mm²|mm2|mm|cm|m|kg/m³|kg|t|mpa|kpa|kv|v|w|kw|a)[)）]', std_attr_name, re.I)
+    if m_unit_in_key:
+        u_key = m_unit_in_key.group(1)
+        m_num = re.fullmatch(r'([+-]?\d+(?:\.\d+)?)\s*(?:mm²|mm2|mm|cm|m|kg/m³|kg|t|mpa|kpa|kv|v|w|kw|a|平方)?', val, re.I)
+        if m_num:
+            val = m_num.group(1)
+
+    # 2. 对照历史标准枚举值对齐
+    if not enum_str:
+        return val, None
+    enums = [e.strip() for e in re.split(r'[,，;；/、|]+', str(enum_str)) if e.strip()]
+    if not enums or val in enums:
+        return val, None
+
+    val_low = val.lower()
+    # 精确忽略大小写
+    for e in enums:
+        if e.lower() == val_low:
+            return e, None
+    # 常用工程字变体对齐（如 聚酯胎 <-> 聚酯毡）
+    val_norm = val_low.replace('胎', '毡')
+    for e in enums:
+        if e.lower().replace('胎', '毡') == val_norm:
+            return e, None
+    # 唯一包含关系对齐（例如原值写 "氟碳"，标准枚举只有 "氟碳喷涂"；或原值写 "304"，标准枚举为 "304不锈钢"）
+    contain_hits = [e for e in enums if (len(val_low) >= 2 and (val_low in e.lower() or e.lower() in val_low or val_norm in e.lower().replace('胎', '毡')))]
+    if len(contain_hits) == 1:
+        return contain_hits[0], None
+    return val, None
 
 
 def validate_and_normalize_specs(
     level3_name: str,
     specs: Dict[str, Any],
+    raw_spec_text: str = "",
 ) -> Tuple[Dict[str, str], List[str], List[str]]:
     """
-    对照 Sheet2 标准属性表校验并归一化规格参数：
-    返回: (normalized_specs, missing_required_attrs, enum_warnings)
+    对照历史标准属性表（Sheet2 / category_attrs_cache.json / 接口）校验、认领并归一化规格参数：
+    1. 属性键同义词对齐（口径->公称直径DN(mm)、壁厚->厚度(mm)）；
+    2. 属性值单位脱壳与标准枚举值对齐（'1.5mm'->'1.5'，'氟碳'->'氟碳涂层'）；
+    3. 历史枚举值反向认领：对于尚未填上的标准属性，扫描原始规格串 raw_spec_text，若命中该属性的专有枚举值则自动补齐！
     """
     _load_catalog()
-    # 支持传入标准三级名称 (如 '彩钢板') 或标准分类编码 (如 '12-09-07' / '120907')
     lvl3 = str(level3_name or "").strip()
     if lvl3 in _CODE_MAP:
         lvl3 = _CODE_MAP[lvl3][2]
@@ -721,35 +837,48 @@ def validate_and_normalize_specs(
         fmt_c = _format_cat_code(lvl3)
         if fmt_c in _CODE_MAP:
             lvl3 = _CODE_MAP[fmt_c][2]
-    schema = _ATTR_SCHEMA_MAP.get(lvl3, [])
-    if not schema:
-        schema = fetch_category_attributes(lvl3)
+    schema = _ATTR_SCHEMA_MAP.get(lvl3, []) or fetch_category_attributes(lvl3)
     if not specs or not isinstance(specs, dict):
         specs = {}
     clean_specs: Dict[str, str] = {str(k).strip(): str(v).strip() for k, v in specs.items() if str(v or "").strip()}
     if not schema:
         return clean_specs, [], []
 
-    # 属性名同义对齐（如 厚度 -> 厚度(mm)，公称口径 -> 公称直径DN(mm)）
     normalized: Dict[str, str] = {}
     used_schema_names = set()
     enum_warnings: List[str] = []
+    unsplit_text_blobs = [raw_spec_text] if raw_spec_text else []
 
     for raw_k, raw_v in clean_specs.items():
-        matched_attr = None
-        raw_k_base = re.sub(r'[（(].*?[)）]', '', raw_k).strip()
-        for attr in schema:
-            std_k = attr["name"]
-            std_k_base = re.sub(r'[（(].*?[)）]', '', std_k).strip()
-            if raw_k == std_k or (raw_k_base and raw_k_base == std_k_base) or (raw_k_base in std_k_base):
-                matched_attr = attr
-                break
+        matched_attr = _match_attr_key_to_schema(raw_k, schema)
         if matched_attr:
             std_k = matched_attr["name"]
-            normalized[std_k] = raw_v
+            norm_v, warn = _normalize_attr_value_with_enum(std_k, raw_v, matched_attr.get("enum", ""))
+            normalized[std_k] = norm_v
             used_schema_names.add(std_k)
+            if warn:
+                enum_warnings.append(warn)
         else:
             normalized[raw_k] = raw_v
+            unsplit_text_blobs.append(f"{raw_k}:{raw_v}")
+
+    # 3. 历史枚举反向自动认领：若某标准属性尚未被提取，但其专有枚举值在原始规格文本中明确出现，则自动认领填入！
+    full_blob = " ; ".join(unsplit_text_blobs)
+    if full_blob:
+        blob_norm = full_blob.lower().replace('胎', '毡')
+        for attr in schema:
+            std_k = attr["name"]
+            if std_k in used_schema_names or not attr.get("enum"):
+                continue
+            enums = [e.strip() for e in re.split(r'[,，;；/、|]+', str(attr["enum"])) if len(e.strip()) >= 2]
+            # 按枚举长度从长到短匹配，确保优先匹配最具体的枚举值（如优先匹配“聚酯胎PY”而非“PY”）
+            for ev in sorted(enums, key=len, reverse=True):
+                ev_low = ev.lower()
+                ev_norm = ev_low.replace('胎', '毡')
+                if (_is_specific_enum(ev) or _is_specific_attr_enum(ev)) and (ev_low in full_blob.lower() or ev_norm in blob_norm):
+                    normalized[std_k] = ev
+                    used_schema_names.add(std_k)
+                    break
 
     missing_req = [a["name"] for a in schema if a.get("required") and a["name"] not in used_schema_names]
     return normalized, missing_req, enum_warnings

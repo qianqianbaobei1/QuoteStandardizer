@@ -1565,7 +1565,9 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 # 对照标准材料类别特定参数及要求接口规范，执行参数限定值校验与规范化
                 if l3 or cat_code:
                     try:
-                        structured_specs, missing_req, enum_warns = validate_and_normalize_specs(l3 or cat_code, structured_specs)
+                        structured_specs, missing_req, enum_warns = validate_and_normalize_specs(
+                            l3 or cat_code, structured_specs, raw_spec_text=raw_spec_str
+                        )
                         if missing_req:
                             notes.append(f"缺少类别必填属性: {'、'.join(missing_req)}")
                         if enum_warns:
