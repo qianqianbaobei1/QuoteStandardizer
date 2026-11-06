@@ -94,10 +94,12 @@ ALIASES = {
     '报价地区市': ['报价地区市', '地区市', '城市'],
     '厂家报价文件页码': ['厂家报价文件页码', '页码', '原表页码', '文件页码'],
     '类别编码': ['类别编码', '分类编码', '物料编码', '编码'],
-    '增值税税率': ['增值税税率', '税率'],
+    '增值税税率': ['增值税税率', '增值税税率%', '税率', '增值税率'],
     '是否含运费': ['是否含运费', '含运费'],
     '是否含增值税': ['是否含增值税', '含税'],
     '厂家报价图片文件名': ['厂家报价图片文件名', '图片文件名', '切片文件名', '图片名', '凭证图片文件名'],
+    '报价ID': ['报价ID', '报价id', '报价Id'],
+    '供应商名称': ['供应商名称', '供应商', '供方'],
 }
 # 中文标点 → 半角（NFKC 不处理这些，业务上属排版差异不算错）
 PUNCT = {'，': ',', '：': ':', '；': ';', '（': '(', '）': ')', '【': '[', '】': ']',
@@ -255,8 +257,23 @@ def load_table(path, sheet=None):
             if std not in col and h in names:
                 col[std] = idx
                 break
+
+    known_col_indices = set(col.values())
+    dyn_spec_cols = [(idx, h) for idx, h in enumerate(header) if idx not in known_col_indices and h and not any(k in h for k in ('图片', '文件夹', '序号', '项目类型', '工程用量', '报价时间'))]
+
+    sheet_cat_code = None
+    if '类别编码' not in col:
+        s_name = str(ws.title).strip()
+        if re.match(r'^[A-Za-z0-9\-_]{4,}$', s_name) and s_name not in ('Sheet', 'Sheet1'):
+            sheet_cat_code = s_name
+
     missing = [f[0] for f in FIELDS if f[0] not in col and f[0] not in ('厂家报价文件页码',)]
-    if '名称规格' not in col and '规格参数' not in col:
+    if '规格参数' in missing and dyn_spec_cols:
+        missing.remove('规格参数')
+    if '类别编码' in missing and sheet_cat_code:
+        missing.remove('类别编码')
+
+    if '名称规格' not in col and '规格参数' not in col and not dyn_spec_cols:
         problems.append(f'E16_HEADER: 表头没找到物料名列，实际表头: {header[:8]}…')
     if missing:
         problems.append(f'E16_HEADER: 缺列 {missing} (该列按"双方都空"处理)')
@@ -264,7 +281,15 @@ def load_table(path, sheet=None):
     for r in ws.iter_rows(min_row=2, values_only=True):
         if not any(v not in (None, '') for v in r):
             continue
-        rows.append({std: (r[i] if i < len(r) else None) for std, i in col.items()})
+        row_dict = {std: (r[i] if i < len(r) else None) for std, i in col.items()}
+        if '规格参数' not in row_dict or not row_dict['规格参数']:
+            if dyn_spec_cols:
+                parts = [f"{h}:{r[i]}" for i, h in dyn_spec_cols if i < len(r) and r[i] not in (None, '')]
+                if parts:
+                    row_dict['规格参数'] = ';'.join(parts)
+        if ('类别编码' not in row_dict or not row_dict['类别编码']) and sheet_cat_code:
+            row_dict['类别编码'] = sheet_cat_code
+        rows.append(row_dict)
     return rows, problems
 
 

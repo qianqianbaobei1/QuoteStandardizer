@@ -28,6 +28,15 @@ STANDARD_HEADERS = [
     '是否含增值税', '报价说明', '价格填报类型', '图片文件夹', '图片', '图片', '图片', '图片', '图片'
 ]
 
+# 汇总主表【标准化报价】基础列规范（完整保留 33 列全要素，并衔接工程与时间字段）
+MAIN_PRE_ATTR_HEADERS = [
+    '报价ID', '供应商名称', '名称规格', '类别编码', '品牌', '规格参数', '厂家原始规格参数', '厂家报价文件页码',
+    '厂家报价图片文件名', '顺序号', '报价地区省', '报价地区市', '单位', '市场价', '工程价', '工程价折扣比例',
+    '折扣下限', '折扣上限', '折扣系列', '运费说明', '是否含运费', '税费说明', '增值税税率', '运费结算方式',
+    '是否含增值税', '报价说明', '价格填报类型',
+    '项目类型', '工程用量', '报价时间'
+]
+
 # 标杆线上系统基础 27 列 (AA 列为 报价时间 锚点)
 BENCHMARK_PRE_ATTR_HEADERS = [
     '报价id', '名称规格', '品牌', '厂家原始规格参数', '厂家报价文件页码', '厂家报价图片文件名',
@@ -507,7 +516,8 @@ class StandardizedWorkbookBuilder:
         dynamic_attr_columns = []
         if self.auto_expand_attributes and not self.template_path:
             dynamic_attr_columns = collect_dynamic_attribute_headers(items)
-            active_headers = list(BENCHMARK_PRE_ATTR_HEADERS) + dynamic_attr_columns + list(BENCHMARK_TAIL_HEADERS)
+            # 汇总主表【标准化报价】：完整保留 33 列全要素（供应商名称、类别编码、规格参数等）+ 报价时间 + 动态属性列
+            active_headers = list(MAIN_PRE_ATTR_HEADERS) + dynamic_attr_columns + list(BENCHMARK_TAIL_HEADERS)
             self.headers = active_headers
 
         # 图片目录按需延迟创建，杜绝在磁盘生成无用的空图片库文件夹
