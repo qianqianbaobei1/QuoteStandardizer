@@ -252,6 +252,23 @@ class DeepSeekStandardizer:
 
         results = None
 
+        # 0. 内容寻址缓存：同一批输入第二次起直接本地返回（断点续跑/回归测试秒级完成）
+        import cas_cache
+        _cas_payload = json.dumps({'items': items, 'supplier': supplier_hint or '',
+                                   'brand': brand_hint or '', 'lib': _library_text_for(items)},
+                                  ensure_ascii=False, sort_keys=True)
+        _cached = cas_cache.get('llm_standardize', self.model or '', _cas_payload)
+        if _cached:
+            try:
+                results = json.loads(_cached)
+                for r in results:
+                    if isinstance(r, dict):
+                        r['_source'] = 'llm'      # 缓存命中的内容本来就是模型产出
+                        r['_cached'] = True
+                print(f"    · LLM 批次命中 CAS 缓存（{len(results)} 条）")
+            except Exception:
+                results = None
+
         # 优先调用 Gemini 引擎
         if self.gemini_client:
             res_json = self.gemini_client.generate_json(
@@ -288,6 +305,13 @@ class DeepSeekStandardizer:
         if results is None:
             print("[LLM Batch Warning] 模型未返回有效清洗结果，切入规则降级。")
             return self._dynamic_batch_fallback(items)
+
+        if results and not any(r.get('_cached') for r in results if isinstance(r, dict)):
+            try:
+                cas_cache.put('llm_standardize', self.model or '', _cas_payload,
+                              json.dumps([r for r in results if isinstance(r, dict)], ensure_ascii=False))
+            except Exception:
+                pass
 
         for r in results:
             if isinstance(r, dict):

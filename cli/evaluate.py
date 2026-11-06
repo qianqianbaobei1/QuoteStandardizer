@@ -97,6 +97,7 @@ ALIASES = {
     '增值税税率': ['增值税税率', '税率'],
     '是否含运费': ['是否含运费', '含运费'],
     '是否含增值税': ['是否含增值税', '含税'],
+    '厂家报价图片文件名': ['厂家报价图片文件名', '图片文件名', '切片文件名', '图片名', '凭证图片文件名'],
 }
 # 中文标点 → 半角（NFKC 不处理这些，业务上属排版差异不算错）
 PUNCT = {'，': ',', '：': ':', '；': ';', '（': '(', '）': ')', '【': '[', '】': ']',
@@ -249,7 +250,7 @@ def load_table(path, sheet=None):
     for idx, h in enumerate(header):
         if not h:
             continue
-        for std in [f[0] for f in FIELDS] + IGNORE_FIELDS:
+        for std in [f[0] for f in FIELDS] + IGNORE_FIELDS + ['厂家报价图片文件名']:
             names = ALIASES.get(std, [std])
             if std not in col and h in names:
                 col[std] = idx
@@ -296,6 +297,19 @@ def align(A, B):
                 pairs.append((i, j)); used_a.add(i); used_b.add(j)
                 break
 
+    def _exact_img_sig(r):
+        """四级级联第一级：切片图片文件名 / (页码+价格+规格) 物理原件切片精确对齐"""
+        img = str(r.get('厂家报价图片文件名') or '').strip()
+        p = str(r.get('厂家报价文件页码') or '').strip()
+        pr = canon_num(r.get('市场价'))
+        sp = spec_sig(r.get('规格参数'))
+        if img and pr:
+            return ('img_pr', img, pr)
+        if p and pr and sp:
+            return ('page_pr_sp', p, pr, sp)
+        return None
+
+    run(lambda r: _exact_img_sig(r) or ('__none__', id(r)))
     run(_sig)
     run(lambda r: spec_sig(r.get('规格参数')))
     run(lambda r: (canon_num(r.get('市场价')), canon_text(r.get('名称规格'))))

@@ -305,6 +305,14 @@ def _row_status_map(diffs, all_rows=None):
     rows = defaultdict(lambda: {'L1': 'PASS', 'L2': 'PASS', 'L3': 'PASS', 'L4': 'PASS', 'fields': []})
     for label in (all_rows or []):
         rows[label]  # 先把所有行建出来，避免"只统计有分歧的行"把通过率算成 0
+
+    # L1-TERMS 页级双重归因联动：收集哪些页的页级商务条款经裁决为 FAIL (STD_WIN / BOTH_WRONG)
+    PAGE_TERMS_FIELDS = {'是否含增值税', '是否含运费', '运费说明', '税费说明', '增值税税率'}
+    page_terms_fail_pages = set()
+    for d in diffs:
+        if d['field'] in PAGE_TERMS_FIELDS and d['verdict'] in ('STD_WIN', 'BOTH_WRONG'):
+            page_terms_fail_pages.add(d.get('page') or 1)
+
     for d in diffs:
         st = rows[d['row_label']]
         layer = d.get('layer') or layer_of(d['field'])
@@ -313,6 +321,16 @@ def _row_status_map(diffs, all_rows=None):
         elif d['verdict'] in ('PENDING', 'UNADJUDICATED') and st[layer] == 'PASS':
             st[layer] = 'PENDING'
         st['fields'].append(f"{d['field']}={_WIN_LABEL[d['verdict']]}")
+
+    # 若某行所在页的页级商务条款错，将该页物料行的 L1 联动置为 FAIL (L1-TERMS)
+    if page_terms_fail_pages:
+        for label, st in rows.items():
+            m_p = re.search(r'p(\d+)|第(\d+)页', label)
+            p = int(m_p.group(1) or m_p.group(2)) if m_p else 1
+            if p in page_terms_fail_pages and st['L1'] == 'PASS':
+                st['L1'] = 'FAIL'
+                st['fields'].append('商务条款(页级)=FAIL(L1-TERMS)')
+
     for st in rows.values():
         vals = [st[k] for k in ('L1', 'L2', 'L3', 'L4')]
         st['状态'] = 'FAIL' if 'FAIL' in vals else ('PENDING' if 'PENDING' in vals else 'PASS')
@@ -378,10 +396,10 @@ def write_reports(per_file, out_dir, source_label):
     _sheet(wb, '3_差异明细',
            ['文件ID', '行定位', '字段', '错误码', '线上值', '标准值', '裁决', '原图真值', '证据位置',
             '标准修正原因', '四层编码', '页码'],
-           [[f['file_id'], d['row_label'], d['field'], d['code'], _cell(d['online']),
-             _cell(d['standard']), f"{_WIN_LABEL[d['verdict']]}({d['verdict']})",
-             d['ground_truth_from_image'], d['evidence_location'], d['std_fix_reason'],
-             d.get('l_code') or E_TO_L.get(d['code'], ''), d.get('page', '')]
+           [[f['file_id'], d['row_label'], d['field'], d.get('code', ''), _cell(d.get('online')),
+             _cell(d.get('standard')), f"{_WIN_LABEL.get(d['verdict'], d['verdict'])}({d['verdict']})",
+             d.get('ground_truth_from_image', ''), d.get('evidence_location', ''), d.get('std_fix_reason', ''),
+             d.get('l_code') or E_TO_L.get(d.get('code', ''), ''), d.get('page', '')]
             for f in per_file for d in f['diffs']],
            [26, 32, 20, 22, 30, 30, 22, 24, 30, 36, 18, 8])
 

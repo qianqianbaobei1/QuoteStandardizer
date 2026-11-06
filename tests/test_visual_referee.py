@@ -107,6 +107,30 @@ class TestVisualRefereeDirection(unittest.TestCase):
         self.assertEqual(vr.page_number_of({'厂家报价文件页码': 2}), 2)
         self.assertEqual(vr.page_number_of({}), 1)
 
+    def test_page_terms_fail_propagates_to_row_l1_and_deduplicates_in_root_cause(self):
+        """手册公理 3：页级商务条款错，同页物料行联动判 FAIL(L1-TERMS)，但在 Sheet 4 归因为 1 个根因"""
+        vr = _load('visual_referee_under_test5', 'visual_referee.py')
+        diffs = [
+            {'row_label': '行2 [p1]', 'field': '是否含增值税', 'code': 'E11_TERMS',
+             'l_code': 'L1-TERMS', 'layer': 'L1', 'verdict': 'STD_WIN', 'page': 1},
+            {'row_label': '行3 [p1]', 'field': '是否含增值税', 'code': 'E11_TERMS',
+             'l_code': 'L1-TERMS', 'layer': 'L1', 'verdict': 'STD_WIN', 'page': 1},
+        ]
+        all_rows = ['行2 [p1]', '行3 [p1]', '行4 [p1]']
+        st_map = vr._row_status_map(diffs, all_rows)
+        # 行 4 虽然没有直接分歧，但所在第 1 页商务条款全错，L1 应联动为 FAIL (L1-TERMS)
+        self.assertEqual(st_map['行4 [p1]']['L1'], 'FAIL')
+        self.assertIn('L1-TERMS', st_map['行4 [p1]']['fields'][0])
+
+        per_file = [dict(file_id='F1', rows_ours=3, rows_theirs=3, only_a=0, only_b=0,
+                         diffs=diffs, all_rows=all_rows)]
+        out = os.path.join(self.tmp.name, 'out_terms')
+        xlsx_path, _ = vr.write_reports(per_file, out, 'test')
+        wb = openpyxl.load_workbook(xlsx_path)
+        sheet4 = list(wb['4_问题归因'].iter_rows(min_row=2, values_only=True))
+        # 即使影响了 2 处分歧，根因去重数严格为 1
+        self.assertEqual(sheet4[0][4], 1, "同页商务条款根因去重数必须为 1")
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

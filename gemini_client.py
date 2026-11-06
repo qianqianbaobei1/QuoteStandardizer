@@ -83,10 +83,13 @@ class GeminiClient:
                 time.sleep(1)
 
         # 若 REST 均未成功，尝试 SDK 兜底 (若已配额超限则不重复尝试)
+        # 只兜底首选模型：REST 已经把全梯队试过一轮，SDK 再逐个重试只是把卡死时间乘以 5
         if genai and not GeminiClient._quota_exhausted:
-            for cur_model in self.models_priority:
+            for cur_model in self.models_priority[:1]:
                 try:
-                    client = genai.Client(api_key=self.api_key)
+                    # 不给 http timeout，SDK 会无限等下去（主流程曾因此挂死 30 分钟）
+                    client = genai.Client(api_key=self.api_key,
+                                          http_options={"timeout": max(1, int(timeout)) * 1000})
                     config_args = {"temperature": LLM_TEMPERATURE}
                     if is_json and hasattr(types, "GenerateContentConfig"):
                         config_args["response_mime_type"] = "application/json"

@@ -40,7 +40,8 @@ from category_attribute_service import (
     validate_and_normalize_specs,
 )
 from llm_agent import DeepSeekStandardizer, JevJudge, UNIT_PRICE_KEYS, TOTAL_PRICE_KEYS
-from config import STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE, CATEGORY_ENGINE, JEV_CATEGORY_GATE
+from config import (STRUCTURE_ENGINE, JEV_MIN_CONFIDENCE, CATEGORY_ENGINE, JEV_CATEGORY_GATE,
+                    FINGERPRINT_DEDUPE, UNIT_CONVERT_NOTE, PRICE_GUARD)
 
 RULE_DECISION_TYPE = {'item': 'item', '分组标题行': 'title', '重复表头行': 'header', '合计/小计行': 'summary',
                       '无价格且有效属性不足2项': 'note'}
@@ -1360,11 +1361,36 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
             except Exception as jev_err:
                 print(f"    ! Jev 双档位判定异常，回退树检索+LLM: {jev_err}")
 
+        # 同构行指纹聚类：同一(品名, 规格骨架)只送 1 行给模型，其余行套用键映射（值一律取本行原文）
+        # 实测长表压缩比 1.5~2.5:1，省的是重复的模型调用，不是数据
+        def _row_fp(cells: dict, name_key: str) -> str:
+            parts = [name_key]
+            for k in sorted(cells):
+                v = str(cells[k])
+                shape = re.sub(r'\d', '#', v)
+                shape = re.sub(r'[A-Za-z]', 'a', shape)
+                shape = re.sub(r'[\u4e00-\u9fa5]', '中', shape)
+                parts.append(f"{k}={shape[:40]}")
+            return hashlib.md5("|".join(parts).encode()).hexdigest()[:16]
+
+        rep_rows = raw_rows
+        if FINGERPRINT_DEDUPE:
+            reps = {}
+            for item in raw_rows:
+                nm = _pick_row_field(item["raw_cells_dict"], SRC_NAME_KEYS, SRC_NAME_EXCLUDE)
+                fp = _row_fp(item["raw_cells_dict"], nm)
+                item["_fp"] = fp
+                reps.setdefault(fp, item)
+            rep_rows = list(reps.values())
+            if len(rep_rows) < len(raw_rows):
+                print(f"    -> 同构行指纹压缩: {len(raw_rows)} 行 → {len(rep_rows)} 个代表行送模型"
+                      f"（压缩 {len(raw_rows)/max(len(rep_rows),1):.1f}:1）")
+
         # 分批调用 DeepSeek 提炼标准物料模型（并发线程池加速）
         batch_size = 30
         batches = []
-        for b_idx in range(0, len(raw_rows), batch_size):
-            batch_slice = raw_rows[b_idx:b_idx + batch_size]
+        for b_idx in range(0, len(rep_rows), batch_size):
+            batch_slice = rep_rows[b_idx:b_idx + batch_size]
             llm_input = []
             for item in batch_slice:
                 cands = item.get("candidate_categories", [])
@@ -1394,10 +1420,45 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             cleaned_batch_results = list(pool.map(_clean_worker, batches))
 
-        for batch_slice, cleaned_dict in cleaned_batch_results:
-            for item in batch_slice:
+        # 代表行的模型结果，按指纹索引（供同组其余行套用）
+        fp_rep_res: dict = {}
+        for _b, _d in cleaned_batch_results:
+            for _it in _b:
+                _r = _d.get(_it["id"])
+                if _r and _it.get("_fp"):
+                    fp_rep_res.setdefault(_it["_fp"], _r)
+
+        def _apply_template(rep_res: dict, own_cells: dict, own_unit: str) -> dict:
+            """把代表行的"键映射/名称/分类"套到本行；**值一律取本行原文**，绝不复制代表行的值"""
+            rep_specs = rep_res.get("structured_specs") or {}
+            mapped = {}
+            for k in rep_specs:
+                v = own_cells.get(k)
+                if v in (None, ""):
+                    v = next((ov for ok, ov in own_cells.items()
+                              if _spec_key_norm(str(ok)) == _spec_key_norm(str(k))), None)
+                if v not in (None, ""):
+                    mapped[str(k)] = str(v)
+            if not mapped:
+                return {}
+            out = {k: rep_res[k] for k in ("standard_name", "category_code", "selected_category_code")
+                   if rep_res.get(k)}
+            out["unit"] = rep_res.get("unit", "") if normalize_unit(str(rep_res.get("unit") or "")) == normalize_unit(own_unit) else ""
+            out["structured_specs"] = mapped
+            out["raw_spec"] = "；".join(f"{k}:{v}" for k, v in mapped.items())
+            out["_source"] = "llm"
+            out["_cached"] = True          # 不重复写缓存，也不是"独立模型结论"
+            out["_by_template"] = True
+            return out
+
+        rep_res_by_id = {}
+        for _b, _d in cleaned_batch_results:
+            rep_res_by_id.update({str(it["id"]): r for it, r in ((i, _d.get(i["id"])) for i in _b) if r})
+
+        for item in raw_rows:            # 逐行处理（含未送模型的同构行）
+            if True:
                 it_id = item["id"]
-                cleaned_res = cleaned_dict.get(it_id, {})
+                cleaned_res = rep_res_by_id.get(it_id, {})
                 notes = list(global_notes) + list(item.get("notes", []))
 
                 # 表内行级品牌推导 (F4)
@@ -1419,6 +1480,12 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 src_name = _strip_model_prefix(_pick_row_field(item["raw_cells_dict"], SRC_NAME_KEYS, SRC_NAME_EXCLUDE))
                 # 原表自带的分类（如“三级类别名称”）：按它查标准编码库，忠实原件分类
                 src_cat = _pick_row_field(item["raw_cells_dict"], SRC_CAT_KEYS, ('编码',))
+
+                if not cleaned_res and item.get("_fp") in fp_rep_res:
+                    cleaned_res = _apply_template(fp_rep_res[item["_fp"]],
+                                                 item["raw_cells_dict"], str(item.get("raw_unit") or ""))
+                    if cleaned_res:
+                        notes.append("同构行套用代表行键映射（值取自本行原文）")
 
                 clean_source = cleaned_res.get("_source", "fallback")
                 if clean_source != "llm":
@@ -1469,7 +1536,11 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 # 杀手锏 2：显式键值对确定性预解析打底 + AI 提炼并集 (Lossless Merge)
                 # 先以原表显式参数与非空单元格打底，再合入大模型提取属性，原表规整键值与产品配置 100% 零丢失
                 raw_spec_str = cleaned_res.get("raw_spec") or item.get("raw_spec") or item["raw_full_line"]
-                det_kv = extract_deterministic_kv(raw_spec_str, item.get("raw_cells_dict"))
+                _cells_for_specs = {
+                    k: v for k, v in (item.get("raw_cells_dict") or {}).items()
+                    if not any(bad in str(k) for bad in ('品牌', '档位', '厂家', '供应商', '产地'))
+                }
+                det_kv = extract_deterministic_kv(raw_spec_str, _cells_for_specs)
                 raw_structured_specs = cleaned_res.get("structured_specs")
                 if isinstance(raw_structured_specs, dict) and raw_structured_specs:
                     clean_ai_specs = {str(k).strip(): str(v).strip() for k, v in raw_structured_specs.items() if str(v or "").strip()}
@@ -1556,7 +1627,14 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
                 # 杀手锏 3：复合单位自动解构与定尺回填（如 '根/3.6米' -> 规格字典补入 '定尺长度: 3.6米/根'）
                 raw_u = item.get("raw_unit") or str(cleaned_res.get("unit") or "").strip()
                 _, structured_specs = decompose_compound_unit(raw_u, structured_specs)
-                unit = normalize_unit(str(cleaned_res.get("unit") or "").strip() or item["raw_unit"])
+                # 原件写了带包装/定尺的量纲（根/3.6米、卷/95米、百米）就以原件为准：
+                # 模型清洗常把"根/3.6米"截成"根"，一截就丢了 3.6 倍换算信息
+                _raw_u = str(item["raw_unit"] or '').strip()
+                _llm_u = str(cleaned_res.get("unit") or '').strip()
+                if _raw_u and re.search(r'[/／]\s*\d', _raw_u):
+                    unit = normalize_unit(_raw_u)
+                else:
+                    unit = normalize_unit(_llm_u or _raw_u)
                 if not unit:
                     notes.append("原表无计量单位")
                 elif item["raw_unit"] and unit != normalize_unit(item["raw_unit"]):
@@ -1880,6 +1958,32 @@ def _finish(items, source_rows, template_xlsx, output_xlsx, img_dir, struct_log=
             except Exception:
                 pass
         return None, [err_msg]
+
+    # 量纲/包装折算（只写说明，绝不改 市场价/单位）与跨行价格离群护栏（只提示，不改价）
+    try:
+        from unit_solver import note_of as _unit_note
+        from price_guard import find_outliers as _find_outliers, note_of as _guard_note
+        if UNIT_CONVERT_NOTE:
+            _n = 0
+            for it in items:
+                msg = _unit_note(it.unit, it.market_price)
+                if msg:
+                    it.quote_desc = f"{it.quote_desc}；{msg}".strip('；') if it.quote_desc else msg
+                    _n += 1
+            if _n:
+                print(f"[*] 量纲折算留痕: {_n} 行（原件口径不变，仅附折合单价）")
+        if PRICE_GUARD:
+            hits = _find_outliers([{'key': it.quote_id, 'price': it.market_price,
+                                    'unit': it.unit, 'code': it.category_code} for it in items])
+            by_id = {it.quote_id: it for it in items}
+            for h in hits:
+                it = by_id.get(h['key'])
+                if it:
+                    it.add_note(_guard_note(h))
+            if hits:
+                print(f"[*] 价格离群护栏: 命中 {len(hits)} 行待复核（未改任何数值）")
+    except Exception as e:
+        print(f"[Warning] 量纲折算/价格护栏执行异常: {e}")
 
     # 接入材料配图接口：通过材料名称检索配图，并匹配图片链接
     try:

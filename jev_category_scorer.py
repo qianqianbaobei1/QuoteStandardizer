@@ -91,6 +91,54 @@ def lexicon_candidates(name: str, limit: int = 6) -> List[Dict[str, Any]]:
     return out
 
 
+@lru_cache(maxsize=4096)
+def spec_lexicon_lookup(spec_str: str) -> Optional[Dict[str, Any]]:
+    """
+    查广材规格分类词库 (category_lexicon.db -> spec_lex)：
+    根据物料的规格属性 JSON 串或核心属性签名，直达精确对应的标准工料机分类。
+    """
+    if not spec_str or not os.path.exists(LEXICON_DB):
+        return None
+    spec_clean = spec_str.strip()
+    con = sqlite3.connect(LEXICON_DB)
+    try:
+        cur = con.cursor()
+        # 1. 尝试全字匹配
+        row = cur.execute(
+            "SELECT t1, t2, t3, code, sample_unit, sample_brand, total_occurrences, unique_companies "
+            "FROM spec_lex WHERE spec_json = ?", (spec_clean,)
+        ).fetchone()
+        if not row:
+            # 2. 若传入是字典序列化有空格差异，尝试归一化 json 匹配
+            try:
+                parsed = json.loads(spec_clean)
+                canon_json = json.dumps(parsed, ensure_ascii=False, separators=(',', ':'))
+                row = cur.execute(
+                    "SELECT t1, t2, t3, code, sample_unit, sample_brand, total_occurrences, unique_companies "
+                    "FROM spec_lex WHERE spec_json = ?", (canon_json,)
+                ).fetchone()
+            except Exception:
+                row = None
+        if row:
+            t1, t2, t3, code, unit, brand, occ, comp = row
+            return {
+                'level1': t1,
+                'level2': t2,
+                'level3': t3,
+                'code': code,
+                'unit': unit,
+                'brand': brand,
+                'occurrences': occ,
+                'companies': comp,
+                'confidence': 1.0,
+                'reason': f"广材规格词库精准命中 ({comp}家企业/{occ}条记录验证)"
+            }
+    finally:
+        con.close()
+    return None
+
+
+
 class JevCategoryScorer:
     """
     利用 Jev 模型 (choice + score 原语) 对工料机候选类别进行批量概率判别与匹配度打分。
