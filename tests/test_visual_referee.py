@@ -131,6 +131,34 @@ class TestVisualRefereeDirection(unittest.TestCase):
         # 即使影响了 2 处分歧，根因去重数严格为 1
         self.assertEqual(sheet4[0][4], 1, "同页商务条款根因去重数必须为 1")
 
+    def test_deep_verifier_math_and_human_review_sheet(self):
+        """测试原文件四通道深潜核验：工程价算术定理 + 人工核验专席Sheet生成"""
+        vr = _load('visual_referee_under_test6', 'visual_referee.py')
+        task_price = {
+            'field': '工程价', 'page': 1, 'standard': '540', 'online': '600',
+            'row_context': {'market_price': '600', 'discount_rate': '0.9'},
+        }
+        res_math = vr.adjudicate(task_price)
+        self.assertEqual(res_math['verdict'], 'STD_WIN')
+        self.assertEqual(res_math['truth'], '540.00')
+
+        # 当存在待人工核验项时，必须生成 Sheet 6
+        human_diff = {
+            'file_id': 'F1', 'row_label': '行2 [p1]', 'field': '规格参数:厚度',
+            'online': '1.5', 'standard': '2.0', 'verdict': 'NEED_HUMAN_VERIFY',
+            'confidence': 0.65, 'evidence_location': '原图模糊', 'std_fix_reason': '字迹模糊转人工',
+            'evidence_crop_path': 'evidence/crop1.png', 'page': 1,
+        }
+        per_file = [dict(file_id='F1', rows_ours=1, rows_theirs=1, only_a=0, only_b=0,
+                         diffs=[human_diff], all_rows=['行2 [p1]'])]
+        out = os.path.join(self.tmp.name, 'out_human')
+        xlsx_path, _ = vr.write_reports(per_file, out, 'test')
+        wb = openpyxl.load_workbook(xlsx_path)
+        self.assertIn('6_人工核验专席', wb.sheetnames)
+        sheet6 = list(wb['6_人工核验专席'].iter_rows(min_row=2, values_only=True))
+        self.assertEqual(len(sheet6), 1)
+        self.assertEqual(sheet6[0][2], '规格参数:厚度')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

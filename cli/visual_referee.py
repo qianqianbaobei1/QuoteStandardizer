@@ -39,6 +39,9 @@ from openpyxl.utils import get_column_letter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import VISION_API_KEY, VISION_BASE_URL, VISION_MODEL  # noqa: E402
+from cli.deep_source_verifier import DeepSourceVerifier  # noqa: E402
+
+_GLOBAL_VERIFIER = DeepSourceVerifier()
 
 REFEREE_SYSTEM_PROMPT = """【报价单质量 · 三方原图裁决】
 你是严格的报价单解析质量审查法官。唯一真值是你看到的原始报价单图像，标准答案也可能错。
@@ -48,19 +51,21 @@ REFEREE_SYSTEM_PROMPT = """【报价单质量 · 三方原图裁决】
 - "STD_WIN"：原图明确支持「标准答案值」（线上解析漏提/错提/幻觉/分类错误）
 - "BOTH_WRONG"：线上值与标准值都与原图真实内容不符
 - "PENDING"：原图中确实看不到该字段（如外部商务配置、系统侧折扣），无法判定
+- "NEED_HUMAN_VERIFY"：字迹严重模糊、反光、无法清晰辨认，或置信度不足
 
 只输出 JSON，不要任何解释文字：
-{"verdict": "ONLINE_WIN|STD_WIN|BOTH_WRONG|PENDING",
+{"verdict": "ONLINE_WIN|STD_WIN|BOTH_WRONG|PENDING|NEED_HUMAN_VERIFY",
  "ground_truth_from_image": "你从原图亲眼读到的该字段真实值（看不到就写空串）",
  "evidence_location": "证据在原图的位置，如：第2页表头/第5行单价列/页脚备注第2条",
  "std_fix_reason": "若标准答案有误，一句话说明错在哪；否则空串"}"""
 
-VERDICTS = ('ONLINE_WIN', 'STD_WIN', 'BOTH_WRONG', 'PENDING', 'UNADJUDICATED')
+VERDICTS = ('ONLINE_WIN', 'STD_WIN', 'BOTH_WRONG', 'PENDING', 'NEED_HUMAN_VERIFY', 'UNADJUDICATED')
 _WIN_LABEL = {
     'ONLINE_WIN': '线上对/标准错',
     'STD_WIN': '标准对/线上错',
     'BOTH_WRONG': '双方都错',
     'PENDING': '待人工(原图未体现)',
+    'NEED_HUMAN_VERIFY': '待人工复核(置信度不足)',
     'UNADJUDICATED': '未裁决',
 }
 
@@ -147,67 +152,19 @@ def page_image_b64(path, page):
 
 # ------------------------------------------------------------------ 裁决
 def adjudicate(task, cache=None):
-    """单处分歧的原图裁决（结果按 图+字段+两值 缓存，同构行不重复花钱）"""
-    if task.get('pre_verdict'):
-        # 手册公理 2：C 类外部配置字段原图未体现，直接 PENDING，不浪费一次视觉调用，也不冤枉任一方
-        return {'verdict': task['pre_verdict'], 'ground_truth_from_image': '',
-                'evidence_location': 'C 类外部配置字段，原图未体现', 'std_fix_reason': ''}
-    sig = json.dumps([task.get('source_file'), task['page'], task['field'],
-                      str(task['online']), str(task['standard'])], ensure_ascii=False)
-    if cache is not None and sig in cache:
-        return cache[sig]
-
-    undecided = {'verdict': 'UNADJUDICATED', 'ground_truth_from_image': '',
-                 'evidence_location': '', 'std_fix_reason': ''}
-    if not VISION_API_KEY or not VISION_BASE_URL or not VISION_MODEL:
-        return dict(undecided, std_fix_reason='未配置视觉模型(VISION_*)')
-    img = page_image_b64(task.get('source_file'), task['page'])
-    if not img:
-        return dict(undecided, std_fix_reason='没找到该行所在页的原图')
-
-    prompt = (
-        f"【待裁决分歧】\n"
-        f"- 原图页码：第 {task['page']} 页\n"
-        f"- 物料：品名={task.get('name', '')} | 规格={task.get('raw_spec', '')}\n"
-        f"- 争议字段：【{task['field']}】（错误码 {task.get('code', '-')}）\n"
-        f"- 标准答案值：\"{task['standard']}\"\n"
-        f"- 线上解析值：\"{task['online']}\"\n\n"
-        f"请只看原图，裁决这两个值谁与原图一致。"
-    )
-    payload = {
-        'model': VISION_MODEL, 'temperature': 0,
-        'max_tokens': 400,
-        'messages': [
-            {'role': 'system', 'content': REFEREE_SYSTEM_PROMPT},
-            {'role': 'user', 'content': [
-                {'type': 'text', 'text': prompt},
-                {'type': 'image_url', 'image_url': {'url': f"data:image/png;base64,{img}"}},
-            ]},
-        ],
+    """单处分歧的原图裁决（四通道深潜核验：物理层直取 + 多光谱微距 + 知识图谱算术定理 + 人工核验兜底）"""
+    res = _GLOBAL_VERIFIER.adjudicate_task(task, cache=cache)
+    if res and res.get('verdict') in VERDICTS:
+        return res
+    return {
+        'verdict': 'UNADJUDICATED',
+        'ground_truth_from_image': '',
+        'evidence_location': '',
+        'std_fix_reason': '未完成裁决',
+        'confidence': 0.0,
+        'channel': 'UNADJUDICATED',
+        'evidence_crop_path': '',
     }
-    try:
-        resp = requests.post(f"{VISION_BASE_URL.rstrip('/')}/chat/completions",
-                             headers={'Authorization': f"Bearer {VISION_API_KEY}"},
-                             json=payload, timeout=90)
-        if resp.status_code != 200:
-            return dict(undecided, std_fix_reason=f'裁判接口 HTTP {resp.status_code}')
-        content = resp.json()['choices'][0]['message']['content']
-        m = re.search(r'\{.*\}', content, re.S)
-        parsed = json.loads(m.group(0)) if m else {}
-        verdict = str(parsed.get('verdict') or '').upper()
-        if verdict not in VERDICTS:
-            return dict(undecided, std_fix_reason=f'裁判输出无法解析: {content[:80]}')
-        out = {
-            'verdict': verdict,
-            'ground_truth_from_image': str(parsed.get('ground_truth_from_image') or '').strip(),
-            'evidence_location': str(parsed.get('evidence_location') or '').strip(),
-            'std_fix_reason': str(parsed.get('std_fix_reason') or '').strip(),
-        }
-    except Exception as e:
-        out = dict(undecided, std_fix_reason=f'裁判调用异常: {e}')
-    if cache is not None:
-        cache[sig] = out
-    return out
 
 
 def adjudicate_batch(tasks, workers=6):
@@ -260,6 +217,13 @@ def collect_discrepancies(ev, ours_path, theirs_path, source, file_hint='', max_
                                 else ''),
                 'online': d['theirs'],
                 'standard': d['ours'],
+                'row_context': {
+                    'name': str(row.get('名称规格') or ''),
+                    'raw_spec': str(row.get('规格参数') or ''),
+                    'market_price': row.get('市场价'),
+                    'discount_rate': row.get('工程价折扣比例'),
+                    'category_code': row.get('类别编码'),
+                },
             })
     return dict(rows_ours=len(A), rows_theirs=len(B), diffs=tasks,
                 all_rows=[ev._row_label(A[i], i) for i in range(len(A))],
@@ -407,7 +371,7 @@ def write_reports(per_file, out_dir, source_label):
     root = defaultdict(lambda: {'rows': set(), 'pages': set(), 'count': 0})
     for f in per_file:
         for d in f['diffs']:
-            key = (d.get('l_code') or E_TO_L.get(d['code'], ''), d['verdict'])
+            key = (d.get('l_code') or E_TO_L.get(d.get('code', ''), ''), d['verdict'])
             root[key]['rows'].add((f['file_id'], d['row_label']))
             root[key]['pages'].add((f['file_id'], d.get('page') or 1))
             root[key]['count'] += 1
@@ -423,9 +387,19 @@ def write_reports(per_file, out_dir, source_label):
     _sheet(wb, '5_标准待修正',
            ['文件ID', '行定位', '字段', '原标准值', '原图真值', '裁决', '修正原因', '证据位置'],
            [[fid, d['row_label'], d['field'], _cell(d['standard']),
-             d['ground_truth_from_image'] or '(原图无法确认)', d['verdict'],
-             d['std_fix_reason'], d['evidence_location']] for fid, d in fixes],
+             d.get('ground_truth_from_image') or d.get('truth') or '(原图无法确认)', d['verdict'],
+             d.get('std_fix_reason', ''), d.get('evidence_location', '')] for fid, d in fixes],
            [26, 32, 20, 26, 26, 20, 40, 30])
+
+    human_reviews = [(f['file_id'], d) for f in per_file for d in f['diffs']
+                     if d['verdict'] in ('NEED_HUMAN_VERIFY', 'PENDING')]
+    if human_reviews:
+        _sheet(wb, '6_人工核验专席',
+               ['文件ID', '行定位', '字段', '线上值', '标准值', '置信度', '微距证据切片', '证据位置', '核验指引'],
+               [[fid, d['row_label'], d['field'], _cell(d.get('online')), _cell(d.get('standard')),
+                 d.get('confidence', 0.0), d.get('evidence_crop_path', ''), d.get('evidence_location', ''),
+                 d.get('std_fix_reason', '')] for fid, d in human_reviews],
+               [26, 32, 20, 26, 26, 12, 30, 30, 40])
 
     xlsx_path = os.path.join(out_dir, '三方裁决报告.xlsx')
     wb.save(xlsx_path)
