@@ -64,8 +64,9 @@ def find_primary_quote_file(vendor_dir: Path) -> Path:
         # 1. 绝对拉黑线上系统导出特征
         if re.search(r"_\d{14}", str(p)) or "报价数据.xlsx" in p.name or "标准解析" in p.name:
             continue
-        # 2. 排除纯说明和纯折扣图片（若为 PDF/Excel 即使带“说明”也可能是主报价函）
-        if p.suffix.lower() in [".png", ".jpg", ".jpeg"] and any(k in p.name for k in ["报价说明", "折扣说明", "折扣记录", "商务说明"]):
+        # 2. 排除纯说明和纯折扣图片（若位于“报价单”目录或文件名含“报价单/清单”，坚决不排除）
+        is_quote_dir_or_name = "报价单" in str(p) or "价格明细" in p.name or "清单" in p.name
+        if not is_quote_dir_or_name and p.suffix.lower() in [".png", ".jpg", ".jpeg"] and any(k in p.name for k in ["报价说明", "折扣说明", "折扣记录", "商务说明"]):
             continue
             
         ext = p.suffix.lower()
@@ -92,7 +93,32 @@ def find_primary_quote_file(vendor_dir: Path) -> Path:
         return None
     # 按得分高、文件大小大排序
     candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
-    return candidates[0][2]
+    top_file = candidates[0][2]
+
+    # 若选中的是最优图片，检查其同一父目录下是否存在多张连续切片报价图片（如 02~07）
+    if top_file.suffix.lower() in [".png", ".jpg", ".jpeg"]:
+        parent_dir = top_file.parent
+        sibling_imgs = sorted([
+            f for f in parent_dir.glob("*")
+            if f.is_file() and f.suffix.lower() in [".png", ".jpg", ".jpeg"]
+            and not f.name.startswith(".")
+            and ("报价单" in f.name or not any(k in f.name for k in ["折扣说明", "折扣记录"]))
+        ])
+        if len(sibling_imgs) > 1:
+            try:
+                import fitz
+                merged_pdf_path = parent_dir / "报价单_多页合并.pdf"
+                m_doc = fitz.open()
+                for img_p in sibling_imgs:
+                    i_doc = fitz.open(str(img_p))
+                    m_doc.insert_pdf(fitz.open("pdf", i_doc.convert_to_pdf()))
+                m_doc.save(str(merged_pdf_path))
+                print(f"[*] 自动装订 {len(sibling_imgs)} 张分散报价图片为完整多页文档: {merged_pdf_path.name}")
+                return merged_pdf_path
+            except Exception as e:
+                print(f"[Warning] 多图片装订异常，回退单张图片: {e}")
+
+    return top_file
 
 def _count_delivery_rows(path: str) -> int:
     """交付件数据行数（用已依赖的 openpyxl，不再为一个 len() 拉进 pandas）"""

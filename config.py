@@ -8,6 +8,7 @@
 import csv
 import os
 import re
+from typing import Optional
 from dotenv import load_dotenv
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,12 +19,40 @@ load_dotenv(os.path.join(CURRENT_DIR, ".env"))
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-# 扫描件 / 商务单图片识别用的多模态模型；未单独配置时回落到 DeepSeek 端点。
-# 注意：DeepSeek 官方 deepseek-chat 并不保证支持图片输入，回落到它时可能拿到“看起来像表格”的幻觉结果，
-# 生产请在 .env 里显式指定 VISION_MODEL / VISION_BASE_URL（当前端点实测能读图，但换模型或换服务商就会静默变鬼）。
-VISION_API_KEY = os.getenv("VISION_API_KEY") or DEEPSEEK_API_KEY
-VISION_BASE_URL = os.getenv("VISION_BASE_URL") or DEEPSEEK_BASE_URL
-VISION_MODEL = os.getenv("VISION_MODEL") or DEEPSEEK_MODEL
+
+# 【防幻觉第一铁律】：严禁将纯文本大模型接入视觉/图片/PDF通道
+BANNED_VISION_MODELS = {
+    "deepseek-chat", "deepseek-coder", "deepseek-reasoner",
+    "gpt-3.5-turbo", "gpt-3.5", "text-davinci", "qwen-turbo", "qwen-plus"
+}
+
+def check_vision_model_safety(model_name: Optional[str] = None):
+    """【防幻觉第一铁律】：严禁将纯文本大模型接入视觉/图片/PDF通道"""
+    m = (model_name or VISION_MODEL or "").strip().lower()
+    if not m:
+        return True
+    if m in BANNED_VISION_MODELS or "deepseek-chat" in m or "deepseek-coder" in m or "deepseek-reasoner" in m:
+        raise RuntimeError(
+            f"[SECURITY CRITICAL] 视觉模型被配置为纯文本模型 '{model_name or VISION_MODEL}'！\n"
+            "系统铁律：处理图片/PDF 只能调用真正的多模态视觉模型（如 gemini-3.6-flash / qwen-vl-max / gpt-4o 等），\n"
+            "严禁纯文本大模型接入视觉通道，以绝根源性表格默写与幻觉！"
+        )
+    return True
+
+_raw_vision_model = (os.getenv("VISION_MODEL") or "").strip()
+if _raw_vision_model:
+    check_vision_model_safety(_raw_vision_model)
+    VISION_MODEL = _raw_vision_model
+    VISION_API_KEY = os.getenv("VISION_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
+    VISION_BASE_URL = os.getenv("VISION_BASE_URL") or "https://generativelanguage.googleapis.com"
+elif os.getenv("GEMINI_API_KEY", "").strip():
+    VISION_MODEL = "gemini-3.6-flash"
+    VISION_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+    VISION_BASE_URL = "https://generativelanguage.googleapis.com"
+else:
+    VISION_MODEL = ""
+    VISION_API_KEY = ""
+    VISION_BASE_URL = ""
 # 扫描件是否让视觉模型独立读两遍做交叉校验 (默认关闭以提高效率；可通过环境变量 VISION_DOUBLE_CHECK=1 开启)
 VISION_DOUBLE_CHECK = os.getenv("VISION_DOUBLE_CHECK", "0").strip().lower() in ("1", "true")
 # 扫描件识别增强的 gamma (>1 压暗浅色笔画)
@@ -45,8 +74,8 @@ TYPESAFE_BASE_URL = os.getenv("TYPESAFE_BASE_URL", "https://api.typesafe.ai/v1/s
 TYPESAFE_MODEL = os.getenv("TYPESAFE_MODEL", "jev-latest")
 # Jev 判定置信度低于此值时写入待复核说明 (需用真实样例校准)
 JEV_MIN_CONFIDENCE = float(os.getenv("JEV_MIN_CONFIDENCE", "0.5"))
-# 分类判定引擎开关：'jev_tiered' = 双档位 Jev 判定优先（默认），'legacy' = 只用树检索+LLM 受限单选
-CATEGORY_ENGINE = os.getenv("CATEGORY_ENGINE", "jev_tiered").strip().lower()
+# 分类判定引擎开关：'local' = 本地纯净智能体驱动（首选，毫秒级，0外部依赖），'legacy' = 树检索+LLM 受限单选
+CATEGORY_ENGINE = os.getenv("CATEGORY_ENGINE", "local").strip().lower()
 # Jev 判定的采纳门槛：低于此值回退到原路径（宁可不判，不许硬配）
 JEV_CATEGORY_GATE = float(os.getenv("JEV_CATEGORY_GATE", "0.65"))
 # 同构行指纹去重：同一(品名,规格骨架)只送 1 行给模型，其余套用键映射（0 可关）

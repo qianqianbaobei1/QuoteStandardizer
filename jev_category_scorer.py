@@ -158,8 +158,8 @@ class JevCategoryScorer:
     def enabled(self) -> bool:
         return bool(self.api_key)
 
-    def _call_jev(self, state: Dict[str, Any], questions: Dict[str, Any], timeout: int = 15) -> Optional[Dict[str, Any]]:
-        if not self.enabled or not questions:
+    def _call_jev(self, state: Dict[str, Any], questions: Dict[str, Any], timeout: int = 3) -> Optional[Dict[str, Any]]:
+        if not self.enabled or not questions or getattr(self, '_circuit_broken', False):
             return None
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -176,7 +176,8 @@ class JevCategoryScorer:
                 data = resp.json()
                 return data.get("answers") or data.get("results") or data
         except Exception as e:
-            print(f"[JevScorer Warning] API 调用异常: {e}")
+            self._circuit_broken = True
+            print(f"[JevScorer CircuitBreaker] API 异常 ({e})，熔断保护激活，后续秒级直通本地引擎")
         return None
 
     @staticmethod

@@ -498,9 +498,14 @@ def compute_sheet_category_prior(items: List[Dict[str, Any]]) -> set:
 
     t2_counter: Counter = Counter()
     for it in items:
-        name = str(it.get("src_name") or it.get("raw_name") or "")
-        spec = str(it.get("raw_spec") or "")
-        cat = str(it.get("src_cat") or "")
+        if isinstance(it, dict):
+            name = str(it.get("src_name") or it.get("raw_name") or "")
+            spec = str(it.get("raw_spec") or "")
+            cat = str(it.get("src_cat") or "")
+        else:
+            name = str(it or "")
+            spec = ""
+            cat = ""
 
         # ① 词表实盘：按企业支持度加权（去重企业数，不是行数）
         if lexicon_candidates and name:
@@ -705,6 +710,37 @@ def retrieve_category_candidates(
     spec_txt = f"{std_name} {raw_cat} {raw_spec}"
     seen_codes = set()
     merged = []
+
+    # 3.0 【铁律二：显式品种与三级品类精准锚定（救赎残字，绝不错分）】
+    var_cands_to_check = []
+    if raw_spec:
+        m_var = re.search(r'品种[：:\s]+([^\s;；,，\n]+)', str(raw_spec))
+        if m_var:
+            var_cands_to_check.append(m_var.group(1).strip())
+    if std_name:
+        var_cands_to_check.append(str(std_name).strip())
+
+    for v_name in var_cands_to_check:
+        matched_item = None
+        if v_name in _EXACT_T3_MAP:
+            matched_item = _EXACT_T3_MAP[v_name]
+        else:
+            suffix_hits = [t3 for t3 in _EXACT_T3_MAP if v_name.endswith(t3)]
+            if suffix_hits:
+                best_t3 = max(suffix_hits, key=len)
+                matched_item = _EXACT_T3_MAP[best_t3]
+        if matched_item:
+            t1, t2, t3, code = matched_item
+            if code not in seen_codes:
+                p_score = 190.0
+                if sheet_prior and t2 in sheet_prior:
+                    p_score += 60.0
+                merged.append({
+                    "level1": t1, "level2": t2, "level3": t3, "code": code,
+                    "score": p_score,
+                    "reason": f"显式品种/品名 '{v_name}' 精准锚定标准品类 [{t3}]",
+                })
+                seen_codes.add(code)
 
     # 3.1 若 377 万规格词库直接命中，赋予最高先验分置顶进入候选池
     if spec_lex_hit and spec_lex_hit.get("code"):

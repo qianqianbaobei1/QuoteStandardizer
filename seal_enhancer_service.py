@@ -25,6 +25,35 @@ except ImportError:
         return img
 
 
+def surgical_seal_mask_repair(bgr_img: np.ndarray, threshold: int = 25) -> np.ndarray:
+    """
+    【顶层铁律 2：红章局部手术式修复，严禁全页破坏性滤波】
+    1. 用红度色差 R - max(G, B) > 25 找出红章像素掩膜 seal_mask；
+    2. 只把 seal_mask 覆盖的那一小块像素替换成 R 通道灰度值（去红留黑看底字）；
+    3. 表格其余 95% 的区域（包括黑底白字表头、蓝底白字表头、细小数字 12.24）100% 保持原图原貌！
+    """
+    if bgr_img is None or bgr_img.size == 0:
+        return bgr_img
+
+    b = bgr_img[:, :, 0].astype(np.int32)
+    g = bgr_img[:, :, 1].astype(np.int32)
+    r = bgr_img[:, :, 2].astype(np.int32)
+
+    max_gb = np.maximum(g, b)
+    seal_mask = (r - max_gb > threshold).astype(np.uint8)
+
+    if np.count_nonzero(seal_mask) < 30:
+        return bgr_img
+
+    out = bgr_img.copy()
+    r_gray = bgr_img[:, :, 2]
+
+    out[seal_mask > 0, 0] = r_gray[seal_mask > 0]
+    out[seal_mask > 0, 1] = r_gray[seal_mask > 0]
+    out[seal_mask > 0, 2] = r_gray[seal_mask > 0]
+    return out
+
+
 class SealEnhancerService:
     def __init__(self, output_debug_dir: Optional[str] = None):
         self.output_debug_dir = output_debug_dir

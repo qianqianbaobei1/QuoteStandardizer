@@ -106,6 +106,49 @@ def _core_consistent(sup: str, core: str, evidence: str) -> bool:
     return False
 
 
+def _extract_explicit_variety(spec_text: str, cells: Optional[dict] = None) -> Optional[str]:
+    """【铁律二】：从规格参数文本或单元格字典中精确提取显式声明的“品种”"""
+    if cells:
+        for k, v in cells.items():
+            if "品种" in str(k) and v:
+                cand = str(v).strip().split(";")[0].split("；")[0].split("\n")[0].strip()
+                if cand and len(cand) >= 2 and not cand.isdigit():
+                    return cand
+    if spec_text:
+        m = re.search(r'品种[：:\s]+([^\s;；,，\n]+)', str(spec_text))
+        if m:
+            cand = m.group(1).strip()
+            if cand and len(cand) >= 2:
+                return cand
+        for kw in ("等边角钢", "不等边角钢", "热轧H型钢", "花纹钢板", "热镀锌角钢", "热镀锌槽钢", "普通槽钢", "玻璃球洒水喷头", "快速响应喷头"):
+            if kw in str(spec_text):
+                return kw
+    return None
+
+
+def _should_override_name_with_variety(curr_name: str, variety: str) -> bool:
+    """【铁律二】：判定是否用规格中的显式品种覆盖/纠偏当前残缺品名"""
+    if not curr_name:
+        return True
+    curr_name = curr_name.strip()
+    variety = variety.strip()
+    if curr_name == variety:
+        return False
+    generic_names = {"钢材", "型钢", "板材", "管材", "材料", "设备", "喷头", "五金", "建材"}
+    if curr_name in generic_names:
+        return True
+    # 典型易错/残字混淆对：折角残字扁钢 vs 等边角钢
+    if "扁钢" in curr_name and "角钢" in variety:
+        return True
+    # 花纹钢板 vs 钢板
+    if curr_name == "钢板" and "花纹" in variety:
+        return True
+    # 包含关系（如品种为'等边角钢'，品名为'角钢'）
+    if variety.endswith(curr_name) and len(variety) > len(curr_name):
+        return True
+    return False
+
+
 def verify_terms_supplier(terms: dict, evidence_texts: list) -> dict:
     """
     公章环形文字容易被模型读错。用文件名/目录名/页面标题/表格内容做旁证：
@@ -1028,6 +1071,12 @@ def _collect_list_rows(ws, ws_f, sname, standardizer, extractor, cell_issue, jev
         qty_col = next((c for c, h in headers_map.items() if any(k in h for k in ('数量', '工程量', '采购量'))), None)
         amount_col = next((c for c, h in headers_map.items() if any(k in h for k in ('合价', '总价', '金额', '小计')) and not _is_unit_price_header(h)), None)
 
+        # 兜底：若整表完全没有单价列（如 OCR 将“单位价格”识别为“数量”或列名简写），且存在唯一数值列
+        if not price_col and not any(_is_unit_price_header(h) for h in headers_map.values()):
+            if qty_col and not amount_col:
+                price_col = qty_col
+                qty_col = None
+
         # 杀手锏 4：表内分组小标题状态机与向下继承
         current_sec_name = ""
         current_sec_brand = ""
@@ -1347,10 +1396,23 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         group_of.update({r["id"]: r["group_key"] for r in raw_rows if r.get("group_key")})
         print(f"    -> 提取出有效物料原始行: {len(raw_rows)} 行，启动大模型槽位精准清洗...")
 
-        # 1. 先提取每行的 clean_src_name 与 src_cat，再计算整表主业先验并召回 Top-5 候选类别
+        # 1. 先提取每行的 clean_src_name 与 src_cat，并执行显式品种反向纠偏（救赎残字）
         for it in raw_rows:
+            raw_spec_str = str(it.get("raw_spec") or it.get("raw_full_line") or "")
             it["src_name"] = _strip_model_prefix(_pick_row_field(it["raw_cells_dict"], SRC_NAME_KEYS, SRC_NAME_EXCLUDE))
+            if not it["src_name"]:
+                det_kv_tmp = extract_deterministic_kv(raw_spec_str, it["raw_cells_dict"])
+                it["src_name"] = det_kv_tmp.get("品种") or det_kv_tmp.get("名称") or ""
             it["src_cat"] = _pick_row_field(it["raw_cells_dict"], SRC_CAT_KEYS, ('编码',))
+
+            # 【铁律二：规格栏显式 品种:xxx 反向纠偏残缺品名】
+            var_cand = _extract_explicit_variety(raw_spec_str, it.get("raw_cells_dict"))
+            if var_cand:
+                it["explicit_variety"] = var_cand
+                curr_nm = str(it.get("src_name") or "")
+                if _should_override_name_with_variety(curr_nm, var_cand):
+                    it["raw_ocr_broken_name"] = curr_nm
+                    it["src_name"] = var_cand
 
         sheet_prior_t2 = compute_sheet_category_prior(raw_rows)
         for it in raw_rows:
@@ -1406,7 +1468,7 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
         if FINGERPRINT_DEDUPE:
             reps = {}
             for item in raw_rows:
-                nm = _pick_row_field(item["raw_cells_dict"], SRC_NAME_KEYS, SRC_NAME_EXCLUDE)
+                nm = item.get("src_name") or _pick_row_field(item["raw_cells_dict"], SRC_NAME_KEYS, SRC_NAME_EXCLUDE)
                 fp = _row_fp(item["raw_cells_dict"], nm)
                 item["_fp"] = fp
                 reps.setdefault(fp, item)
@@ -1507,6 +1569,9 @@ def standardize_workbook(wb_val, wb_fml, extractor, supplier, brand, id_prefix, 
 
                 # 原表自带的「材料名称」：这是原件写明的物料品名，必须照抄进名称规格
                 src_name = _strip_model_prefix(_pick_row_field(item["raw_cells_dict"], SRC_NAME_KEYS, SRC_NAME_EXCLUDE))
+                if not src_name:
+                    det_kv_tmp = extract_deterministic_kv(item.get("raw_spec") or item.get("raw_full_line", ""), item["raw_cells_dict"])
+                    src_name = det_kv_tmp.get("品种") or det_kv_tmp.get("名称") or ""
                 # 原表自带的分类（如“三级类别名称”）：按它查标准编码库，忠实原件分类
                 src_cat = _pick_row_field(item["raw_cells_dict"], SRC_CAT_KEYS, ('编码',))
 

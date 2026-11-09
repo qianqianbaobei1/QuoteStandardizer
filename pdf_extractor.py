@@ -28,7 +28,7 @@ import requests
 from config import (VISION_API_KEY, VISION_BASE_URL, VISION_MODEL, VISION_DOUBLE_CHECK,
                     VISION_GAMMA, VISION_MAX_ROWS_PER_TILE, VISION_TILE_OVERLAP_ROWS,
                     VISION_MAX_WORKERS, LLM_MAX_RETRIES)
-from seal_enhancer_service import SealEnhancerService
+from seal_enhancer_service import SealEnhancerService, surgical_seal_mask_repair
 from universal_pdf_grid_engine import (
     auto_orient_page_upright,
     detect_physical_table_row_bands,
@@ -36,6 +36,13 @@ from universal_pdf_grid_engine import (
     is_valid_table_header_row,
     broadcast_headers_to_page_grids,
 )
+
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 _SEAL_ENHANCER = SealEnhancerService()
 
@@ -185,119 +192,223 @@ class PDFTableExtractor:
                 print(f"    -> {sname}: {label} 还原 {len(grid)} 行 x {max((len(r) for r in grid), default=0)} 列")
         return wb
 
-    # ------------------------------------------------------------------ 视觉模型
+    # ------------------------------------------------------------------ 视觉模型与硬门禁
+    @staticmethod
+    def _verify_against_rapidocr(img_bgr: Optional[np.ndarray], vision_dict: dict) -> Tuple[bool, float, str]:
+        """
+        【硬门禁 1】：模型输出汉字与本地 RapidOCR 重合度必须 >=60%，否则熔断判废
+        """
+        if not vision_dict or not isinstance(vision_dict, dict):
+            return False, 0.0, "模型输出为空或非合规JSON"
+
+        vision_chars = set()
+        for t in vision_dict.get("tables", []):
+            for row in t.get("cells", []):
+                for cell in row:
+                    for c in str(cell):
+                        if '\u4e00' <= c <= '\u9fa5':
+                            vision_chars.add(c)
+
+        if len(vision_chars) < 5:
+            return True, 1.0, "模型输出汉字少于5个，放行"
+
+        if img_bgr is None or img_bgr.size == 0:
+            return True, 1.0, "无原始像素数据，放行"
+
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            ocr = RapidOCR()
+            res, _ = ocr(img_bgr)
+            ocr_chars = set()
+            if res:
+                for line in res:
+                    if len(line) > 1:
+                        for c in str(line[1]):
+                            if '\u4e00' <= c <= '\u9fa5':
+                                ocr_chars.add(c)
+
+            if len(ocr_chars) < 5:
+                return True, 1.0, "本地OCR未检测到足够汉字，放行"
+
+            overlap_chars = vision_chars & ocr_chars
+            overlap_ratio = len(overlap_chars) / len(vision_chars)
+
+            if overlap_ratio < 0.60:
+                return False, overlap_ratio, (
+                    f"模型输出汉字与本地RapidOCR重合度仅为 {overlap_ratio:.1%} "
+                    f"(<60% 熔断阈值，模型汉字数 {len(vision_chars)}，OCR汉字数 {len(ocr_chars)})"
+                )
+
+            return True, overlap_ratio, f"重合度 {overlap_ratio:.1%} (>=60% 门禁通过)"
+        except Exception as e:
+            print(f"    [!] RapidOCR门禁执行异常: {e}，安全放行")
+            return True, 1.0, "门禁异常放行"
+
     def _page_png_b64(self, page, enhanced=True):
         """
-        渲染页面给视觉模型。enhanced=True 时做识别增强：
-        去除红色公章 → 灰度 → gamma 压暗褪色笔画 (防止褪色笔画被误读)
+        渲染页面给视觉模型。保留高清晰度原生彩色通道，自动执行姿态矫正与尺寸自适应；
+        enhanced=True 时采用【顶层铁律 2：红章局部掩膜修复】，仅脱去红章覆盖区域印泥，
+        其余 95% 表格区域（黑底白字表头、蓝底白字表头、细小数字等）100% 保持原图原貌！
+        返回 (b64_str, bgr_img)。
         """
         dpi = SCAN_DPI if enhanced else VISION_DPI
         pix = page.get_pixmap(dpi=dpi)
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+        bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+        try:
+            bgr = auto_orient_page_upright(bgr)
+        except Exception:
+            pass
         if enhanced:
-            bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
-            # 系统级四向 5ms 极速自动摆正 (消灭 ±90°/180° 正反横扫、Landscape 横置)
             try:
-                bgr = auto_orient_page_upright(bgr)
+                bgr = surgical_seal_mask_repair(bgr)
             except Exception:
                 pass
-            # 杀手锏 5：手机拍照与扫描件 LAB 亮度均衡 (消除阴影暗角，100% 保留红色通道，do_orient=False 避免二次摆正)
-            try:
-                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr, do_orient=False)
-            except Exception:
-                pass
-            # 系统性公章脱印穿透与凸线骨架增强 (CLAHE + Unsharp Masking 滤波)
-            try:
-                gray = _SEAL_ENHANCER.penetrate_and_enhance_text(bgr)
-            except Exception:
-                gray = cv2.cvtColor(self._remove_red(bgr), cv2.COLOR_BGR2GRAY)
-            out = (255 * (gray / 255.0) ** VISION_GAMMA).astype(np.uint8)
-        else:
-            bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
-            try:
-                bgr = auto_orient_page_upright(bgr)
-            except Exception:
-                pass
-            try:
-                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr, do_orient=False)
-            except Exception:
-                pass
-            out = bgr
+        out = bgr
         scale = VISION_MAX_EDGE / max(out.shape[:2])
         if scale < 1:
             out = cv2.resize(out, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-        return base64.b64encode(cv2.imencode('.jpg', out, [int(cv2.IMWRITE_JPEG_QUALITY), 88])[1].tobytes()).decode()
+        b64 = base64.b64encode(cv2.imencode('.jpg', out, [int(cv2.IMWRITE_JPEG_QUALITY), 92])[1].tobytes()).decode()
+        return b64, out
 
-    def _vision_call(self, b64):
-        """调用 OpenAI 兼容的多模态接口，返回解析后的 dict；失败返回 None（带内容寻址缓存）"""
+    def _execute_multimodal_vision(self, b64: str, prompt_text: str, kind: str,
+                                   img_bgr: Optional[np.ndarray] = None) -> Optional[dict]:
+        """统一多模态视觉中枢：支持 Gemini 原生 / OpenAI 兼容接口，严密挂接 RapidOCR 60% 熔断门禁与 CAS 缓存"""
         import cas_cache
-        _cas = cas_cache.get('vision_table', VISION_MODEL or '', b64 + '|' + VISION_TABLE_PROMPT)
+        cache_key = b64 + '|' + prompt_text
+        _cas = cas_cache.get(kind, VISION_MODEL or '', cache_key)
         if _cas:
             try:
                 cached = json.loads(_cas)
                 if not validate_vision_payload(cached):
-                    print("    · 视觉识别命中 CAS 缓存")
                     return cached
             except Exception:
                 pass
-        url = f"{VISION_BASE_URL.rstrip('/')}/chat/completions"
-        headers = {"Authorization": f"Bearer {VISION_API_KEY}", "Content-Type": "application/json"}
-        payload = {
-            "model": VISION_MODEL,
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": VISION_TABLE_PROMPT},
-                {"role": "user", "content": [
-                    {"type": "text", "text": "请转录这一页中的全部表格，返回 JSON。"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                ]},
-            ],
-            "response_format": {"type": "json_object"},
-        }
-        last = ""
-        for attempt in range(min(LLM_MAX_RETRIES + 1, 2)):
-            try:
-                resp = requests.post(url, headers=headers, json=payload, timeout=45)
-                if resp.status_code == 400 and "response_format" in payload:
-                    # 部分模型不支持 response_format，去掉后重试
-                    payload.pop("response_format")
-                    continue
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choice = data["choices"][0]
-                    finish_reason = choice.get("finish_reason")
-                    content = choice["message"]["content"]
-                    if finish_reason == "length":
-                        print("[Vision Warning] 视觉模型输出触发 length 截断！")
-                        return {"_truncated": True}
+
+        parsed = None
+        is_gemini = (VISION_MODEL.startswith("gemini-") or "generativelanguage" in (VISION_BASE_URL or ""))
+
+        if is_gemini:
+            # 1. 优先使用 Google GenAI 官方 SDK
+            if genai and VISION_API_KEY:
+                for attempt in range(min(LLM_MAX_RETRIES + 1, 2)):
                     try:
-                        parsed = json.loads(_strip_fence(content))
-                        bad = validate_vision_payload(parsed)
-                        if bad:
-                            print(f"[Vision Warning] 响应结构不合规（{bad}），整份作废")
-                            last = f"结构不合规: {bad}"
-                            continue
-                        try:
-                            cas_cache.put('vision_table', VISION_MODEL or '', b64 + '|' + VISION_TABLE_PROMPT,
-                                          json.dumps(parsed, ensure_ascii=False))
-                        except Exception:
-                            pass
-                        return parsed
-                    except Exception as json_err:
-                        print(f"[Vision Warning] JSON解析失败(疑似截断): {json_err}")
-                        return {"_truncated": True}
-                last = f"HTTP {resp.status_code}: {resp.text[:200]}"
-                if 400 <= resp.status_code < 500 and resp.status_code != 429:
-                    break
-            except Exception as e:
-                last = str(e)
-                # 遇到证书或连接断开直接终止，防止无效重试阻塞
-                if "SSLError" in str(e) or "Max retries exceeded" in str(e):
-                    break
-            if attempt < 1:
-                time.sleep(1)
-        print(f"[Vision Warning] 视觉模型调用失败: {last}")
-        return None
+                        client = genai.Client(api_key=VISION_API_KEY)
+                        img_bytes = base64.b64decode(b64)
+                        img_part = types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
+                        cfg = types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            temperature=0.0,
+                            max_output_tokens=16384
+                        )
+                        full_prompt = f"{VISION_TABLE_PROMPT}\n\n{prompt_text}"
+                        resp = client.models.generate_content(
+                            model=VISION_MODEL,
+                            contents=[img_part, full_prompt],
+                            config=cfg
+                        )
+                        if resp and resp.text:
+                            parsed = json.loads(_strip_fence(resp.text))
+                            break
+                    except Exception as g_err:
+                        if attempt == 0:
+                            time.sleep(1)
+
+            # 2. 若 SDK 失败或未安装，使用官方 REST API 备选
+            if not parsed and VISION_API_KEY:
+                try:
+                    rest_url = f"https://generativelanguage.googleapis.com/v1beta/models/{VISION_MODEL}:generateContent?key={VISION_API_KEY}"
+                    full_prompt = f"{VISION_TABLE_PROMPT}\n\n{prompt_text}"
+                    payload = {
+                        "contents": [{
+                            "parts": [
+                                {"inlineData": {"mimeType": "image/jpeg", "data": b64}},
+                                {"text": full_prompt}
+                            ]
+                        }],
+                        "generationConfig": {
+                            "responseMimeType": "application/json",
+                            "temperature": 0.0,
+                            "maxOutputTokens": 16384
+                        }
+                    }
+                    resp = requests.post(rest_url, json=payload, timeout=60)
+                    if resp.status_code == 200:
+                        res_data = resp.json()
+                        candidates = res_data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            text_str = "".join(p.get("text", "") for p in parts if "text" in p)
+                            parsed = json.loads(_strip_fence(text_str))
+                except Exception as r_err:
+                    print(f"[Gemini REST Vision Warning] {r_err}")
+        else:
+            # OpenAI 兼容多模态接口 (如 Qwen-VL 等)
+            url = f"{VISION_BASE_URL.rstrip('/')}/chat/completions"
+            headers = {"Authorization": f"Bearer {VISION_API_KEY}", "Content-Type": "application/json"}
+            payload = {
+                "model": VISION_MODEL,
+                "temperature": 0,
+                "messages": [
+                    {"role": "system", "content": VISION_TABLE_PROMPT},
+                    {"role": "user", "content": [
+                        {"type": "text", "text": prompt_text},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                    ]},
+                ],
+                "response_format": {"type": "json_object"},
+            }
+            for attempt in range(min(LLM_MAX_RETRIES + 1, 2)):
+                try:
+                    resp = requests.post(url, headers=headers, json=payload, timeout=45)
+                    if resp.status_code == 400 and "response_format" in payload:
+                        payload.pop("response_format")
+                        continue
+                    if resp.status_code == 200:
+                        choice = resp.json()["choices"][0]
+                        if choice.get("finish_reason") == "length":
+                            return {"_truncated": True}
+                        parsed = json.loads(_strip_fence(choice["message"]["content"]))
+                        break
+                except Exception:
+                    pass
+                if attempt < 1:
+                    time.sleep(1)
+
+        if not parsed:
+            return None
+
+        if parsed.get("_truncated"):
+            return parsed
+
+        bad = validate_vision_payload(parsed)
+        if bad:
+            print(f"[Vision Warning] 响应结构不合规（{bad}），整份作废")
+            return None
+
+        # 🔒【硬门禁 1】：模型输出汉字与本地 RapidOCR 重合度必须 >=60%，否则熔断判废！
+        if img_bgr is not None:
+            ok, overlap, reason = self._verify_against_rapidocr(img_bgr, parsed)
+            if not ok:
+                print(f"    [!] 触发【硬门禁 1】熔断判废: {reason}！拒绝采纳并废除脏数据！")
+                return None
+
+        # 仅在通过硬门禁后写入 CAS 内容寻址缓存
+        try:
+            cas_cache.put(kind, VISION_MODEL or '', cache_key, json.dumps(parsed, ensure_ascii=False))
+        except Exception:
+            pass
+
+        return parsed
+
+    def _vision_call(self, b64_or_tuple):
+        """调用统一多模态接口转录整页表格"""
+        if isinstance(b64_or_tuple, tuple):
+            b64, img_bgr = b64_or_tuple
+        else:
+            b64, img_bgr = b64_or_tuple, None
+        return self._execute_multimodal_vision(b64, "请转录这一页中的全部表格，返回 JSON。",
+                                              kind='vision_table', img_bgr=img_bgr)
 
     @staticmethod
     def _normalize_tables(result):
@@ -319,35 +430,17 @@ class PDFTableExtractor:
         dpi = SCAN_DPI if enhanced else VISION_DPI
         pix = page.get_pixmap(dpi=dpi)
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+        bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
+        try:
+            bgr = auto_orient_page_upright(bgr)
+        except Exception:
+            pass
         if enhanced:
-            bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
-            # 系统级四向 5ms 极速自动摆正 (消灭 ±90°/180° 正反横扫、Landscape 横置)
             try:
-                bgr = auto_orient_page_upright(bgr)
+                bgr = surgical_seal_mask_repair(bgr)
             except Exception:
                 pass
-            # 杀手锏 5：手机拍照与扫描件 LAB 亮度均衡 (消除阴影暗角，100% 保留红色通道，do_orient=False 避免二次摆正)
-            try:
-                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr, do_orient=False)
-            except Exception:
-                pass
-            # 系统性公章脱印穿透与凸线骨架增强 (CLAHE + Unsharp Masking 滤波)
-            try:
-                gray = _SEAL_ENHANCER.penetrate_and_enhance_text(bgr)
-            except Exception:
-                gray = cv2.cvtColor(self._remove_red(bgr), cv2.COLOR_BGR2GRAY)
-            out = (255 * (gray / 255.0) ** VISION_GAMMA).astype(np.uint8)
-        else:
-            bgr = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
-            try:
-                bgr = auto_orient_page_upright(bgr)
-            except Exception:
-                pass
-            try:
-                bgr = _SEAL_ENHANCER.balance_illumination_and_orient(bgr, do_orient=False)
-            except Exception:
-                pass
-            out = bgr
+        out = bgr
         H, W = out.shape[:2]
         tile_h = int(H / num_tiles)
         overlap_h = int(tile_h * 0.1) # 10% 物理重叠
@@ -359,23 +452,24 @@ class PDFTableExtractor:
             scale = VISION_MAX_EDGE / max(crop.shape[:2])
             if scale < 1:
                 crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-            b64_list.append(base64.b64encode(cv2.imencode('.jpg', crop, [int(cv2.IMWRITE_JPEG_QUALITY), 88])[1].tobytes()).decode())
+            b64_str = base64.b64encode(cv2.imencode('.jpg', crop, [int(cv2.IMWRITE_JPEG_QUALITY), 92])[1].tobytes()).decode()
+            b64_list.append((b64_str, crop))
         return b64_list
 
     def _grids_from_tiles(self, page, base, num_tiles=2):
         print(f"    [*] 页面数据量大或发生截断，正在执行水平 {num_tiles} 分块切片识别...")
-        b64_tiles = self._slice_page_tiles(page, enhanced=True, num_tiles=num_tiles)
+        tile_items = self._slice_page_tiles(page, enhanced=True, num_tiles=num_tiles)
         merged_cells = []
         all_unc = []
 
         # 并发请求切片识别，消灭串行排队超时
-        def _fetch_tile(idx_b64):
-            idx, b64 = idx_b64
+        def _fetch_tile(idx_item):
+            idx, (b64, crop) = idx_item
             p_text = f"请转录切片图片中的全部表格，返回 JSON。这是第 {idx+1}/{num_tiles} 个垂直分块。"
-            return idx, self._vision_call_prompt(b64, p_text)
+            return idx, self._vision_call_prompt(b64, p_text, img_bgr=crop)
 
         with ThreadPoolExecutor(max_workers=min(num_tiles, 3)) as pool:
-            tile_results = list(pool.map(_fetch_tile, enumerate(b64_tiles)))
+            tile_results = list(pool.map(_fetch_tile, enumerate(tile_items)))
 
         tile_results.sort(key=lambda x: x[0])
         target_cols = None
@@ -397,7 +491,13 @@ class PDFTableExtractor:
                 if any(k in s for k in ('×', '*', 'mm', '#', 'DN', 'Q235', 'Q355')):
                     spec = s
                     break
-            return seq, spec
+            price = ''
+            for c in row:
+                s = str(c).strip().replace(',', '')
+                if re.fullmatch(r'\d+(\.\d+)?', s) and float(s) > 10:
+                    price = s
+                    break
+            return seq, spec, price
 
         def _align_row_to_hdr(row, hdr):
             if len(row) == len(hdr):
@@ -459,30 +559,41 @@ class PDFTableExtractor:
                 merged_cells.extend(grid)
             else:
                 # 过滤后续切片顶部的重复表头
-                clean_grid = [r for r in grid if not (_is_hdr(r) and not clean_grid)] if grid else []
+                clean_grid = []
+                for r in grid:
+                    if not clean_grid and _is_hdr(r):
+                        continue
+                    clean_grid.append(r)
+
                 # 建立前密切片尾部最近 12 行指纹索引
                 tail_keys = []
                 for t_i, tr in enumerate(merged_cells[-12:]):
                     t_abs = len(merged_cells) - 12 + t_i if len(merged_cells) >= 12 else t_i
-                    s, sp = _row_keys(tr)
-                    tail_keys.append((t_abs, s, sp, tr))
+                    s, sp, p = _row_keys(tr)
+                    tail_keys.append((t_abs, s, sp, p, tr))
 
                 hdr_row = merged_cells[0] if (merged_cells and _is_hdr(merged_cells[0])) else None
 
                 start_r = 0
+                last_matched_t_abs = None
                 for r_i, row in enumerate(clean_grid):
-                    s2, sp2 = _row_keys(row)
+                    s2, sp2, p2 = _row_keys(row)
                     r_text = ''.join(str(c) for c in row)
                     matched = None
-                    for t_abs, s1, sp1, r1 in tail_keys:
-                        if s2 and s1 and s2 == s1:
-                            matched = (t_abs, r1)
-                            break
-                        elif sp1 and sp2 and (sp1 == sp2 or (len(sp1) > 10 and len(sp2) > 10 and (sp1 in sp2 or sp2 in sp1))):
-                            matched = (t_abs, r1)
-                            break
+                    for t_abs, s1, sp1, p1, r1 in tail_keys:
+                        if s1 and s2:
+                            if s1 == s2:
+                                matched = (t_abs, r1)
+                                break
+                        else:
+                            # 缺序号时，需规格与单价双重对齐才允许判定为同一行
+                            if sp1 and sp2 and sp1 == sp2 and p1 and p2 and p1 == p2:
+                                matched = (t_abs, r1)
+                                break
                     if matched:
                         t_abs, r1 = matched
+                        if last_matched_t_abs is None or t_abs > last_matched_t_abs:
+                            last_matched_t_abs = t_abs
                         if len(r_text) > len(''.join(str(c) for c in r1)):
                             merged_cells[t_abs] = _align_row_to_hdr(row, hdr_row) if hdr_row else row
                         start_r = r_i + 1
@@ -494,8 +605,14 @@ class PDFTableExtractor:
                         start_r = r_i
                         break
 
+                # 关键修复：截断前密切片尾部由于重叠切割产生的残影碎片行
+                if last_matched_t_abs is not None:
+                    merged_cells = merged_cells[:last_matched_t_abs + 1]
+
                 hdr_row = merged_cells[0] if (merged_cells and _is_hdr(merged_cells[0])) else None
                 for row in clean_grid[start_r:]:
+                    if not any(str(c).strip() for c in row):
+                        continue
                     if hdr_row and len(row) != len(hdr_row):
                         row = _align_row_to_hdr(row, hdr_row)
                     elif target_cols and len(row) != target_cols:
@@ -507,51 +624,13 @@ class PDFTableExtractor:
             return None
         return [(merged_cells, all_unc)]
 
-    def _vision_call_prompt(self, b64, prompt_text):
-        import cas_cache
-        _cas = cas_cache.get('vision_table_tile', VISION_MODEL or '', b64 + '|' + prompt_text)
-        if _cas:
-            try:
-                cached = json.loads(_cas)
-                if not validate_vision_payload(cached):
-                    return cached
-            except Exception:
-                pass
-        url = f"{VISION_BASE_URL.rstrip('/')}/chat/completions"
-        headers = {"Authorization": f"Bearer {VISION_API_KEY}", "Content-Type": "application/json"}
-        payload = {
-            "model": VISION_MODEL,
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": VISION_TABLE_PROMPT},
-                {"role": "user", "content": [
-                    {"type": "text", "text": prompt_text},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                ]},
-            ],
-            "response_format": {"type": "json_object"},
-        }
-        for attempt in range(min(LLM_MAX_RETRIES + 1, 2)):
-            try:
-                resp = requests.post(url, headers=headers, json=payload, timeout=45)
-                if resp.status_code == 200:
-                    choice = resp.json()["choices"][0]
-                    content = choice["message"]["content"]
-                    parsed = json.loads(_strip_fence(content))
-                    bad = validate_vision_payload(parsed)
-                    if bad:
-                        raise ValueError(f"响应结构不合规: {bad}")
-                    try:
-                        cas_cache.put('vision_table_tile', VISION_MODEL or '', b64 + '|' + prompt_text,
-                                      json.dumps(parsed, ensure_ascii=False))
-                    except Exception:
-                        pass
-                    return parsed
-            except Exception:
-                pass
-            if attempt < 1:
-                time.sleep(1)
-        return None
+    def _vision_call_prompt(self, b64_or_tuple, prompt_text, img_bgr=None):
+        """调用统一多模态接口转录局部切片表格，受 RapidOCR 60% 重合度硬门禁保护"""
+        if isinstance(b64_or_tuple, tuple):
+            b64, img_bgr = b64_or_tuple
+        else:
+            b64 = b64_or_tuple
+        return self._execute_multimodal_vision(b64, prompt_text, kind='vision_table_tile', img_bgr=img_bgr)
 
     def _thread_page(self, p_idx):
         """每线程独占一份 PyMuPDF Document —— Document 不是线程安全的，跨线程共享会读坏页面"""
@@ -588,12 +667,17 @@ class PDFTableExtractor:
                 tables = self._grids_from_tiles(page, base, num_tiles=3)
             else:
                 tables = self._normalize_tables(first)
-                if tables and len(tables[0][0]) > VISION_MAX_ROWS_PER_TILE and len(tables[0][0]) >= 60:
+                if tables and len(tables[0][0]) > VISION_MAX_ROWS_PER_TILE:
                     n_rows = len(tables[0][0])
-                    self.cell_issue[(f"{base}#1", 1, 1)] = (
-                        f"本页识别 {n_rows} 行，超过单块阈值 {VISION_MAX_ROWS_PER_TILE} 行，未做切块复查")
-                    print(f"    [!] {base}: 页面行数 {n_rows} 超过阈值 {VISION_MAX_ROWS_PER_TILE}，"
-                          f"未做切块复查，已标注待复核")
+                    empty_price_count = sum(1 for r in tables[0][0][1:] if len(r) > 3 and not str(r[3]).strip())
+                    if empty_price_count > 5 or n_rows >= 60:
+                        print(f"    [*] {base}: 页面行数 {n_rows} 且有 {empty_price_count} 行单价缺失，主动执行 3 分块切片高精识别...")
+                        t_sliced = self._grids_from_tiles(page, base, num_tiles=3)
+                        if t_sliced:
+                            tables = t_sliced
+                    else:
+                        self.cell_issue[(f"{base}#1", 1, 1)] = (
+                            f"本页识别 {n_rows} 行，超过单块阈值 {VISION_MAX_ROWS_PER_TILE} 行")
 
         if not tables:
             # 切块重试一次 (num_tiles=3)

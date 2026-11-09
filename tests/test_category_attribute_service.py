@@ -125,7 +125,9 @@ class TestCategoryAttributeService(unittest.TestCase):
         cands = retrieve_category_candidates(raw_cat="", std_name="仿石涂料", top_k=2)
         self.assertTrue(len(cands) > 0)
         self.assertEqual(cands[0]["level3"], "仿石涂料")
-        self.assertIn("广材双大库品名反查命中", cands[0]["reason"])
+        self.assertTrue(
+            "广材双大库品名反查命中" in cands[0]["reason"] or "精准锚定标准品类" in cands[0]["reason"]
+        )
 
 
 if __name__ == "__main__":

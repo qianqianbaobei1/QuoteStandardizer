@@ -152,6 +152,14 @@ class GuangcaiKnowledgeBaseService:
         sec_m = re.search(r'(?:(?:[1-5]\s*[xX*×]\s*)?(\d+(?:\.\d+)?))\s*(?:mm²|平方|mm2)', text)
         val_sec = sec_m.group(1) if sec_m else None
 
+        # 预拆解钢筋/圆钢/线材直径 (例如 Φ20, φ18, 直径:25mm)
+        rebar_m = re.search(r'(?:[Φφϕ]|直径\s*[:：=]?\s*)\s*(\d+(?:\.\d+)?)', text)
+        val_rebar_dia = rebar_m.group(1) if rebar_m else None
+
+        # 预拆解常见钢号/牌号/材质 (例如 Q235B, Q345, HRB400E, HPB300, 304, 316L)
+        grade_m = re.search(r'\b(Q\d{3}[A-E]?|HRB\d{3}[E]?|HPB\d{3}|CRB\d{3}|SS\d{3}|SUS\d{3}|304|316L|201)\b', text, re.I)
+        val_grade = grade_m.group(1).upper() if grade_m else None
+
         # 逐个对标标准属性
         for attr in standard_attrs:
             key_name = str(attr.get("name") or "").strip()
@@ -198,6 +206,10 @@ class GuangcaiKnowledgeBaseService:
             if not val:
                 if ('标称截面' in core_key or '截面' in core_key) and val_sec:
                     val = val_sec
+                elif ('直径' in core_key) and val_rebar_dia:
+                    val = val_rebar_dia
+                elif ('牌号' in core_key or '材质' in core_key or '钢号' in core_key) and val_grade:
+                    val = val_grade
 
             # F. 常用公称外径 / 壁厚 / 压力正则
             if not val:

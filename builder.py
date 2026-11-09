@@ -814,3 +814,23 @@ class StandardizedWorkbookBuilder:
         for col, w in zip('ABCDEFGHI', [14, 26, 14, 14, 11, 9, 10, 70, 22]):
             ws.column_dimensions[col].width = w
         ws.freeze_panes = 'A3'
+
+
+def build_from_canonical_items(items: list, output_xlsx_path: str, image_dir: str = None,
+                               reconciliation: list = None, structure_log: list = None,
+                               auto_expand_attributes: bool = True, split_by_category: bool = True,
+                               template_path: str = None, **kwargs):
+    """便捷模块级函数，包装 StandardizedWorkbookBuilder"""
+    builder = StandardizedWorkbookBuilder(
+        template_path=template_path,
+        auto_expand_attributes=auto_expand_attributes,
+        split_by_category=split_by_category
+    )
+    return builder.build_from_canonical_items(
+        items=items,
+        output_xlsx_path=output_xlsx_path,
+        img_dir=image_dir or "",
+        reconciliation=reconciliation,
+        structure_log=structure_log
+    )
+
